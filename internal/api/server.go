@@ -20,23 +20,25 @@ import (
 	"clawbot-gateway/internal/config"
 	"clawbot-gateway/internal/database"
 	"clawbot-gateway/internal/ilink"
+	"clawbot-gateway/internal/notify"
 	"clawbot-gateway/internal/log"
 	"clawbot-gateway/internal/route"
 	"clawbot-gateway/internal/session"
 )
 
 type APIServer struct {
-	config     *config.Config
-	db         *database.DB
-	router     *route.Router
-	adapters   *adapter.AdapterFactory
-	ctxManager *session.ContextManager
-	connector  *bot.Connector
-	clientReg  *ilink.ClientRegistry
-	wsClients  map[string]*websocket.Conn
-	wsMu       sync.RWMutex
-	restServer *http.Server
-	log        *log.Logger
+	config       *config.Config
+	db           *database.DB
+	router       *route.Router
+	adapters     *adapter.AdapterFactory
+	ctxManager   *session.ContextManager
+	connector    *bot.Connector
+	clientReg    *ilink.ClientRegistry
+
+	wsClients    map[string]*websocket.Conn
+	wsMu         sync.RWMutex
+	restServer   *http.Server
+	log          *log.Logger
 }
 
 func NewAPIServer(
@@ -49,14 +51,15 @@ func NewAPIServer(
 	clientReg *ilink.ClientRegistry,
 ) *APIServer {
 	return &APIServer{
-		config:     cfg,
-		db:         db,
-		router:     r,
-		adapters:   af,
-		ctxManager: cm,
-		connector:  conn,
-		clientReg:  clientReg,
-		wsClients:  make(map[string]*websocket.Conn),
+		config:        cfg,
+		db:            db,
+		router:        r,
+		adapters:      af,
+		ctxManager:    cm,
+		connector:     conn,
+		clientReg:     clientReg,
+
+		wsClients:     make(map[string]*websocket.Conn),
 	}
 }
 
@@ -81,6 +84,10 @@ func (s *APIServer) Start(addr string) error {
 	// iLink API
 	ilinkServer := ilink.NewServer(s.connector, s.clientReg)
 	ilinkServer.RegisterRoutes(rest)
+
+	// Webhook API
+	notifyHandler := notify.NewHandler(s.db, s.sendNotifyMessage)
+	notifyHandler.RegisterRoutes(rest)
 
 	// 需要鉴权的 API
 	api := rest.Group("/api/v1", s.authMiddleware())
@@ -116,9 +123,14 @@ func (s *APIServer) Start(addr string) error {
 
 	// 微信账号
 	wc := api.Group("/accounts")
-	wc.GET("", s.handleListAccounts)
-	wc.POST("", s.handleAddAccount)
-	wc.DELETE("/:id", s.handleDeleteAccount)
+	wc.GET("", s.handleListWechatAccounts)
+	wc.POST("", s.handleSaveWechatAccount)
+	wc.DELETE("/:id", s.handleDisconnectAccount)
+
+	// 微信扫码
+	wx := api.Group("/wechat")
+	wx.POST("/qrcode", s.handleGetQRCode)
+	wx.POST("/qrcode/status", s.handleQRStatus)
 
 	// 连接适配器
 	conn := api.Group("/connections")
@@ -294,4 +306,23 @@ func (s *APIServer) handleStats(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"backends": len(backends),
 	})
+}
+
+// sendNotifyMessage 发送 Webhook 消息
+func (s *APIServer) sendNotifyMessage(ctx context.Context, toUser, content, accountID string) error {
+	accounts, err := s.db.ListAccounts()
+	if err != nil || len(accounts) == 0 {
+		return fmt.Errorf("no accounts available")
+	}
+
+	for _, acct := range accounts {
+		if accountID == "" || acct.AccountID == accountID {
+			return s.connector.SendTextWithCreds(ctx, &bot.Credentials{
+				Token:   acct.Token,
+				BaseURL: acct.BaseURL,
+			}, toUser, content, "")
+		}
+	}
+
+	return fmt.Errorf("account not found")
 }

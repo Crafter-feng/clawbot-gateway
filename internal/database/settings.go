@@ -15,6 +15,9 @@ var defaults = map[string]string{
 	"context.switch_strategy": "keep",
 	"context.ttl":           "3600",
 	"route.default_backend": "echo",
+	"notify.url":           "",
+	"notify.token":         "",
+	"notify.enabled":       "false",
 }
 
 // 环境变量映射（特殊处理）

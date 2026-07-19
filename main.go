@@ -202,9 +202,6 @@ func createAdapterFromDB(b database.Backend) adapter.BackendAdapter {
 			model = "gpt-4o"
 		}
 		return adapter.NewOpenAICompatibleAdapter(b.ID, b.Name, apiKey, baseURL, model)
-	case "webhook":
-		url := getJSONString(b.Config, "url")
-		return adapter.NewWebhookAdapter(b.ID, b.Name, url, nil)
 	default:
 		return nil
 	}

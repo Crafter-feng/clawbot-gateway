@@ -96,6 +96,14 @@ func (db *DB) migrate() error {
 			name TEXT DEFAULT '',
 			created_at TEXT DEFAULT (datetime('now'))
 		)`,
+		`CREATE TABLE IF NOT EXISTS notify_tokens (
+			id TEXT PRIMARY KEY,
+			account_id TEXT NOT NULL DEFAULT '',
+			name TEXT NOT NULL,
+			token TEXT NOT NULL UNIQUE,
+			enabled INTEGER DEFAULT 1,
+			created_at TEXT DEFAULT (datetime('now'))
+		)`,
 	}
 
 	for _, q := range queries {

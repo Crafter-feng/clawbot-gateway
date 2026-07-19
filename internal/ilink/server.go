@@ -46,8 +46,6 @@ func (s *Server) RegisterRoutes(r *gin.Engine) {
 		ilink.POST("/sendmessage", s.handleSendMessage)
 		ilink.POST("/sendtyping", s.handleSendTyping)
 		ilink.POST("/getconfig", s.handleGetConfig)
-		ilink.GET("/get_bot_qrcode", s.handleGetQRCode)
-		ilink.GET("/get_qrcode_status", s.handleGetQRCodeStatus)
 		ilink.POST("/getuploadurl", s.handleGetUploadURL)
 	}
 	s.log.Info("iLink API routes registered")

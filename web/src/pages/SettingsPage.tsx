@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { api } from '../api/client'
 import { useToast } from '../components/Toast'
+import { useBackendsStore } from '../stores/backends'
 
 interface Settings {
   [key: string]: string
@@ -11,16 +12,20 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const backends = useBackendsStore()
 
   useEffect(() => {
     fetchSettings()
+    backends.fetch()
   }, [])
 
   const fetchSettings = async () => {
     setLoading(true)
     try {
       const data = await api.get<{ settings: Settings }>('/api/v1/config')
-      setSettings(data.settings || {})
+      const settings = data.settings || {}
+      
+      setSettings(settings)
     } catch {
       toast('加载配置失败', 'error')
     } finally {
@@ -56,40 +61,6 @@ export default function SettingsPage() {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-
-        {/* 服务器设置 */}
-        <div className="card">
-          <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>服务器设置</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>监听地址</label>
-              <input className="input" value={settings['server.host'] || ''} onChange={(e) => updateSetting('server.host', e.target.value)} />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>监听端口</label>
-              <input className="input" type="number" value={settings['server.port'] || '8080'} onChange={(e) => updateSetting('server.port', e.target.value)} />
-            </div>
-          </div>
-        </div>
-
-        {/* iLink 设置 */}
-        <div className="card">
-          <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>iLink 设置</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <div style={{ gridColumn: 'span 2' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>基础 URL</label>
-              <input className="input" value={settings['clawbot.base_url'] || ''} onChange={(e) => updateSetting('clawbot.base_url', e.target.value)} />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>轮询超时（秒）</label>
-              <input className="input" type="number" value={settings['clawbot.poll_timeout'] || '35'} onChange={(e) => updateSetting('clawbot.poll_timeout', e.target.value)} />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>Bot 类型</label>
-              <input className="input" type="number" value={settings['clawbot.bot_type'] || '3'} onChange={(e) => updateSetting('clawbot.bot_type', e.target.value)} />
-            </div>
-          </div>
-        </div>
 
         {/* API 设置 */}
         <div className="card">
@@ -134,7 +105,12 @@ export default function SettingsPage() {
           <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>路由设置</div>
           <div>
             <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>默认后端</label>
-            <input className="input" value={settings['route.default_backend'] || 'echo'} onChange={(e) => updateSetting('route.default_backend', e.target.value)} />
+            <select className="select" value={settings['route.default_backend'] || ''} onChange={(e) => updateSetting('route.default_backend', e.target.value)}>
+              <option value="">无（不自动路由）</option>
+              {backends.items.map((b) => (
+                <option key={b.id} value={b.id}>{b.name} ({b.id})</option>
+              ))}
+            </select>
           </div>
         </div>
 

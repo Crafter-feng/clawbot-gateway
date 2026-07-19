@@ -191,7 +191,6 @@ export default function ManagePage() {
               <select className="select" value={bType} onChange={(e) => setBType(e.target.value)}>
                 <option value="echo">Echo 调试</option>
                 <option value="openai_compatible">OpenAI 兼容</option>
-                <option value="webhook">Webhook 通知</option>
                 <option value="ilink_proxy">iLink 代理</option>
               </select>
             </div>
@@ -389,7 +388,6 @@ ILINK_TOKEN=gw_${bId || '<id>'}`}</pre>
                 <select className="select" value={editType} onChange={(e) => setEditType(e.target.value)}>
                   <option value="echo">Echo 调试</option>
                   <option value="openai_compatible">OpenAI 兼容</option>
-                  <option value="webhook">Webhook 通知</option>
                   <option value="ilink_proxy">iLink 代理</option>
                 </select>
               </div>

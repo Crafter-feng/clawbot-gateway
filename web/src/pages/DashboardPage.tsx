@@ -61,15 +61,21 @@ export default function DashboardPage() {
                   borderRadius: 'var(--radius-md)',
                   border: '1px solid var(--border)',
                 }}>
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: '14px' }}>{a.user_id}</div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                      {new Date(a.login_at * 1000).toLocaleString('zh-CN')}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{
+                      width: '8px',
+                      height: '8px',
+                      borderRadius: '50%',
+                      background: 'var(--success)',
+                      flexShrink: 0,
+                    }} />
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: '14px' }}>{a.user_id}</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                        {a.account_id} · {new Date(a.login_at * 1000).toLocaleString('zh-CN')}
+                      </div>
                     </div>
                   </div>
-                  <span className={`tag ${a.status === 'online' ? 'tag-success' : 'tag-danger'}`}>
-                    {a.status === 'online' ? '在线' : '离线'}
-                  </span>
                 </div>
               ))}
             </div>

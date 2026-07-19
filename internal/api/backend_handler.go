@@ -95,9 +95,6 @@ func (s *APIServer) handleRegisterBackend(c *gin.Context) {
 		accountID := "gw_" + req.ID
 		userID := accountID + "@im.wechat"
 		baseURL := "http://localhost:8080"
-		if s.config != nil && s.config.Server.Port != 8080 {
-			baseURL = "http://localhost:" + itoa(s.config.Server.Port)
-		}
 
 		vb := database.VirtualBot{
 			ID:        req.ID,
@@ -106,14 +103,10 @@ func (s *APIServer) handleRegisterBackend(c *gin.Context) {
 			BaseURL:   baseURL,
 		}
 		s.db.SaveVirtualBot(vb)
-
-		// 注册到 ClientRegistry
 		s.clientReg.Register(accountID, userID)
 	}
 
-	// 重新加载适配器
 	s.reloadAdapters()
-
 	c.JSON(200, gin.H{"success": true, "backend_id": req.ID})
 }
 
@@ -161,11 +154,8 @@ func (s *APIServer) handleUpdateBackend(c *gin.Context) {
 
 func (s *APIServer) handleRemoveBackend(c *gin.Context) {
 	id := c.Param("id")
-
-	// 删除虚拟 Bot（如果是 ilink_proxy）
 	s.db.DeleteVirtualBot(id)
 	s.clientReg.Unregister("gw_" + id)
-
 	s.db.DeleteBackend(id)
 	s.reloadAdapters()
 	c.JSON(200, gin.H{"success": true})
@@ -226,16 +216,12 @@ func (s *APIServer) getAdapterFromDB(b database.Backend) adapter.BackendAdapter 
 			model = "gpt-4o"
 		}
 		return adapter.NewOpenAICompatibleAdapter(b.ID, b.Name, apiKey, baseURL, model)
-	case "webhook":
-		url := getJSONString(b.Config, "url")
-		return adapter.NewWebhookAdapter(b.ID, b.Name, url, nil)
 	default:
 		return nil
 	}
 }
 
 func (s *APIServer) reloadAdapters() {
-	// 清空并重新加载
 	s.adapters = adapter.NewAdapterFactory()
 
 	backends, _ := s.db.ListBackends()
@@ -249,13 +235,11 @@ func (s *APIServer) reloadAdapters() {
 		}
 	}
 
-	// 重新注册连接适配器
 	vbots, _ := s.db.ListVirtualBots()
 	for _, vb := range vbots {
 		s.adapters.RegisterConnection(adapter.NewILinkProxyAdapter(vb.ID, vb.ID, vb.BaseURL))
 	}
 
-	// 默认 echo
 	s.adapters.Register(adapter.NewEchoAdapter("echo", "Echo Debug"))
 }
 
@@ -268,18 +252,4 @@ func getJSONString(jsonStr, key string) string {
 		return v
 	}
 	return ""
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	buf := [20]byte{}
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(buf[i:])
 }

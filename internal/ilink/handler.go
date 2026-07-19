@@ -282,38 +282,8 @@ func (s *Server) handleGetConfig(c *gin.Context) {
 }
 
 // handleGetQRCode 获取二维码（我们就是服务，返回空数据）
-func (s *Server) handleGetQRCode(c *gin.Context) {
-	c.JSON(200, gin.H{
-		"ret":                0,
-		"qrcode":             "",
-		"qrcode_img_content": "",
-	})
-}
 
 // handleGetQRCodeStatus 检查二维码状态
-func (s *Server) handleGetQRCodeStatus(c *gin.Context) {
-	qrcode := c.Query("qrcode")
-	if qrcode == "" {
-		c.JSON(400, gin.H{"ret": -1, "errmsg": "missing qrcode"})
-		return
-	}
-
-	state := s.bot.QRManager().CheckStatus(qrcode)
-
-	resp := gin.H{
-		"ret":    0,
-		"status": state.Status,
-	}
-
-	if state.Creds != nil {
-		resp["bot_token"] = state.Creds.Token
-		resp["ilink_bot_id"] = state.Creds.AccountID
-		resp["ilink_user_id"] = state.Creds.UserID
-		resp["baseurl"] = state.Creds.BaseURL
-	}
-
-	c.JSON(200, resp)
-}
 
 // handleGetUploadURL 获取上传 URL
 func (s *Server) handleGetUploadURL(c *gin.Context) {

@@ -8,6 +8,7 @@ const DashboardPage = lazy(() => import('./pages/DashboardPage'))
 const ChannelsPage = lazy(() => import('./pages/ChannelsPage'))
 const ManagePage = lazy(() => import('./pages/ManagePage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const NotificationPage = lazy(() => import('./pages/NotificationPage'))
 
 function RootLayout() {
   return (
@@ -30,6 +31,7 @@ export const router = createBrowserRouter([
           { path: '/channels', element: <ChannelsPage /> },
           { path: '/manage', element: <ManagePage /> },
           { path: '/settings', element: <SettingsPage /> },
+          { path: '/notify', element: <NotificationPage /> }
         ],
       },
     ],
