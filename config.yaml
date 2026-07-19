@@ -1,0 +1,86 @@
+# ClawBot Proxy Gateway Configuration
+# HermesClaw-style triple-gateway with Web management UI
+
+log_level: "info"               # 日志级别: debug / info / warn / error
+
+server:
+  host: "0.0.0.0"
+  port: 8080                  # 统一端口（REST API + WebSocket + Web 管理页面）
+
+clawbot:
+  base_url: "https://ilinkai.weixin.qq.com"
+  poll_timeout: 35                # 长轮询超时（秒）
+  max_retry_login: 3
+
+  # 多账号配置（支持 ${VAR} 环境变量展开）
+  # 启动时将自动注册以下账号并持久化到 store，重启后自动恢复
+  # accounts:
+  #   - token: "${BOT1_TOKEN}"
+  #     user_id: "bot1"
+  #     account_id: "wx_bot1"
+  #     account_name: "Bot 1"
+  #   - token: "${BOT2_TOKEN}"
+  #     user_id: "bot2"
+
+api:
+  # 登录密码：通过环境变量 CLAWBOT_LOGIN_PASSWORD 设置，或留空自动生成
+  login_password: "${CLAWBOT_LOGIN_PASSWORD}"
+  allowed_origins:
+    - "*"
+
+# ── 后端服务配置 ──
+backend:
+  default_backend: "openclaw"     # 默认路由
+
+  providers:
+    - id: openclaw
+      name: "OpenClaw Agent"
+      type: openai_compatible
+      enabled: true
+      config:
+        api_key: "${OPENCAW_KEY}"       # 环境变量引用
+        base_url: "http://localhost:18789/v1"
+        model: "openclaw/default"
+
+    - id: claude
+      name: "Claude 3.5 Sonnet"
+      type: openai_compatible
+      enabled: true
+      config:
+        api_key: "${ANTHROPIC_KEY}"
+        base_url: "https://api.anthropic.com/v1"
+        model: "claude-3-5-sonnet-latest"
+
+    - id: deepseek
+      name: "DeepSeek V3"
+      type: openai_compatible
+      enabled: true
+      config:
+        api_key: "${DEEPSEEK_KEY}"
+        base_url: "https://api.deepseek.com/v1"
+        model: "deepseek-chat"
+
+    - id: echo
+      name: "Echo Debug"
+      type: echo
+      enabled: true
+      config: {}
+
+  keyword_rules:
+    - keywords: ["天气", "温度", "下雨", "空气"]
+      backend: openclaw
+    - keywords: ["画图", "生成图片", "画一个", "图片生成"]
+      backend: openclaw
+    - keywords: ["代码", "编程", "写一个", "debug", "修复"]
+      backend: claude
+    - keywords: ["翻译", "英文", "中文", "日语"]
+      backend: deepseek
+    - keywords: ["搜索", "查一下", "百度", "谷歌"]
+      backend: openclaw
+    - keywords: ["测试"]
+      backend: echo
+
+context:
+  max_history: 20
+  switch_strategy: keep    # keep 保留 / clear 清空 / isolated 独立
+  ttl: 3600                # 会话空闲超时（秒）

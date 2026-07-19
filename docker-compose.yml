@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  clawbot-gateway:
+    build: .
+    container_name: clawbot-gateway
+    restart: unless-stopped
+    ports:
+      - "8080:8080"      # Web UI + REST API + WebSocket（统一端口）
+    environment:
+      - TZ=Asia/Shanghai
+      # - CLAWBOT_TOKEN=xxx       # 可在 config.yaml 中使用 ${CLAWBOT_TOKEN}
+      # - OPENCAW_KEY=xxx
+      # - ANTHROPIC_KEY=xxx
+      # - DEEPSEEK_KEY=xxx
+    volumes:
+      - ./data:/app/data       # 持久化凭证和配置
+      - ./config.yaml:/app/config.yaml
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

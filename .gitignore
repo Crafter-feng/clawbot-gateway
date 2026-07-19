@@ -1,0 +1,40 @@
+# ── Go ──
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+*.test
+/tmp/
+/clawbot-gateway
+/clawbot-gateway.exe
+
+# ── IDE ──
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ── OS ──
+.DS_Store
+Thumbs.db
+
+# ── Data (凭证、规则持久化，切勿提交) ──
+/data/
+*.store.json
+
+# ── Docker ──
+.docker/
+
+# ── 环境变量 ──
+.env
+.env.local
+*.env
+web/dist
+web/node_modules/*
+.codegraph
+.omo
+.vscode
