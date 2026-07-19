@@ -3,41 +3,26 @@ package api
 import (
 	"github.com/gin-gonic/gin"
 
-	"clawbot-gateway/internal/route"
+	"clawbot-gateway/internal/database"
 )
 
-// ══════════════════════════════════════════════════════════════════════
-//  用户会话管理
-// ══════════════════════════════════════════════════════════════════════
-
 func (s *APIServer) handleListUsers(c *gin.Context) {
-	backends := s.router.GetAllUserBackends()
-	users := make([]gin.H, 0)
-	for uid, bid := range backends {
-		users = append(users, gin.H{
-			"user_id": uid,
-			"backend": bid,
-			"active":  true,
-		})
+	sessions, err := s.db.GetAllUserSessions()
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
 	}
-	c.JSON(200, gin.H{"users": users, "total": len(users)})
+	c.JSON(200, gin.H{"users": sessions})
 }
 
 func (s *APIServer) handleGetUserContext(c *gin.Context) {
 	userID := c.Param("id")
-	backendID := c.Query("backend")
-	if backendID == "" {
-		c.JSON(400, gin.H{"error": "backend query parameter is required"})
+	session, err := s.db.GetUserSession(userID)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "user not found"})
 		return
 	}
-	ctx := s.ctxManager.GetContext(userID, backendID)
-	c.JSON(200, gin.H{
-		"user_id":     userID,
-		"backend":     backendID,
-		"history":     ctx.History,
-		"created_at":  ctx.CreatedAt,
-		"last_active": ctx.LastActive,
-	})
+	c.JSON(200, session)
 }
 
 func (s *APIServer) handleSwitchUserBackend(c *gin.Context) {
@@ -49,57 +34,52 @@ func (s *APIServer) handleSwitchUserBackend(c *gin.Context) {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
-	oldBackend, hasOld := s.router.GetUserBackend(userID)
-	s.router.SetUserBackend(userID, req.BackendID)
-	if hasOld {
-		s.ctxManager.SwitchBackend(userID, oldBackend, req.BackendID)
+
+	session := database.UserSession{
+		UserID:    userID,
+		BackendID: req.BackendID,
+		RouteMode: "single",
 	}
-	_ = s.store.SetUserBackend(userID, req.BackendID)
-	c.JSON(200, gin.H{"success": true, "user_id": userID, "backend": req.BackendID})
+	s.db.SaveUserSession(session)
+	s.router.SetUserBackend(userID, req.BackendID)
+
+	c.JSON(200, gin.H{"success": true})
 }
 
 func (s *APIServer) handleClearUserContext(c *gin.Context) {
 	userID := c.Param("id")
-	backendID := c.Query("backend")
-	if backendID != "" {
-		s.ctxManager.ClearContext(userID, backendID)
-	} else {
-		s.ctxManager.ClearAllUserContext(userID)
-	}
+	s.db.DeleteUserSession(userID)
+	s.router.ClearUserBackend(userID)
 	c.JSON(200, gin.H{"success": true})
 }
 
 func (s *APIServer) handleGetUserRouteMode(c *gin.Context) {
 	userID := c.Param("id")
-	mode := s.router.GetUserRouteMode(userID)
-	secondaries := s.router.GetUserSecondaries(userID)
-	c.JSON(200, gin.H{
-		"user_id":     userID,
-		"mode":        mode,
-		"secondaries": secondaries,
-	})
+	session, err := s.db.GetUserSession(userID)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "user not found"})
+		return
+	}
+	c.JSON(200, gin.H{"route_mode": session.RouteMode})
 }
 
 func (s *APIServer) handleSetUserRouteMode(c *gin.Context) {
 	userID := c.Param("id")
 	var req struct {
-		Mode        string   `json:"mode"`
-		Secondaries []string `json:"secondaries,omitempty"`
+		RouteMode string `json:"route_mode"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
-	switch req.Mode {
-	case route.ModeSingle, route.ModeBoth, route.ModeThree:
-		s.router.SetUserRouteMode(userID, req.Mode)
-		if len(req.Secondaries) > 0 {
-			s.router.SetUserSecondaries(userID, req.Secondaries)
-			_ = s.store.SetUserSecondaries(userID, req.Secondaries)
-		}
-		_ = s.store.SetUserRouteMode(userID, req.Mode)
-		c.JSON(200, gin.H{"success": true, "user_id": userID, "mode": req.Mode, "secondaries": req.Secondaries})
-	default:
-		c.JSON(400, gin.H{"error": "invalid mode, must be single/both/three"})
+
+	session, _ := s.db.GetUserSession(userID)
+	if session == nil {
+		session = &database.UserSession{UserID: userID}
 	}
+	session.RouteMode = req.RouteMode
+	s.db.SaveUserSession(*session)
+	s.router.SetUserRouteMode(userID, req.RouteMode)
+
+	c.JSON(200, gin.H{"success": true})
 }

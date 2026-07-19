@@ -165,10 +165,17 @@ func (c *Connector) accountPollLoop(ctx context.Context, creds *Credentials) {
 			}
 			msg := normalize(raw)
 			msg.AccountID = creds.AccountID
+
+			// 1. 发送到 Pipeline（内置 AI 处理）
 			select {
 			case c.msgChan <- msg:
 			default:
 				c.log.Warn("msg channel full, dropping msg", "account_id", creds.AccountID)
+			}
+
+			// 2. 广播到所有虚拟 Bot（代理模式）
+			if b := c.GetBroadcaster(); b != nil {
+				b.Broadcast(msg)
 			}
 		}
 
@@ -189,6 +196,13 @@ func (c *Connector) syncBufPath(accountID string) string {
 }
 
 func (c *Connector) loadSyncBuf(accountID string) string {
+	c.mu.RLock()
+	store := c.syncBufStore
+	c.mu.RUnlock()
+	if store != nil {
+		return store.GetSyncBuf(accountID)
+	}
+	// Fallback to file
 	path := c.syncBufPath(accountID)
 	if path == "" {
 		return ""
@@ -203,13 +217,20 @@ func (c *Connector) loadSyncBuf(accountID string) string {
 	if err := json.Unmarshal(data, &stored); err != nil {
 		return ""
 	}
-	if stored.GetUpdatesBuf != "" {
-		c.log.Debug("loaded sync buf", "account_id", accountID, "len", len(stored.GetUpdatesBuf))
-	}
 	return stored.GetUpdatesBuf
 }
 
 func (c *Connector) saveSyncBuf(accountID, buf string) {
+	c.mu.RLock()
+	store := c.syncBufStore
+	c.mu.RUnlock()
+	if store != nil {
+		if err := store.SetSyncBuf(accountID, buf); err != nil {
+			c.log.Warn("failed to save sync buf to db", "account_id", accountID, "error", err)
+		}
+		return
+	}
+	// Fallback to file
 	if buf == "" || c.dataDir == "" {
 		return
 	}

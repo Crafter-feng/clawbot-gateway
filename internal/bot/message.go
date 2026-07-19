@@ -19,13 +19,78 @@ const (
 
 // ── 消息模型 ──
 
+// MediaType 媒体类型常量
+const (
+	MediaTypeText  = 1
+	MediaTypeImage = 2
+	MediaTypeVoice = 3
+	MediaTypeFile  = 4
+	MediaTypeVideo = 5
+)
+
+// MessageItem 消息项（从 iLink item_list 解析）
+type MessageItem struct {
+	Type      int              `json:"type"`
+	TextItem  *TextItem        `json:"text_item,omitempty"`
+	ImageItem *ImageItem       `json:"image_item,omitempty"`
+	VoiceItem *VoiceItem       `json:"voice_item,omitempty"`
+	FileItem  *FileItem        `json:"file_item,omitempty"`
+	VideoItem *VideoItem       `json:"video_item,omitempty"`
+	RefMsg    *RefMessage      `json:"ref_msg,omitempty"`
+}
+
+type TextItem struct {
+	Text string `json:"text"`
+}
+
+type ImageItem struct {
+	Media     *CDNMedia `json:"media,omitempty"`
+	ThumbMedia *CDNMedia `json:"thumb_media,omitempty"`
+	AESKey    string    `json:"aeskey,omitempty"`
+	URL       string    `json:"url,omitempty"`
+	MidSize   int64     `json:"mid_size,omitempty"`
+}
+
+type VoiceItem struct {
+	Media   *CDNMedia `json:"media,omitempty"`
+	Text    string    `json:"text,omitempty"`
+	PlayTime int      `json:"playtime,omitempty"`
+}
+
+type FileItem struct {
+	Media    *CDNMedia `json:"media,omitempty"`
+	FileName string    `json:"file_name,omitempty"`
+	MD5      string    `json:"md5,omitempty"`
+	Len      string    `json:"len,omitempty"`
+}
+
+type VideoItem struct {
+	Media      *CDNMedia `json:"media,omitempty"`
+	VideoSize  int64     `json:"video_size,omitempty"`
+	VideoMD5   string    `json:"video_md5,omitempty"`
+	ThumbMedia *CDNMedia `json:"thumb_media,omitempty"`
+}
+
+type RefMessage struct {
+	MessageItem *MessageItem `json:"message_item,omitempty"`
+	Title       string       `json:"title,omitempty"`
+}
+
+type CDNMedia struct {
+	EncryptQueryParam string `json:"encrypt_query_param,omitempty"`
+	AESKey            string `json:"aes_key,omitempty"`
+	EncryptType       int    `json:"encrypt_type,omitempty"`
+}
+
+// NormalizedMessage 标准化消息
 type NormalizedMessage struct {
 	MsgID        string          `json:"msg_id"`
 	FromUser     string          `json:"from_user"`
 	ToUser       string          `json:"to_user"`
-	AccountID    string          `json:"account_id"` // 消息来源的微信账号
-	Type         int             `json:"type"`       // 1=text, 3=image, 34=voice, 49=file ...
+	AccountID    string          `json:"account_id"`
+	Type         int             `json:"type"`
 	Content      string          `json:"content"`
+	Items        []MessageItem   `json:"items,omitempty"` // 原始消息项
 	Timestamp    int64           `json:"timestamp"`
 	ContextToken string          `json:"context_token,omitempty"`
 	Raw          json.RawMessage `json:"raw,omitempty"`
@@ -125,15 +190,43 @@ type RawMessageItem_RefMsg struct {
 // normalize 将原始 iLink 消息转换为标准化格式
 func normalize(raw RawMessageItem) NormalizedMessage {
 	content := extractText(raw.ItemList)
+	items := convertItems(raw.ItemList)
 	return NormalizedMessage{
 		MsgID:        raw.MsgID.String(),
 		FromUser:     raw.FromUserid,
 		ToUser:       raw.ToUserid,
 		Type:         raw.MsgType,
 		Content:      content,
+		Items:        items,
 		Timestamp:    raw.Timestamp,
 		ContextToken: raw.ContextToken,
 	}
+}
+
+// convertItems 将 RawMessageItem_Item 转换为 MessageItem
+func convertItems(rawItems []RawMessageItem_Item) []MessageItem {
+	items := make([]MessageItem, 0, len(rawItems))
+	for _, raw := range rawItems {
+		item := MessageItem{Type: raw.Type}
+		if raw.TextItem != nil {
+			item.TextItem = &TextItem{Text: raw.TextItem.Text}
+		}
+		if raw.VoiceItem != nil {
+			item.VoiceItem = &VoiceItem{Text: raw.VoiceItem.Text}
+		}
+		if raw.RefMsg != nil {
+			ref := &RefMessage{Title: raw.RefMsg.Title}
+			if raw.RefMsg.MessageItem != nil {
+				converted := convertItems([]RawMessageItem_Item{*raw.RefMsg.MessageItem})
+				if len(converted) > 0 {
+					ref.MessageItem = &converted[0]
+				}
+			}
+			item.RefMsg = ref
+		}
+		items = append(items, item)
+	}
+	return items
 }
 
 // extractText 从 item_list 提取文本内容（与 Python _extract_text 逻辑对齐）

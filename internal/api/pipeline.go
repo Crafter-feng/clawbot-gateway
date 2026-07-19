@@ -93,6 +93,15 @@ func (p *MessagePipeline) processMessage(ctx context.Context, msg bot.Normalized
 	// 2. 命令解析（始终执行，优先级最高）
 	if cmd := p.commandProc.Parse(content); cmd != nil {
 		p.log.Info("command matched", "seq", seq, "action", cmd.Action, "args", cmd.Args)
+
+		// 一次性转发命令：/<backend_id>
+		if cmd.Action == "forward_to" {
+			backendID := cmd.Args[0]
+			p.log.Info("forwarding to backend", "seq", seq, "backend", backendID)
+			p.forwardToBackend(ctx, msg, content, backendID, seq)
+			return
+		}
+
 		reply := p.commandProc.Execute(cmd, msg)
 		if reply != "" {
 			creds := p.connector.GetAccountCredentials(msg.AccountID)
@@ -167,6 +176,58 @@ func (p *MessagePipeline) processMessage(ctx context.Context, msg bot.Normalized
 	ctxSession.AddTurn(content, resp.Text)
 
 	// 6. 发送回复
+	creds := p.connector.GetAccountCredentials(msg.AccountID)
+	if creds != nil {
+		contextToken := p.connector.GetContextToken(msg.AccountID, msg.FromUser)
+		if err := p.connector.SendTextWithCreds(ctx, creds, msg.FromUser, resp.Text, contextToken); err != nil {
+			p.log.Warn("send reply error", "seq", seq, "error", err)
+		}
+	} else {
+		p.log.Warn("no credentials for reply", "seq", seq, "account_id", msg.AccountID)
+	}
+
+	p.log.Info("message processed", "seq", seq, "backend", backendID, "reply_chars", len(resp.Text))
+}
+
+// forwardToBackend 转发消息到指定后端（一次性，不切换）
+func (p *MessagePipeline) forwardToBackend(ctx context.Context, msg bot.NormalizedMessage, content, backendID string, seq int64) {
+	bak, ok := p.adapters.Get(backendID)
+	if !ok {
+		p.log.Warn("backend not found", "seq", seq, "backend", backendID)
+		reply := fmt.Sprintf("❌ 后端 [%s] 不可用\n输入 /backends 查看可用后端", backendID)
+		creds := p.connector.GetAccountCredentials(msg.AccountID)
+		if creds != nil {
+			contextToken := p.connector.GetContextToken(msg.AccountID, msg.FromUser)
+			_ = p.connector.SendTextWithCreds(context.Background(), creds, msg.FromUser, reply, contextToken)
+		}
+		return
+	}
+
+	// 处理消息
+	ctxSession := p.ctxManager.GetContext(msg.FromUser, backendID)
+	backendCtx, cancel := context.WithTimeout(ctx, 120*time.Second)
+	defer cancel()
+
+	resp, err := bak.Handle(backendCtx, &adapter.ChatRequest{
+		Message:   content,
+		UserID:    msg.FromUser,
+		BackendID: backendID,
+		History:   ctxSession.GetHistory(),
+	})
+	if err != nil {
+		p.log.Warn("backend error", "seq", seq, "backend", backendID, "error", err)
+		reply := fmt.Sprintf("⚠️ [%s] 处理出错: %s", backendID, err.Error())
+		creds := p.connector.GetAccountCredentials(msg.AccountID)
+		if creds != nil {
+			contextToken := p.connector.GetContextToken(msg.AccountID, msg.FromUser)
+			_ = p.connector.SendTextWithCreds(context.Background(), creds, msg.FromUser, reply, contextToken)
+		}
+		return
+	}
+
+	ctxSession.AddTurn(content, resp.Text)
+
+	// 发送回复
 	creds := p.connector.GetAccountCredentials(msg.AccountID)
 	if creds != nil {
 		contextToken := p.connector.GetContextToken(msg.AccountID, msg.FromUser)
@@ -317,6 +378,17 @@ func (cp *CommandProcessor) Parse(text string) *CommandMatch {
 		return &CommandMatch{Action: "show_help"}
 	}
 
+	// 动态生成一次性转发命令：/<backend_id>
+	// 根据配置的 providers 自动生成，如 /hermes、/openclaw
+	if strings.HasPrefix(text, "/") && text != "/use" {
+		backendID := strings.TrimPrefix(text, "/")
+		if backendID != "" {
+			if _, ok := cp.adapters.Get(backendID); ok {
+				return &CommandMatch{Action: "forward_to", Args: []string{backendID}}
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -379,11 +451,20 @@ func (cp *CommandProcessor) Execute(cmd *CommandMatch, msg bot.NormalizedMessage
 			current, len(backends), healthyCount)
 
 	case "show_help":
-		return `📖 **帮助**
-/use              — 查看当前状态
-/use <后端ID>     — 切换后端
-/backends         — 列出所有后端
-/help             — 显示此帮助`
+		backends := cp.adapters.List()
+		lines := []string{"📖 **帮助**"}
+		lines = append(lines, "/use              — 查看当前状态")
+		lines = append(lines, "/use <后端ID>     — 切换后端（持久）")
+		lines = append(lines, "/backends         — 列出所有后端")
+		lines = append(lines, "/help             — 显示此帮助")
+		if len(backends) > 0 {
+			lines = append(lines, "")
+			lines = append(lines, "⚡ 一次性转发命令（不切换后端）：")
+			for _, b := range backends {
+				lines = append(lines, fmt.Sprintf("/%-16s — 转发到 %s", b.ID(), b.Name()))
+			}
+		}
+		return strings.Join(lines, "\n")
 
 	default:
 		return "❓ 未知命令，输入 /help 查看帮助"

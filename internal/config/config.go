@@ -4,166 +4,114 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"os"
-	"regexp"
+	"strconv"
 
-	"gopkg.in/yaml.v3"
+	"clawbot-gateway/internal/database"
 )
 
-// GenerateSecret 生成随机密钥（32 字节 → 64 hex）
+// GenerateSecret 生成随机密钥
 func GenerateSecret() string {
 	b := make([]byte, 32)
 	rand.Read(b)
 	return hex.EncodeToString(b)
 }
 
-// envVarRe matches ${VAR_NAME} patterns (NOT bare $var) for safe YAML expansion
-var envVarRe = regexp.MustCompile(`\$\{([^}]+)\}`)
-
+// Config 运行时配置（从数据库加载）
 type Config struct {
-	Server   ServerConfig   `yaml:"server"`
-	ClawBot  ClawBotConfig  `yaml:"clawbot"`
-	API      APIConfig      `yaml:"api"`
-	Backend  BackendConfig  `yaml:"backend"`
-	Context  ContextConfig  `yaml:"context"`
-	LogLevel string         `yaml:"log_level"`
+	Server   ServerConfig
+	ClawBot  ClawBotConfig
+	API      APIConfig
+	Context  ContextConfig
+	LogLevel string
 }
 
 type ServerConfig struct {
-	Host string `yaml:"host"`
-	Port int    `yaml:"port"`
-}
-
-type ClawBotAccount struct {
-	Token     string `yaml:"token"`
-	UserID    string `yaml:"user_id"`
-	AccountID string `yaml:"account_id"`
-	BaseURL   string `yaml:"base_url"`
-	AccountName string `yaml:"account_name"`
+	Host string
+	Port int
 }
 
 type ClawBotConfig struct {
-	Token         string            `yaml:"token"`
-	BaseURL       string            `yaml:"base_url"`
-	PollTimeout   int               `yaml:"poll_timeout"`
-	MaxRetryLogin int               `yaml:"max_retry_login"`
-	Accounts      []ClawBotAccount  `yaml:"accounts"`
-	BotType       int               `yaml:"bot_type"`
+	BaseURL      string
+	PollTimeout  int
+	BotType      int
 }
 
 type APIConfig struct {
-	// Web 登录密码（管理后台 UI 登录使用）
-	LoginPassword string `yaml:"login_password"`
-	// JWT 签名密钥（不填自动生成）
-	JWTSecret string `yaml:"jwt_secret"`
-	// JWT 有效期（小时，默认 24）
-	JWTExpiryHours int `yaml:"jwt_expiry_hours"`
-	AllowedOrigins []string `yaml:"allowed_origins"`
-}
-
-type BackendConfig struct {
-	DefaultBackend string           `yaml:"default_backend"`
-	Providers      []ProviderConfig `yaml:"providers"`
-	KeywordRules   []KeywordRule    `yaml:"keyword_rules"`
-}
-
-type ProviderConfig struct {
-	ID      string                 `yaml:"id"`
-	Name    string                 `yaml:"name"`
-	Type    string                 `yaml:"type"`
-	Enabled bool                   `yaml:"enabled"`
-	Config  map[string]interface{} `yaml:"config"`
-}
-
-type KeywordRule struct {
-	Keywords []string `yaml:"keywords"`
-	Backend  string   `yaml:"backend"`
+	JWTSecret       string
+	JWTExpiryHours  int
+	AllowedOrigins  []string
+	LoginPassword   string
 }
 
 type ContextConfig struct {
-	MaxHistory     int    `yaml:"max_history"`
-	SwitchStrategy string `yaml:"switch_strategy"`
-	TTL            int    `yaml:"ttl"`
+	MaxHistory      int
+	SwitchStrategy  string
+	TTL             int
 }
 
-func Load(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	// 展开 ${VAR_NAME} 环境变量引用（在 yaml 反序列化之前，确保 map[string]interface{} 值也被展开）
-	// 使用 ${VAR} 语法而非 os.ExpandEnv（$var），避免意外展开 YAML 内容中的 $ 符号
-	expanded := envVarRe.ReplaceAllStringFunc(string(data), func(match string) string {
-		key := match[2 : len(match)-1]
-		if v := os.Getenv(key); v != "" {
-			return v
-		}
-		return match
-	})
+// LoadFromDB 从数据库加载配置
+func LoadFromDB(db *database.DB) *Config {
 	cfg := &Config{}
-	if err := yaml.Unmarshal([]byte(expanded), cfg); err != nil {
-		return nil, err
-	}
-	setDefaults(cfg)
-	return cfg, nil
-}
 
-func setDefaults(cfg *Config) {
-	if cfg.Server.Host == "" {
-		cfg.Server.Host = "0.0.0.0"
-	}
-	if cfg.Server.Port == 0 {
-		cfg.Server.Port = 8080
-	}
-	if cfg.ClawBot.BaseURL == "" {
-		cfg.ClawBot.BaseURL = "https://ilinkai.weixin.qq.com"
-	}
-	if cfg.ClawBot.PollTimeout == 0 {
-		cfg.ClawBot.PollTimeout = 35
-	}
-	if cfg.ClawBot.MaxRetryLogin == 0 {
-		cfg.ClawBot.MaxRetryLogin = 3
-	}
-	if cfg.ClawBot.BotType == 0 {
-		cfg.ClawBot.BotType = 3
-	}
+	// 服务器配置（环境变量优先）
+	cfg.Server.Host = getEnvOrDefault("CLAWBOT_HOST", db.GetSetting("server.host"))
+	cfg.Server.Port = getIntEnvOrDefault("CLAWBOT_PORT", db.GetSetting("server.port"), 8080)
 
-	if cfg.Backend.DefaultBackend == "" {
-		cfg.Backend.DefaultBackend = "openclaw"
-	}
-	if cfg.Context.MaxHistory == 0 {
-		cfg.Context.MaxHistory = 20
-	}
-	if cfg.Context.SwitchStrategy == "" {
-		cfg.Context.SwitchStrategy = "keep"
-	}
-	if cfg.Context.TTL == 0 {
-		cfg.Context.TTL = 3600
-	}
-	if cfg.API.AllowedOrigins == nil {
-		cfg.API.AllowedOrigins = []string{"*"}
-	}
+	// iLink 配置
+	cfg.ClawBot.BaseURL = getEnvOrDefault("CLAWBOT_ILINK_BASE_URL", db.GetSetting("clawbot.base_url"))
+	cfg.ClawBot.PollTimeout = getIntEnvOrDefault("CLAWBOT_POLL_TIMEOUT", db.GetSetting("clawbot.poll_timeout"), 35)
+	cfg.ClawBot.BotType = getIntEnvOrDefault("CLAWBOT_BOT_TYPE", db.GetSetting("clawbot.bot_type"), 3)
 
-	// ── 登录密码 ──
-	// 环境变量 CLAWBOT_LOGIN_PASSWORD 优先
-	if v := os.Getenv("CLAWBOT_LOGIN_PASSWORD"); v != "" {
-		cfg.API.LoginPassword = v
-	}
-	// 如果为空，生成随机登录密码
-	if cfg.API.LoginPassword == "" {
-		b := make([]byte, 12)
-		if _, err := rand.Read(b); err == nil {
-			cfg.API.LoginPassword = "admin_" + hex.EncodeToString(b)
-		}
-	}
-
-	// ── JWT 配置 ──
-	if v := os.Getenv("CLAWBOT_JWT_SECRET"); v != "" {
-		cfg.API.JWTSecret = v
+	// API 配置
+	cfg.API.JWTSecret = getEnvOrDefault("CLAWBOT_JWT_SECRET", "")
+	if cfg.API.JWTSecret == "" {
+		cfg.API.JWTSecret = db.GetSetting("api.jwt_secret")
 	}
 	if cfg.API.JWTSecret == "" {
 		cfg.API.JWTSecret = GenerateSecret()
+		db.SetSetting("api.jwt_secret", cfg.API.JWTSecret)
 	}
-	if cfg.API.JWTExpiryHours == 0 {
-		cfg.API.JWTExpiryHours = 24
+	cfg.API.JWTExpiryHours = getIntEnvOrDefault("CLAWBOT_JWT_EXPIRY_HOURS", db.GetSetting("api.jwt_expiry_hours"), 24)
+	cfg.API.LoginPassword = getEnvOrDefault("CLAWBOT_LOGIN_PASSWORD", "")
+	if cfg.API.LoginPassword == "" {
+		cfg.API.LoginPassword = db.GetSetting("api.login_password")
 	}
+	if cfg.API.LoginPassword == "" {
+		b := make([]byte, 12)
+		rand.Read(b)
+		cfg.API.LoginPassword = "admin_" + hex.EncodeToString(b)
+		db.SetSetting("api.login_password", cfg.API.LoginPassword)
+	}
+	cfg.API.AllowedOrigins = []string{getEnvOrDefault("CLAWBOT_ALLOWED_ORIGINS", db.GetSetting("api.allowed_origins"))}
+
+	// 上下文配置
+	cfg.Context.MaxHistory = getIntEnvOrDefault("CLAWBOT_MAX_HISTORY", db.GetSetting("context.max_history"), 20)
+	cfg.Context.SwitchStrategy = getEnvOrDefault("CLAWBOT_SWITCH_STRATEGY", db.GetSetting("context.switch_strategy"))
+	cfg.Context.TTL = getIntEnvOrDefault("CLAWBOT_CONTEXT_TTL", db.GetSetting("context.ttl"), 3600)
+
+	// 日志级别
+	cfg.LogLevel = getEnvOrDefault("CLAWBOT_LOG_LEVEL", "info")
+
+	return cfg
+}
+
+func getEnvOrDefault(key, defaultValue string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return defaultValue
+}
+
+func getIntEnvOrDefault(key, strValue string, defaultValue int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	if strValue != "" {
+		if n, err := strconv.Atoi(strValue); err == nil {
+			return n
+		}
+	}
+	return defaultValue
 }

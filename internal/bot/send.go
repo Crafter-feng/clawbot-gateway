@@ -7,7 +7,104 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 )
+
+// ── 消息分片配置 ──
+
+const (
+	MaxMessageLength = 2048  // 单条消息最大长度
+	ChunkSeparator   = "\n---\n" // 分片分隔符
+)
+
+// SplitMessage 将长消息拆分为多条消息
+func SplitMessage(text string, maxLen int) []string {
+	if maxLen <= 0 {
+		maxLen = MaxMessageLength
+	}
+
+	// 如果消息未超限，直接返回
+	runes := []rune(text)
+	if len(runes) <= maxLen {
+		return []string{text}
+	}
+
+	// 按段落拆分
+	paragraphs := strings.Split(text, "\n\n")
+	chunks := make([]string, 0)
+	currentChunk := ""
+
+	for _, para := range paragraphs {
+		// 如果当前段落加上新段落超限
+		if len([]rune(currentChunk))+len([]rune(para))+2 > maxLen {
+			// 保存当前 chunk
+			if currentChunk != "" {
+				chunks = append(chunks, strings.TrimSpace(currentChunk))
+			}
+			// 如果单个段落就超限，需要进一步拆分
+			if len([]rune(para)) > maxLen {
+				subChunks := splitByRunes(para, maxLen)
+				chunks = append(chunks, subChunks...)
+				currentChunk = ""
+			} else {
+				currentChunk = para
+			}
+		} else {
+			if currentChunk != "" {
+				currentChunk += "\n\n"
+			}
+			currentChunk += para
+		}
+	}
+
+	// 保存最后一个 chunk
+	if currentChunk != "" {
+		chunks = append(chunks, strings.TrimSpace(currentChunk))
+	}
+
+	return chunks
+}
+
+// splitByRunes 按 rune 数量拆分字符串
+func splitByRunes(text string, maxLen int) []string {
+	runes := []rune(text)
+	if len(runes) <= maxLen {
+		return []string{text}
+	}
+
+	chunks := make([]string, 0)
+	for i := 0; i < len(runes); i += maxLen {
+		end := i + maxLen
+		if end > len(runes) {
+			end = len(runes)
+		}
+		chunks = append(chunks, string(runes[i:end]))
+	}
+	return chunks
+}
+
+// SendTextWithCredsChunked 发送分片消息
+func (c *Connector) SendTextWithCredsChunked(ctx context.Context, creds *Credentials, toUser, text, contextToken string) error {
+	chunks := SplitMessage(text, MaxMessageLength)
+	for i, chunk := range chunks {
+		// 如果有多片，添加序号
+		if len(chunks) > 1 {
+			chunk = fmt.Sprintf("[%d/%d]\n%s", i+1, len(chunks), chunk)
+		}
+		if err := c.SendTextWithCreds(ctx, creds, toUser, chunk, contextToken); err != nil {
+			return err
+		}
+		// 多片之间添加延迟，避免消息乱序
+		if i < len(chunks)-1 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+		}
+	}
+	return nil
+}
 
 // ── 发送消息 ──
 

@@ -5,60 +5,82 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"clawbot-gateway/internal/store"
+	"clawbot-gateway/internal/database"
 )
 
-// ══════════════════════════════════════════════════════════════════════
-//  路由规则管理
-// ══════════════════════════════════════════════════════════════════════
-
 func (s *APIServer) handleListRoutes(c *gin.Context) {
-	rules := s.router.GetKeywordRules()
-	c.JSON(200, gin.H{"routes": rules})
+	routes, err := s.db.ListRoutes()
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"routes": routes})
 }
 
 func (s *APIServer) handleAddRoute(c *gin.Context) {
 	var req struct {
-		Keyword  string `json:"keyword"`
-		Backend  string `json:"backend"`
-		IsRegexp bool   `json:"is_regexp,omitempty"`
+		Keyword   string `json:"keyword"`
+		BackendID string `json:"backend_id"`
+		IsRegexp  bool   `json:"is_regexp"`
+		Priority  int    `json:"priority"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
-	if req.Keyword == "" {
-		c.JSON(400, gin.H{"error": "keyword must not be empty"})
+
+	route := database.Route{
+		Keyword:   req.Keyword,
+		BackendID: req.BackendID,
+		IsRegexp:  req.IsRegexp,
+		Priority:  req.Priority,
+	}
+
+	if err := s.db.CreateRoute(route); err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
-	if req.Backend == "" {
-		c.JSON(400, gin.H{"error": "backend must not be empty"})
-		return
+
+	// 同步到内存路由引擎
+	s.router.AddKeywordRule(req.Keyword, req.BackendID, req.IsRegexp)
+
+	c.JSON(200, gin.H{"success": true})
+}
+
+func (s *APIServer) handleUpdateRoute(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	var req struct {
+		Keyword   string `json:"keyword"`
+		BackendID string `json:"backend_id"`
+		IsRegexp  bool   `json:"is_regexp"`
+		Priority  int    `json:"priority"`
 	}
-	if err := s.router.AddKeywordRule(req.Keyword, req.Backend, req.IsRegexp); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
-	stored := s.store.GetKeywordRules()
-	stored = append(stored, store.StoredRule{Keyword: req.Keyword, Backend: req.Backend, IsRegexp: req.IsRegexp})
-	_ = s.store.SetKeywordRules(stored)
+
+	route := database.Route{
+		ID:        id,
+		Keyword:   req.Keyword,
+		BackendID: req.BackendID,
+		IsRegexp:  req.IsRegexp,
+		Priority:  req.Priority,
+	}
+
+	if err := s.db.UpdateRoute(id, route); err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
 	c.JSON(200, gin.H{"success": true})
 }
 
 func (s *APIServer) handleRemoveRoute(c *gin.Context) {
-	index, err := strconv.Atoi(c.Param("index"))
-	if err != nil {
-		c.JSON(400, gin.H{"error": "invalid index"})
+	id, _ := strconv.Atoi(c.Param("id"))
+	if err := s.db.DeleteRoute(id); err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
-	if s.router.RemoveKeywordRule(index) {
-		stored := s.store.GetKeywordRules()
-		if index >= 0 && index < len(stored) {
-			stored = append(stored[:index], stored[index+1:]...)
-			_ = s.store.SetKeywordRules(stored)
-		}
-		c.JSON(200, gin.H{"success": true})
-	} else {
-		c.JSON(404, gin.H{"error": "rule not found"})
-	}
+	c.JSON(200, gin.H{"success": true})
 }

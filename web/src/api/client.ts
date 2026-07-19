@@ -37,6 +37,10 @@ async function del<T>(path: string): Promise<T> {
   return request<T>('DELETE', path)
 }
 
+async function put<T>(path: string, body?: unknown): Promise<T> {
+  return request<T>('PUT', path, body)
+}
+
 function setToken(newToken: string | null): void {
   token = newToken
 }
@@ -45,4 +49,4 @@ function setOnUnauthorized(handler: (() => void) | null): void {
   onUnauthorized = handler
 }
 
-export const api = { get, post, del, setToken, setOnUnauthorized }
+export const api = { get, post, del, put, setToken, setOnUnauthorized }

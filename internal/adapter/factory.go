@@ -17,14 +17,18 @@ import (
 
 type AdapterFactory struct {
 	mu       sync.RWMutex
-	adapters map[string]BackendAdapter
+	adapters map[string]BackendAdapter    // 后端适配器
+	conns    map[string]ConnectionAdapter // 连接适配器
 }
 
 func NewAdapterFactory() *AdapterFactory {
 	return &AdapterFactory{
 		adapters: make(map[string]BackendAdapter),
+		conns:    make(map[string]ConnectionAdapter),
 	}
 }
+
+// ── 后端适配器管理 ──
 
 func (f *AdapterFactory) Register(adapter BackendAdapter) {
 	f.mu.Lock()
@@ -63,6 +67,37 @@ func (f *AdapterFactory) HealthyList() []BackendAdapter {
 		if a.HealthCheck(context.Background()) {
 			result = append(result, a)
 		}
+	}
+	return result
+}
+
+// ── 连接适配器管理 ──
+
+func (f *AdapterFactory) RegisterConnection(adapter ConnectionAdapter) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.conns[adapter.ID()] = adapter
+}
+
+func (f *AdapterFactory) GetConnection(id string) (ConnectionAdapter, bool) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	a, ok := f.conns[id]
+	return a, ok
+}
+
+func (f *AdapterFactory) RemoveConnection(id string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.conns, id)
+}
+
+func (f *AdapterFactory) ListConnections() []ConnectionAdapter {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	result := make([]ConnectionAdapter, 0, len(f.conns))
+	for _, a := range f.conns {
+		result = append(result, a)
 	}
 	return result
 }

@@ -12,6 +12,11 @@ import (
 	"clawbot-gateway/internal/log"
 )
 
+// MessageBroadcaster 消息广播接口（避免循环依赖）
+type MessageBroadcaster interface {
+	Broadcast(msg NormalizedMessage)
+}
+
 // ── ClawBot Connector ──
 
 type Connector struct {
@@ -30,7 +35,8 @@ type Connector struct {
 	dataDir       string
 	qrManager     *QRCodeManager
 	botType       int
-	contextTokens map[string]string // accountID:userID → context_token
+	contextTokens map[string]string       // accountID:userID → context_token
+	broadcaster   MessageBroadcaster      // 消息广播器（用于虚拟 Bot 代理模式）
 	log           *log.Logger
 }
 
@@ -99,6 +105,22 @@ func (c *Connector) GetCredentials() *Credentials {
 	return c.credentials
 }
 
+// ── 消息广播 ──
+
+// SetBroadcaster 设置消息广播器（用于虚拟 Bot 代理模式）
+func (c *Connector) SetBroadcaster(b MessageBroadcaster) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.broadcaster = b
+}
+
+// GetBroadcaster 获取消息广播器
+func (c *Connector) GetBroadcaster() MessageBroadcaster {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.broadcaster
+}
+
 // ── context_token 缓存 ──
 
 func (c *Connector) SetContextToken(accountID, userID, token string) {
@@ -117,6 +139,14 @@ func (c *Connector) GetContextToken(accountID, userID string) string {
 		return ""
 	}
 	return c.contextTokens[accountID+":"+userID]
+}
+
+// ── 轮询游标存储 ──
+
+func (c *Connector) SetSyncBufStore(store SyncBufStore) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.syncBufStore = store
 }
 
 // ── 辅助方法 ──
