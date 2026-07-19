@@ -61,6 +61,16 @@ func (s *APIServer) handleRegisterBackend(c *gin.Context) {
 			model = "gpt-4o"
 		}
 		bak = adapter.NewOpenAICompatibleAdapter(req.ID, req.Name, apiKey, baseURL, model)
+	case "webhook":
+		url, _ := req.Config["url"].(string)
+		headersRaw, _ := req.Config["headers"].(map[string]interface{})
+		headers := make(map[string]string)
+		for k, v := range headersRaw {
+			if s, ok := v.(string); ok {
+				headers[k] = s
+			}
+		}
+		bak = adapter.NewWebhookAdapter(req.ID, req.Name, url, headers)
 
 	default:
 		c.JSON(400, gin.H{"error": "unsupported backend type: " + req.Type})

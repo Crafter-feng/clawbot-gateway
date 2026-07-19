@@ -15,6 +15,7 @@ import (
 	"clawbot-gateway/internal/bot"
 	"clawbot-gateway/internal/config"
 	"clawbot-gateway/internal/log"
+	"clawbot-gateway/internal/relay"
 	"clawbot-gateway/internal/route"
 	"clawbot-gateway/internal/store"
 )
@@ -111,6 +112,16 @@ func main() {
 			baseURL, _ := provider.Config["base_url"].(string)
 			model, _ := provider.Config["model"].(string)
 			af.Register(adapter.NewOpenAICompatibleAdapter(provider.ID, provider.Name, apiKey, baseURL, model))
+		case "webhook":
+			url, _ := provider.Config["url"].(string)
+			headersRaw, _ := provider.Config["headers"].(map[string]interface{})
+			headers := make(map[string]string)
+			for k, v := range headersRaw {
+				if s, ok := v.(string); ok {
+					headers[k] = s
+				}
+			}
+			af.Register(adapter.NewWebhookAdapter(provider.ID, provider.Name, url, headers))
 		default:
 			log.Warn("unknown backend type", "type", provider.Type, "id", provider.ID)
 		}
@@ -118,6 +129,13 @@ func main() {
 	// 注册默认 echo 调试后端
 	af.Register(adapter.NewEchoAdapter("echo", "Echo Debug"))
 	log.Info("adapter factory initialized", "count", len(af.List()))
+
+	// 4b. 初始化文件中转管理器
+	relayMgr := relay.NewRelayManager()
+	relayMgr.SetLogger(log)
+	// 注册 Obsidian 中转（可通过配置启用）
+	// relayMgr.Register(relay.NewObsidianRelay("/path/to/vault", "临时收集", true))
+	log.Info("relay manager initialized")
 
 	// 5. 初始化上下文管理器
 	ttl := time.Duration(cfg.Context.TTL) * time.Second

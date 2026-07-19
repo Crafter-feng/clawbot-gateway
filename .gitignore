@@ -38,3 +38,4 @@ web/node_modules/*
 .codegraph
 .omo
 .vscode
+.mimocode

@@ -19,6 +19,7 @@ import (
 	"clawbot-gateway/internal/session"
 	"clawbot-gateway/internal/bot"
 	"clawbot-gateway/internal/config"
+	"clawbot-gateway/internal/ilink"
 	"clawbot-gateway/internal/log"
 	"clawbot-gateway/internal/route"
 	"clawbot-gateway/internal/store"
@@ -85,6 +86,10 @@ func (s *APIServer) Start() error {
 	rest.GET("/health", s.handleHealth)
 	rest.GET("/api/v1/health", s.handleHealth)
 	rest.POST("/auth/login", s.handleLogin)
+
+	// ── iLink API（外部服务接入，无需鉴权） ──
+	ilinkServer := ilink.NewServer(s.connector)
+	ilinkServer.RegisterRoutes(rest)
 
 	// ── 需要鉴权的 API ──
 	api := rest.Group("/api/v1", s.authMiddleware())
