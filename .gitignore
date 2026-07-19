@@ -17,6 +17,10 @@
 *.swp
 *.swo
 *~
+.codegraph
+.omo
+.vscode
+.mimocode
 
 # ── OS ──
 .DS_Store
@@ -35,7 +39,3 @@ Thumbs.db
 *.env
 web/dist
 web/node_modules/*
-.codegraph
-.omo
-.vscode
-.mimocode

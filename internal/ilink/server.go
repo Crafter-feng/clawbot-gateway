@@ -22,7 +22,7 @@ func NewServer(bot *bot.Connector) *Server {
 }
 
 // RegisterRoutes 注册 iLink API 路由
-func (s *Server) RegisterRoutes(r *gin.RouterGroup) {
+func (s *Server) RegisterRoutes(r *gin.Engine) {
 	ilink := r.Group("/ilink/bot")
 	{
 		ilink.POST("/sendmessage", s.handleSendMessage)
