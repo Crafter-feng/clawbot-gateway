@@ -133,7 +133,7 @@ export default function DashboardPage() {
                       {r.is_regexp && <span className="tag tag-warning" style={{ marginLeft: '8px' }}>正则</span>}
                     </div>
                     <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                      转发至: {r.backend}
+                      转发至: {r.backend_id}
                     </div>
                   </div>
                 </div>

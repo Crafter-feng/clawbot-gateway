@@ -22,7 +22,7 @@ func (db *DB) ListBackends() ([]Backend, error) {
 	}
 	defer rows.Close()
 
-	var result []Backend
+	result := make([]Backend, 0)
 	for rows.Next() {
 		var b Backend
 		var enabled int

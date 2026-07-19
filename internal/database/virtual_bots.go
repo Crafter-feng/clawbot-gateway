@@ -14,7 +14,7 @@ func (db *DB) ListVirtualBots() ([]VirtualBot, error) {
 	}
 	defer rows.Close()
 
-	var result []VirtualBot
+	result := make([]VirtualBot, 0)
 	for rows.Next() {
 		var vb VirtualBot
 		if err := rows.Scan(&vb.ID, &vb.AccountID, &vb.UserID, &vb.BaseURL); err != nil {
@@ -84,7 +84,7 @@ func (db *DB) GetAllUserSessions() ([]UserSession, error) {
 	}
 	defer rows.Close()
 
-	var result []UserSession
+	result := make([]UserSession, 0)
 	for rows.Next() {
 		var s UserSession
 		if err := rows.Scan(&s.UserID, &s.BackendID, &s.RouteMode, &s.Secondaries); err != nil {

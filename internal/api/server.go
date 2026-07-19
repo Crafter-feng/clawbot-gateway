@@ -85,6 +85,11 @@ func (s *APIServer) Start(addr string) error {
 	// 需要鉴权的 API
 	api := rest.Group("/api/v1", s.authMiddleware())
 
+	// API Token 管理
+	auth := api.Group("/auth")
+	auth.GET("/token", s.handleGetAPIToken)
+	auth.POST("/token", s.handleRegenAPIToken)
+
 	// 配置管理
 	cfg := api.Group("/config")
 	cfg.GET("", s.handleGetAllConfig)

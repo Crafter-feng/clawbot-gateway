@@ -17,14 +17,31 @@ var defaults = map[string]string{
 	"route.default_backend": "echo",
 }
 
+// 环境变量映射（特殊处理）
+var envMapping = map[string]string{
+	"api.login_password": "CLAWBOT_LOGIN_PASSWORD",
+	"api.jwt_secret":     "CLAWBOT_JWT_SECRET",
+	"server.host":        "CLAWBOT_HOST",
+	"server.port":        "CLAWBOT_PORT",
+	"clawbot.base_url":   "CLAWBOT_ILINK_BASE_URL",
+}
+
 // GetSetting 获取配置，优先环境变量
 func (db *DB) GetSetting(key string) string {
-	// 环境变量优先
+	// 检查特殊映射
+	if envKey, ok := envMapping[key]; ok {
+		if v := os.Getenv(envKey); v != "" {
+			return v
+		}
+	}
+
+	// 通用映射：CLAWBOT_ + 大写下划线
 	envKey := "CLAWBOT_" + toEnvKey(key)
 	if v := os.Getenv(envKey); v != "" {
 		return v
 	}
 
+	// 从数据库读取
 	var value string
 	err := db.conn.QueryRow("SELECT value FROM settings WHERE key = ?", key).Scan(&value)
 	if err == nil {
@@ -65,9 +82,10 @@ func (db *DB) GetAllSettings() map[string]string {
 
 	// 环境变量覆盖
 	for k := range result {
-		envKey := "CLAWBOT_" + toEnvKey(k)
-		if v := os.Getenv(envKey); v != "" {
-			result[k] = v
+		if envKey, ok := envMapping[k]; ok {
+			if v := os.Getenv(envKey); v != "" {
+				result[k] = v
+			}
 		}
 	}
 

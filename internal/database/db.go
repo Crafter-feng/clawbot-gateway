@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
-	"sync"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -12,7 +11,6 @@ import (
 // DB 数据库连接管理
 type DB struct {
 	conn     *sql.DB
-	mu       sync.RWMutex
 	filePath string
 }
 

@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
+
 	"clawbot-gateway/internal/adapter"
 	"clawbot-gateway/internal/api"
 	"clawbot-gateway/internal/bot"
@@ -22,6 +24,9 @@ import (
 )
 
 func main() {
+	// 加载 .env 文件
+	godotenv.Load()
+
 	logLevel := os.Getenv("CLAWBOT_LOG_LEVEL")
 	if logLevel == "" {
 		logLevel = "info"
@@ -110,7 +115,6 @@ func main() {
 		BaseURL:     cfg.ClawBot.BaseURL,
 		PollTimeout: cfg.ClawBot.PollTimeout,
 		BotType:     cfg.ClawBot.BotType,
-		DataDir:     "data/syncbuf",
 		Log:         log,
 	})
 	log.Info("ClawBot connector initialized")

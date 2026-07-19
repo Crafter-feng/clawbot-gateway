@@ -2,17 +2,19 @@ import { create } from 'zustand'
 import { api } from '../api/client'
 
 interface Route {
+  id: number
   keyword: string
-  backend: string
+  backend_id: string
   is_regexp: boolean
+  priority: number
 }
 
 interface RoutesState {
   items: Route[]
   loading: boolean
   fetch(): Promise<void>
-  add(keyword: string, backend: string, isRegexp: boolean): Promise<void>
-  remove(index: number): Promise<void>
+  add(keyword: string, backendId: string, isRegexp: boolean): Promise<void>
+  remove(id: number): Promise<void>
 }
 
 export const useRoutesStore = create<RoutesState>((set, get) => ({
@@ -23,19 +25,19 @@ export const useRoutesStore = create<RoutesState>((set, get) => ({
     set({ loading: true })
     try {
       const data = await api.get<{ routes: Route[] }>('/api/v1/routes')
-      set({ items: data.routes, loading: false })
+      set({ items: data.routes || [], loading: false })
     } catch {
-      set({ loading: false })
+      set({ items: [], loading: false })
     }
   },
 
-  async add(keyword: string, backend: string, isRegexp: boolean) {
-    await api.post('/api/v1/routes', { keyword, backend, is_regexp: isRegexp })
+  async add(keyword: string, backendId: string, isRegexp: boolean) {
+    await api.post('/api/v1/routes', { keyword, backend_id: backendId, is_regexp: isRegexp })
     await get().fetch()
   },
 
-  async remove(index: number) {
-    await api.del(`/api/v1/routes/${index}`)
+  async remove(id: number) {
+    await api.del(`/api/v1/routes/${id}`)
     await get().fetch()
   },
 }))

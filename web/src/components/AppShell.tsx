@@ -18,8 +18,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const { items: accounts } = useAccountsStore()
   const { toast } = useToast()
 
-  const online = accounts.some((a) => a.status === 'online')
-  const activeIdx = navItems.findIndex((item) => location.pathname.startsWith(item.path))
+    const activeIdx = navItems.findIndex((item) => location.pathname.startsWith(item.path))
 
   const handleLogout = () => {
     logout()
@@ -143,18 +142,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
             flexDirection: 'column',
             gap: '12px',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 14px' }}>
-              <span style={{
-                width: '8px',
-                height: '8px',
-                borderRadius: '50%',
-                background: online ? 'var(--success)' : 'var(--danger)',
-                display: 'inline-block',
-              }} />
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                {online ? '运行中' : '未连接'}
-              </span>
-            </div>
             <button
               onClick={handleLogout}
               style={{

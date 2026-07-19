@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -184,16 +182,6 @@ func (c *Connector) accountPollLoop(ctx context.Context, creds *Credentials) {
 	}
 }
 
-func (c *Connector) syncBufPath(accountID string) string {
-	if c.dataDir == "" {
-		return ""
-	}
-	safeName := filepath.Base(accountID)
-	if safeName == "." || safeName == "/" {
-		safeName = "unknown"
-	}
-	return filepath.Join(c.dataDir, safeName+".syncbuf.json")
-}
 
 func (c *Connector) loadSyncBuf(accountID string) string {
 	c.mu.RLock()
@@ -202,22 +190,7 @@ func (c *Connector) loadSyncBuf(accountID string) string {
 	if store != nil {
 		return store.GetSyncBuf(accountID)
 	}
-	// Fallback to file
-	path := c.syncBufPath(accountID)
-	if path == "" {
-		return ""
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	var stored struct {
-		GetUpdatesBuf string `json:"get_updates_buf"`
-	}
-	if err := json.Unmarshal(data, &stored); err != nil {
-		return ""
-	}
-	return stored.GetUpdatesBuf
+	return ""
 }
 
 func (c *Connector) saveSyncBuf(accountID, buf string) {
@@ -226,24 +199,8 @@ func (c *Connector) saveSyncBuf(accountID, buf string) {
 	c.mu.RUnlock()
 	if store != nil {
 		if err := store.SetSyncBuf(accountID, buf); err != nil {
-			c.log.Warn("failed to save sync buf to db", "account_id", accountID, "error", err)
+			c.log.Warn("failed to save sync buf", "account_id", accountID, "error", err)
 		}
-		return
-	}
-	// Fallback to file
-	if buf == "" || c.dataDir == "" {
-		return
-	}
-	path := c.syncBufPath(accountID)
-	if path == "" {
-		return
-	}
-	data, err := json.Marshal(map[string]string{"get_updates_buf": buf})
-	if err != nil {
-		return
-	}
-	if err := os.WriteFile(path, data, 0600); err != nil {
-		c.log.Warn("failed to save sync buf", "account_id", accountID, "error", err)
 	}
 }
 

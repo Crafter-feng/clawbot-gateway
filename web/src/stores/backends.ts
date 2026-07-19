@@ -6,20 +6,15 @@ interface Backend {
   name: string
   type: string
   healthy: boolean
-  config?: Record<string, unknown>
+  enabled: boolean
+  config?: string
 }
 
 interface BackendForm {
   id: string
   name: string
   type: string
-  config: {
-    api_key?: string
-    base_url?: string
-    model?: string
-    url?: string
-    headers?: Record<string, string>
-  }
+  config?: Record<string, unknown>
 }
 
 interface BackendsState {
@@ -44,9 +39,9 @@ export const useBackendsStore = create<BackendsState>((set, get) => ({
     set({ loading: true })
     try {
       const data = await api.get<{ backends: Backend[]; default: string }>('/api/v1/backends')
-      set({ items: data.backends, defaultBackend: data.default ?? '', loading: false })
+      set({ items: data.backends || [], defaultBackend: data.default ?? '', loading: false })
     } catch {
-      set({ loading: false })
+      set({ items: [], loading: false })
     }
   },
 
@@ -64,7 +59,7 @@ export const useBackendsStore = create<BackendsState>((set, get) => ({
   },
 
   async update(id: string, data: Partial<BackendForm>) {
-    await api.post(`/api/v1/backends/${id}`, data)
+    await api.put(`/api/v1/backends/${id}`, data)
     await get().fetch()
   },
 
@@ -74,7 +69,7 @@ export const useBackendsStore = create<BackendsState>((set, get) => ({
   },
 
   async setDefault(backendId: string) {
-    await api.post('/api/v1/backends/default', { backend_id: backendId })
+    await api.put('/api/v1/backends/default', { backend_id: backendId })
     set({ defaultBackend: backendId })
   },
 

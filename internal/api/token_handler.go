@@ -10,7 +10,6 @@ import (
 func (s *APIServer) handleGetAPIToken(c *gin.Context) {
 	token := s.db.GetSetting("api.token")
 	if token == "" {
-		// 自动生成
 		b := make([]byte, 32)
 		rand.Read(b)
 		token = hex.EncodeToString(b)
@@ -36,13 +35,12 @@ func (s *APIServer) handleLogin(c *gin.Context) {
 		return
 	}
 
-	expected := s.db.GetSetting("api.login_password")
-	if req.Password != expected {
+	// 使用 config 中的密码（已处理环境变量和自动生成）
+	if req.Password != s.config.API.LoginPassword {
 		c.JSON(401, gin.H{"error": "invalid password"})
 		return
 	}
 
-	// 生成 JWT
 	token, err := GenerateJWT(s.config.API.JWTSecret, s.config.API.JWTExpiryHours)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})

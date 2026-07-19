@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"net/http"
-	"os"
 	"sync"
 	"time"
 
@@ -32,11 +31,11 @@ type Connector struct {
 	client        *http.Client
 	accounts      []*AccountInfo
 	accountMu     sync.RWMutex
-	dataDir       string
 	qrManager     *QRCodeManager
 	botType       int
 	contextTokens map[string]string       // accountID:userID → context_token
 	broadcaster   MessageBroadcaster      // 消息广播器（用于虚拟 Bot 代理模式）
+	syncBufStore  SyncBufStore            // 轮询游标存储
 	log           *log.Logger
 }
 
@@ -52,7 +51,6 @@ type ConnectorConfig struct {
 	PollTimeout int
 	Token       string         // 可选：启动时自动注册的 iLink token
 	BotType     int            // iLink bot_type 参数（默认 3）
-	DataDir     string         // 持久化目录（同步缓冲区、上下文令牌等），空=不持久化
 	Log         *log.Logger    // 日志记录器，nil 时使用默认
 }
 
@@ -64,15 +62,10 @@ func NewConnector(cfg ConnectorConfig) *Connector {
 	if logger == nil {
 		logger = log.Default().WithComponent("bot")
 	}
-	dataDir := cfg.DataDir
-	if dataDir != "" {
-		os.MkdirAll(dataDir, 0700)
-	}
 	c := &Connector{
 		baseURL:     cfg.BaseURL,
 		pollTimeout: cfg.PollTimeout,
 		botType:     cfg.BotType,
-		dataDir:     dataDir,
 		msgChan:     make(chan NormalizedMessage, 100),
 		client: &http.Client{
 			Timeout: time.Duration(cfg.PollTimeout+10) * time.Second,

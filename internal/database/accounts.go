@@ -16,7 +16,7 @@ func (db *DB) ListAccounts() ([]Account, error) {
 	}
 	defer rows.Close()
 
-	var result []Account
+	result := make([]Account, 0)
 	for rows.Next() {
 		var a Account
 		if err := rows.Scan(&a.AccountID, &a.UserID, &a.Token, &a.BaseURL, &a.AccountName, &a.LoginAt); err != nil {

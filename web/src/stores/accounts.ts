@@ -22,15 +22,15 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
   async fetch() {
     set({ loading: true })
     try {
-      const data = await api.get<{ accounts: Account[] }>('/api/v1/wechat/accounts')
-      set({ items: data.accounts, loading: false })
+      const data = await api.get<{ accounts: Account[] }>('/api/v1/accounts')
+      set({ items: data.accounts || [], loading: false })
     } catch {
-      set({ loading: false })
+      set({ items: [], loading: false })
     }
   },
 
   async disconnect(id: string) {
-    await api.post(`/api/v1/wechat/accounts/${id}/disconnect`)
+    await api.del(`/api/v1/accounts/${id}`)
     await get().fetch()
   },
 }))

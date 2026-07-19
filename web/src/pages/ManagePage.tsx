@@ -89,7 +89,7 @@ export default function ManagePage() {
   }, [backends, toast])
 
   const handleOpenEdit = useCallback(async (b: { id: string; name: string; type: string }) => {
-    const detail = await backends.get(b.id)
+    await backends.get(b.id)
     setEditModal({ open: true, backend: { id: b.id, name: b.name, type: b.type, config: {} } })
     setEditName(b.name)
     setEditType(b.type)
@@ -347,7 +347,7 @@ ILINK_TOKEN=gw_${bId || '<id>'}`}</pre>
                         {r.is_regexp && <span className="tag tag-warning" style={{ marginLeft: '8px' }}>正则</span>}
                       </div>
                       <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                        转发至: {r.backend}
+                        转发至: {r.backend_id}
                       </div>
                     </div>
                     <button className="btn btn-danger btn-sm" onClick={() => handleRemoveRoute(i)}>删除</button>

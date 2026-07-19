@@ -15,7 +15,7 @@ func (db *DB) ListRoutes() ([]Route, error) {
 	}
 	defer rows.Close()
 
-	var result []Route
+	result := make([]Route, 0)
 	for rows.Next() {
 		var r Route
 		var isRegexp int
