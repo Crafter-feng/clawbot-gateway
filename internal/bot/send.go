@@ -174,9 +174,8 @@ func (c *Connector) sendMessage(ctx context.Context, creds *Credentials, payload
 	// Encode 会添加换行符，去掉
 	bodyJSON = bytes.TrimRight(bodyJSON, "\n")
 
-	// 打印发送的 payload 便于调试
-	c.log.Info("sendMessage payload", "body", string(bodyJSON))
-	c.log.Info("sendMessage details", "base_url", creds.BaseURL, "to_user_id", "see payload")
+	// 打印发送的 payload 便于调试（不打印完整内容，避免敏感信息泄露）
+	c.log.Debug("sendMessage", "base_url", creds.BaseURL, "to_user", toUser)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", creds.BaseURL+"/ilink/bot/sendmessage", bytes.NewReader(bodyJSON))
 	if err != nil {

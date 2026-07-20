@@ -92,6 +92,10 @@ func (s *APIServer) Start(addr string) error {
 	// 需要鉴权的 API
 	api := rest.Group("/api/v1", s.authMiddleware())
 
+	// 通知管理（需要认证）
+	notify := api.Group("/notify")
+	notifyHandler.RegisterManagementRoutes(notify)
+
 	// API Token 管理
 	auth := api.Group("/auth")
 	auth.GET("/token", s.handleGetAPIToken)
@@ -135,8 +139,8 @@ func (s *APIServer) Start(addr string) error {
 	// 连接适配器
 	conn := api.Group("/connections")
 	conn.GET("", s.handleListConnections)
+	conn.GET("/stats", s.handleConnectionStats)  // 静态路径必须在参数化路径之前
 	conn.GET("/:id", s.handleGetConnection)
-	conn.GET("/stats", s.handleConnectionStats)
 
 	// 消息 API
 	msg := api.Group("/message")
@@ -193,14 +197,34 @@ func (s *APIServer) Shutdown(ctx context.Context) {
 // ── 中间件 ──
 
 func (s *APIServer) corsMiddleware() gin.HandlerFunc {
+	hasWildcard := false
+	for _, o := range s.config.API.AllowedOrigins {
+		if o == "*" {
+			hasWildcard = true
+			break
+		}
+	}
+
 	return func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
-		for _, allowed := range s.config.API.AllowedOrigins {
-			if allowed == "*" || allowed == origin {
-				c.Header("Access-Control-Allow-Origin", origin)
+		allowed := false
+		for _, o := range s.config.API.AllowedOrigins {
+			if o == "*" || o == origin {
+				allowed = true
 				break
 			}
 		}
+
+		if allowed {
+			if hasWildcard {
+				// 通配符模式：只在没有凭证时设置 *
+				c.Header("Access-Control-Allow-Origin", "*")
+			} else {
+				c.Header("Access-Control-Allow-Origin", origin)
+				c.Header("Access-Control-Allow-Credentials", "true")
+			}
+		}
+
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if c.Request.Method == "OPTIONS" {
@@ -252,7 +276,20 @@ func (s *APIServer) validateAPIToken(token string) bool {
 var wsClientCounter int64
 
 func (s *APIServer) handleWSConnection(w http.ResponseWriter, r *http.Request) {
-	upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
+	upgrader := websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				return true // 非浏览器请求
+			}
+			for _, allowed := range s.config.API.AllowedOrigins {
+				if allowed == "*" || allowed == origin {
+					return true
+				}
+			}
+			return false
+		},
+	}
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
@@ -284,7 +321,9 @@ func (s *APIServer) handleWSConnection(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Type == "chat" {
 			// 简化的聊天处理
-			conn.WriteJSON(gin.H{"type": "reply", "content": "echo: " + req.Message})
+			if err := conn.WriteJSON(gin.H{"type": "reply", "content": "echo: " + req.Message}); err != nil {
+				break
+			}
 		}
 	}
 }

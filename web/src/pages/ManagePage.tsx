@@ -80,6 +80,7 @@ export default function ManagePage() {
   }, [bId, bName, bType, bApiKey, bBaseUrl, bModel, backends, toast])
 
   const handleRemoveBackend = useCallback(async (id: string) => {
+    if (!confirm('确定删除此后端？')) return
     try {
       await backends.remove(id)
       toast('后端已删除', 'success')
@@ -89,13 +90,27 @@ export default function ManagePage() {
   }, [backends, toast])
 
   const handleOpenEdit = useCallback(async (b: { id: string; name: string; type: string }) => {
-    await backends.get(b.id)
+    const detail = await backends.get(b.id)
     setEditModal({ open: true, backend: { id: b.id, name: b.name, type: b.type, config: {} } })
     setEditName(b.name)
     setEditType(b.type)
-    setEditApiKey('')
-    setEditBaseUrl('')
-    setEditModel('')
+    // 从获取的详情中加载配置
+    if (detail?.config) {
+      try {
+        const config = JSON.parse(detail.config)
+        setEditApiKey(config.api_key || '')
+        setEditBaseUrl(config.base_url || '')
+        setEditModel(config.model || '')
+      } catch {
+        setEditApiKey('')
+        setEditBaseUrl('')
+        setEditModel('')
+      }
+    } else {
+      setEditApiKey('')
+      setEditBaseUrl('')
+      setEditModel('')
+    }
   }, [backends])
 
   const handleSaveEdit = useCallback(async () => {
@@ -153,9 +168,9 @@ export default function ManagePage() {
     }
   }, [rKeyword, rBackend, rIsRegexp, routes, toast])
 
-  const handleRemoveRoute = useCallback(async (index: number) => {
+  const handleRemoveRoute = useCallback(async (id: number) => {
     try {
-      await routes.remove(index)
+      await routes.remove(id)
       toast('路由规则已删除', 'success')
     } catch {
       toast('删除失败', 'error')
@@ -349,7 +364,7 @@ ILINK_TOKEN=gw_${bId || '<id>'}`}</pre>
                         转发至: {r.backend_id}
                       </div>
                     </div>
-                    <button className="btn btn-danger btn-sm" onClick={() => handleRemoveRoute(i)}>删除</button>
+                    <button className="btn btn-danger btn-sm" onClick={() => handleRemoveRoute(r.id)}>删除</button>
                   </div>
                 ))}
               </div>

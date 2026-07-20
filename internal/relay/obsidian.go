@@ -38,22 +38,28 @@ func (r *ObsidianRelay) Forward(ctx context.Context, file *FileMessage) error {
 		return fmt.Errorf("create directory: %w", err)
 	}
 
-	// 3. 保存文件
-	filePath := filepath.Join(dir, file.FileName)
+	// 3. 安全处理文件名（防止路径穿越）
+	safeName := filepath.Base(file.FileName)
+	if safeName == "." || safeName == "/" {
+		safeName = "unknown_file"
+	}
+
+	// 4. 保存文件
+	filePath := filepath.Join(dir, safeName)
 	if err := os.WriteFile(filePath, file.FileData, 0644); err != nil {
 		return fmt.Errorf("write file: %w", err)
 	}
 
-	// 4. 生成 Markdown 笔记（可选）
+	// 5. 生成 Markdown 笔记（可选）
 	if file.FileType == "image" || file.FileType == "file" {
-		noteName := strings.TrimSuffix(file.FileName, filepath.Ext(file.FileName)) + ".md"
+		noteName := strings.TrimSuffix(safeName, filepath.Ext(safeName)) + ".md"
 		notePath := filepath.Join(dir, noteName)
 		note := fmt.Sprintf("---\ntype: %s\nfrom: %s\ndate: %s\n---\n\n# %s\n\n![](%s)\n",
 			file.FileType,
 			file.FromUser,
 			file.Timestamp.Format("2006-01-02 15:04:05"),
-			file.FileName,
-			file.FileName,
+			safeName,
+			safeName,
 		)
 		if err := os.WriteFile(notePath, []byte(note), 0644); err != nil {
 			return fmt.Errorf("write note: %w", err)

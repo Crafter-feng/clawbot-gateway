@@ -1,8 +1,6 @@
 package api
 
 import (
-	"context"
-
 	"github.com/gin-gonic/gin"
 
 	"clawbot-gateway/internal/bot"
@@ -27,7 +25,7 @@ func (s *APIServer) handlePushSend(c *gin.Context) {
 
 	for _, acct := range accounts {
 		if req.AccountID == "" || acct.AccountID == req.AccountID {
-			err = s.connector.SendTextWithCreds(context.Background(), &bot.Credentials{
+			err = s.connector.SendTextWithCreds(c.Request.Context(), &bot.Credentials{
 				Token:   acct.Token,
 				BaseURL: acct.BaseURL,
 			}, req.ToUser, req.Content, "")

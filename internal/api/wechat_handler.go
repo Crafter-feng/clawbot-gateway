@@ -37,8 +37,8 @@ func (s *APIServer) handleGetQRCode(c *gin.Context) {
 		return
 	}
 
-	// 启动二维码状态轮询
-	if err := qrManager.CreateScan(c.Request.Context(), qrData.QRCode); err != nil {
+	// 启动二维码状态轮询（使用独立 context，不随请求结束）
+	if err := qrManager.CreateScan(context.Background(), qrData.QRCode); err != nil {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("创建扫描会话失败: %v", err)})
 		return
 	}

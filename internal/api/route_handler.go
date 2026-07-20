@@ -48,7 +48,12 @@ func (s *APIServer) handleAddRoute(c *gin.Context) {
 }
 
 func (s *APIServer) handleUpdateRoute(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid route id"})
+		return
+	}
+
 	var req struct {
 		Keyword   string `json:"keyword"`
 		BackendID string `json:"backend_id"`
@@ -77,7 +82,12 @@ func (s *APIServer) handleUpdateRoute(c *gin.Context) {
 }
 
 func (s *APIServer) handleRemoveRoute(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid route id"})
+		return
+	}
+
 	if err := s.db.DeleteRoute(id); err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return

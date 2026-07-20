@@ -1,18 +1,15 @@
 package config
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"os"
 	"strconv"
 
+	"clawbot-gateway/internal/crypto"
 	"clawbot-gateway/internal/database"
 )
 
 func GenerateSecret() string {
-	b := make([]byte, 32)
-	rand.Read(b)
-	return hex.EncodeToString(b)
+	return crypto.GenerateSecret(32)
 }
 
 type Config struct {
@@ -66,9 +63,7 @@ func LoadFromDB(db *database.DB) *Config {
 		cfg.API.LoginPassword = db.GetSetting("api.login_password")
 	}
 	if cfg.API.LoginPassword == "" {
-		b := make([]byte, 12)
-		rand.Read(b)
-		cfg.API.LoginPassword = "admin_" + hex.EncodeToString(b)
+		cfg.API.LoginPassword = "admin_" + crypto.GenerateSecret(6)
 		db.SetSetting("api.login_password", cfg.API.LoginPassword)
 	}
 

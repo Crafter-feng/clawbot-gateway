@@ -2,6 +2,7 @@ package api
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 
 	"github.com/gin-gonic/gin"
@@ -36,7 +37,7 @@ func (s *APIServer) handleLogin(c *gin.Context) {
 	}
 
 	// 使用 config 中的密码（已处理环境变量和自动生成）
-	if req.Password != s.config.API.LoginPassword {
+	if subtle.ConstantTimeCompare([]byte(req.Password), []byte(s.config.API.LoginPassword)) != 1 {
 		c.JSON(401, gin.H{"error": "invalid password"})
 		return
 	}

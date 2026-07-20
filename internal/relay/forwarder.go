@@ -26,8 +26,14 @@ func (r *LocalRelay) Forward(ctx context.Context, file *FileMessage) error {
 		return fmt.Errorf("create directory: %w", err)
 	}
 
+	// 安全处理文件名（防止路径穿越）
+	safeName := filepath.Base(file.FileName)
+	if safeName == "." || safeName == "/" {
+		safeName = "unknown_file"
+	}
+
 	// 保存文件
-	filePath := filepath.Join(dir, file.FileName)
+	filePath := filepath.Join(dir, safeName)
 	if err := os.WriteFile(filePath, file.FileData, 0644); err != nil {
 		return fmt.Errorf("write file: %w", err)
 	}

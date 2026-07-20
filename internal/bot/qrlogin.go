@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
@@ -58,6 +59,8 @@ func (qm *QRCodeManager) CreateScan(ctx context.Context, qrcode string) error {
 	qm.mu.Unlock()
 
 	go func() {
+		log.Default().Info("QR polling goroutine started", "qrcode", qrcode)
+		log.Default().Info("QR polling baseURL", "baseURL", qm.connector.baseURL)
 		defer func() {
 			qm.mu.Lock()
 			// confirmed 状态保留在 active 中，前端需要通过 CheckStatus 读取凭证
@@ -75,6 +78,7 @@ func (qm *QRCodeManager) CreateScan(ctx context.Context, qrcode string) error {
 		for {
 			select {
 			case <-ctx.Done():
+				log.Default().Info("QR polling context cancelled", "qrcode", qrcode)
 				return
 			default:
 			}
@@ -88,7 +92,8 @@ func (qm *QRCodeManager) CreateScan(ctx context.Context, qrcode string) error {
 				return
 			}
 
-			url := fmt.Sprintf("%s/ilink/bot/get_qrcode_status?qrcode=%s", currentBaseURL, qrcode)
+			url := fmt.Sprintf("%s/ilink/bot/get_qrcode_status?qrcode=%s", currentBaseURL, url.QueryEscape(qrcode))
+			log.Default().Info("QR polling making request", "url", url)
 			req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 			if err != nil {
 				qm.mu.Lock()
@@ -107,10 +112,12 @@ func (qm *QRCodeManager) CreateScan(ctx context.Context, qrcode string) error {
 				continue
 			}
 
-			body, _ := io.ReadAll(resp.Body)
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // 限制 1MB
 			resp.Body.Close()
 
+			qm.log().Info("poll status response", "status_code", resp.StatusCode, "body", string(body))
 			status, creds, redirectHost := parseQRStatusResponse(body, qm.connector.baseURL)
+			qm.log().Info("parsed status", "status", status)
 
 			qm.mu.Lock()
 			state.Status = status

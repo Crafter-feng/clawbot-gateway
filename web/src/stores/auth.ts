@@ -54,19 +54,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   checkAuth() {
     const t = localStorage.getItem(STORAGE_KEY)
     if (t) {
-      api.setToken(t)
-      set({ token: t, authenticated: true })
       // 检查 JWT 是否过期（简单解析 exp 字段）
       try {
-        const payload = JSON.parse(atob(t.split('.')[1]))
-        if (payload.exp && payload.exp * 1000 < Date.now()) {
-          // JWT 已过期
-          get().logout()
-          return
+        const parts = t.split('.')
+        if (parts.length === 3) {
+          const payload = JSON.parse(atob(parts[1]))
+          if (payload.exp && payload.exp * 1000 < Date.now()) {
+            // JWT 已过期
+            get().logout()
+            return
+          }
         }
       } catch {
         // 非 JWT 格式（旧 token），视为有效
       }
+      // JWT 有效，设置认证状态
+      api.setToken(t)
+      set({ token: t, authenticated: true })
       get().fetchApiToken()
     }
   },

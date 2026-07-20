@@ -169,7 +169,7 @@ func (c *Connector) UploadAndSendMedia(ctx context.Context, accountID, toUser st
 	if err != nil {
 		return err
 	}
-	resp3.Body.Close()
+	defer resp3.Body.Close()
 
 	// 解析响应体中的 errcode/errmsg
 	var sendResp struct {

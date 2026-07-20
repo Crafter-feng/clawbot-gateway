@@ -41,7 +41,7 @@ export const useBackendsStore = create<BackendsState>((set, get) => ({
       const data = await api.get<{ backends: Backend[]; default: string }>('/api/v1/backends')
       set({ items: data.backends || [], defaultBackend: data.default ?? '', loading: false })
     } catch {
-      set({ items: [], loading: false })
+      set({ items: [], defaultBackend: '', loading: false })
     }
   },
 

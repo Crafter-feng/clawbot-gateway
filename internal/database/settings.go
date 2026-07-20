@@ -1,6 +1,9 @@
 package database
 
-import "os"
+import (
+	"os"
+	"strings"
+)
 
 // 默认配置值
 var defaults = map[string]string{
@@ -96,13 +99,5 @@ func (db *DB) GetAllSettings() map[string]string {
 }
 
 func toEnvKey(key string) string {
-	result := ""
-	for _, c := range key {
-		if c == '.' {
-			result += "_"
-		} else {
-			result += string(c)
-		}
-	}
-	return result
+	return strings.ReplaceAll(key, ".", "_")
 }

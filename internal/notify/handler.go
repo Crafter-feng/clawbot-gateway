@@ -127,9 +127,15 @@ func (h *Handler) HandleDeleteToken(c *gin.Context) {
 }
 
 // RegisterRoutes 注册路由
+// 注意：token 管理端点需要在 api/v1 认证组中注册，不能直接注册在 engine 上
 func (h *Handler) RegisterRoutes(r *gin.Engine) {
+	// 公开端点：发送消息（使用 notify token 认证）
 	r.POST("/api/v1/notify/send", h.HandleSend)
-	r.GET("/api/v1/notify/tokens", h.HandleListTokens)
-	r.POST("/api/v1/notify/tokens", h.HandleCreateToken)
-	r.DELETE("/api/v1/notify/tokens/:id", h.HandleDeleteToken)
+}
+
+// RegisterManagementRoutes 注册需要认证的管理路由
+func (h *Handler) RegisterManagementRoutes(rg *gin.RouterGroup) {
+	rg.GET("/tokens", h.HandleListTokens)
+	rg.POST("/tokens", h.HandleCreateToken)
+	rg.DELETE("/tokens/:id", h.HandleDeleteToken)
 }

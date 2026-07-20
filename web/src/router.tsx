@@ -1,5 +1,5 @@
 import { createBrowserRouter, Navigate, Outlet } from 'react-router-dom'
-import { lazy } from 'react'
+import { lazy, Suspense } from 'react'
 import App from './App'
 import { ToastProvider } from './components/Toast'
 
@@ -10,10 +10,20 @@ const ManagePage = lazy(() => import('./pages/ManagePage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const NotificationPage = lazy(() => import('./pages/NotificationPage'))
 
+function LoadingFallback() {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+      <span className="spinner" />
+    </div>
+  )
+}
+
 function RootLayout() {
   return (
     <ToastProvider>
-      <Outlet />
+      <Suspense fallback={<LoadingFallback />}>
+        <Outlet />
+      </Suspense>
     </ToastProvider>
   )
 }
