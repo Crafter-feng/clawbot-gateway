@@ -226,7 +226,7 @@ func (c *Connector) getUpdatesWithCreds(ctx context.Context, creds *Credentials,
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, err = io.ReadAll(resp.Body)
+	bodyBytes, err = io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return nil, err
 	}

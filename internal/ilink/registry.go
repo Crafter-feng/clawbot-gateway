@@ -284,6 +284,7 @@ func (q *MessageQueue) filePath() string {
 type VirtualBot struct {
 	AccountID  string         // 虚拟 Bot ID（如 gw_a1b2c3d4）
 	UserID     string         // 用户 ID（如 gw_a1b2c3d4@im.wechat）
+	BaseURL    string         // iLink API 地址
 	Queue      *MessageQueue  // 独立消息队列
 	UpdateBuf  string         // get_updates 游标
 	LastActive time.Time      // 最后活跃时间
@@ -311,7 +312,7 @@ func NewClientRegistry(dataDir string) *ClientRegistry {
 }
 
 // Register 注册虚拟 Bot
-func (r *ClientRegistry) Register(accountID, userID string) *VirtualBot {
+func (r *ClientRegistry) Register(accountID, userID, baseURL string) *VirtualBot {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -322,6 +323,7 @@ func (r *ClientRegistry) Register(accountID, userID string) *VirtualBot {
 	bot := &VirtualBot{
 		AccountID:  accountID,
 		UserID:     userID,
+		BaseURL:    baseURL,
 		Queue:      NewMessageQueue(200, accountID, r.dataDir),
 		LastActive: time.Now(),
 		CreatedAt:  time.Now(),

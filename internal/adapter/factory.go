@@ -199,7 +199,7 @@ func (o *OpenAICompatibleAdapter) Handle(ctx context.Context, req *ChatRequest) 
 	}
 	defer resp.Body.Close()
 
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("api error %d: %s", resp.StatusCode, string(respBody))
 	}
@@ -253,7 +253,7 @@ func (o *OpenAICompatibleAdapter) HandleStream(ctx context.Context, req *ChatReq
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 		return fmt.Errorf("stream api error %d: %s", resp.StatusCode, string(respBody))
 	}
 

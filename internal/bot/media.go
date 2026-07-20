@@ -115,7 +115,7 @@ func (c *Connector) UploadAndSendMedia(ctx context.Context, accountID, toUser st
 	}
 	defer resp.Body.Close()
 
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	var uploadResp struct {
 		URL     string `json:"url"`
 		AESKey  string `json:"aeskey"`

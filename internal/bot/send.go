@@ -175,7 +175,7 @@ func (c *Connector) sendMessage(ctx context.Context, creds *Credentials, payload
 	bodyJSON = bytes.TrimRight(bodyJSON, "\n")
 
 	// 打印发送的 payload 便于调试（不打印完整内容，避免敏感信息泄露）
-	c.log.Debug("sendMessage", "base_url", creds.BaseURL, "to_user", toUser)
+	c.log.Debug("sendMessage", "base_url", creds.BaseURL)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", creds.BaseURL+"/ilink/bot/sendmessage", bytes.NewReader(bodyJSON))
 	if err != nil {
@@ -189,7 +189,7 @@ func (c *Connector) sendMessage(ctx context.Context, creds *Credentials, payload
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return fmt.Errorf("read sendMessage response: %w", err)
 	}

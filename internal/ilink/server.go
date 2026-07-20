@@ -33,6 +33,18 @@ func (s *Server) GetRegistry() *ClientRegistry {
 	return s.registry
 }
 
+// validateToken 验证虚拟 Bot token
+func (s *Server) validateToken(c *gin.Context) string {
+	auth := c.GetHeader("Authorization")
+	if len(auth) > 7 && auth[:7] == "Bearer " {
+		token := auth[7:]
+		if bot := s.registry.GetByToken(token); bot != nil {
+			return bot.AccountID
+		}
+	}
+	return ""
+}
+
 // RegisterRoutes 注册 iLink API 路由
 func (s *Server) RegisterRoutes(r *gin.Engine) {
 	ilink := r.Group("/ilink/bot")

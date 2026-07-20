@@ -155,7 +155,7 @@ func (qm *QRCodeManager) CreateScan(ctx context.Context, qrcode string) error {
 				if err != nil {
 					return
 				}
-				newBody, _ := io.ReadAll(newResp.Body)
+				newBody, _ := io.ReadAll(io.LimitReader(newResp.Body, 1<<20))
 				newResp.Body.Close()
 
 				var raw struct {

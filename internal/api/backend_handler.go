@@ -103,7 +103,7 @@ func (s *APIServer) handleRegisterBackend(c *gin.Context) {
 			BaseURL:   baseURL,
 		}
 		s.db.SaveVirtualBot(vb)
-		s.clientReg.Register(accountID, userID)
+		s.clientReg.Register(accountID, userID, baseURL)
 	}
 
 	s.reloadAdapters()

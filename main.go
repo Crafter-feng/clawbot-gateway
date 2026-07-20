@@ -124,7 +124,7 @@ func main() {
 
 	// 8a. 注册虚拟 Bot
 	for _, vb := range vbots {
-		clientRegistry.Register(vb.AccountID, vb.UserID)
+		clientRegistry.Register(vb.AccountID, vb.UserID, vb.BaseURL)
 		log.Info("registered virtual bot", "id", vb.ID, "account_id", vb.AccountID)
 	}
 
