@@ -381,8 +381,11 @@ func (cp *CommandProcessor) Parse(text string) *CommandMatch {
 	// 动态生成一次性转发命令：/<backend_id>
 	// 根据配置的 providers 自动生成，如 /hermes、/openclaw
 	if strings.HasPrefix(text, "/") && text != "/use" {
-		backendID := strings.TrimPrefix(text, "/")
-		if backendID != "" {
+		// 提取 / 后面的第一个单词作为 backend ID
+		afterSlash := strings.TrimPrefix(text, "/")
+		parts := strings.Fields(afterSlash)
+		if len(parts) > 0 {
+			backendID := parts[0]
 			if _, ok := cp.adapters.Get(backendID); ok {
 				return &CommandMatch{Action: "forward_to", Args: []string{backendID}}
 			}

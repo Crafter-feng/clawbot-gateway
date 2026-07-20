@@ -177,7 +177,7 @@ func (c *Connector) UploadAndSendMedia(ctx context.Context, accountID, toUser st
 		Errcode int    `json:"errcode,omitempty"`
 		Errmsg  string `json:"errmsg,omitempty"`
 	}
-	respBody3, _ := io.ReadAll(resp3.Body)
+	respBody3, _ := io.ReadAll(io.LimitReader(resp3.Body, 1<<20))
 	if err := json.Unmarshal(respBody3, &sendResp); err == nil {
 		if sendResp.Ret != 0 || sendResp.Errcode != 0 {
 			return fmt.Errorf("sendMediaMessage api error: ret=%d, errcode=%d, errmsg=%s", sendResp.Ret, sendResp.Errcode, sendResp.Errmsg)

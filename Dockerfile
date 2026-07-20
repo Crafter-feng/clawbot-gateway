@@ -1,4 +1,4 @@
-FROM golang:1.22-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /build
 
@@ -20,11 +20,17 @@ RUN cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
 WORKDIR /app
 
 COPY --from=builder /clawbot-gateway .
-COPY config.yaml .
 COPY web/ web/
+
+# 数据目录
+VOLUME ["/app/data"]
 
 EXPOSE 8080
 
-VOLUME ["/app/data"]
+# 环境变量（可通过 docker-compose 或 -e 传入）
+ENV CLAWBOT_DB_PATH=data/clawbot.db
+ENV CLAWBOT_HOST=0.0.0.0
+ENV CLAWBOT_PORT=8080
+ENV CLAWBOT_LOG_LEVEL=info
 
-CMD ["./clawbot-gateway", "config.yaml"]
+CMD ["./clawbot-gateway"]

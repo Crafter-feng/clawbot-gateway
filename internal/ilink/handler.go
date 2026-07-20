@@ -53,7 +53,7 @@ func (s *Server) handleProxy(c *gin.Context) {
 	defer resp.Body.Close()
 
 	// 5. 直接返回响应（透明管道）
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	c.Data(resp.StatusCode, "application/json", respBody)
 }
 

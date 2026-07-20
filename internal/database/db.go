@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 // DB 数据库连接管理
@@ -21,7 +21,7 @@ func New(dbPath string) (*DB, error) {
 		return nil, err
 	}
 
-	conn, err := sql.Open("sqlite3", dbPath+"?_journal_mode=WAL&_busy_timeout=5000")
+	conn, err := sql.Open("sqlite", dbPath+"?_journal_mode=WAL&_busy_timeout=5000")
 	if err != nil {
 		return nil, err
 	}

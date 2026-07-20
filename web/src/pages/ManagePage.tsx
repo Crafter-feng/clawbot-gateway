@@ -240,7 +240,7 @@ export default function ManagePage() {
                 iLink 代理配置预览
               </div>
               <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px' }}>
-                添加后将自动生成虚拟 Bot 配置，外部服务可通过此配置连接到 Gateway
+                外部服务需要配置以下环境变量连接到此 Gateway
               </p>
               <pre style={{
                 fontSize: '12px',
@@ -250,13 +250,11 @@ export default function ManagePage() {
                 borderRadius: 'var(--radius-sm)',
                 overflow: 'auto',
               }}>{`# ${bName || '后端名称'} 配置
-# 添加后自动生成以下配置
+# 外部服务需要配置以下环境变量
 
-ILINK_BASE_URL=http://localhost:8080
-ILINK_TOKEN=gw_${bId || '<id>'}`}</pre>
-              <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                account_id: gw_{bId || '<id>'}
-              </div>
+WEIXIN_BASE_URL=http://localhost:8080
+WEIXIN_TOKEN=gw_${bId || '<id>'}
+WEIXIN_ACCOUNT_ID=gw_${bId || '<id>'}`}</pre>
             </div>
           )}
 
@@ -475,6 +473,37 @@ ILINK_TOKEN=gw_${bId || '<id>'}`}</pre>
                 </span>
               </div>
             </div>
+
+            {/* iLink 代理配置显示 */}
+            {infoModal.backend.type === 'ilink_proxy' && (
+              <div style={{ marginTop: '16px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                  连接配置
+                </div>
+                <div style={{
+                  padding: '12px',
+                  background: 'var(--bg-secondary)',
+                  borderRadius: 'var(--radius-sm)',
+                  fontFamily: 'monospace',
+                  fontSize: '12px',
+                  marginBottom: '8px',
+                }}>
+                  <div>WEIXIN_BASE_URL=http://localhost:8080</div>
+                  <div>WEIXIN_TOKEN=gw_{infoModal.backend.id}</div>
+                  <div>WEIXIN_ACCOUNT_ID=gw_{infoModal.backend.id}</div>
+                </div>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    const config = `WEIXIN_BASE_URL=http://localhost:8080\nWEIXIN_TOKEN=gw_${infoModal.backend!.id}\nWEIXIN_ACCOUNT_ID=gw_${infoModal.backend!.id}`
+                    navigator.clipboard.writeText(config)
+                    toast('配置已复制', 'success')
+                  }}
+                >
+                  复制配置
+                </button>
+              </div>
+            )}
 
             <div style={{ borderTop: '1px solid var(--border)', marginTop: '16px', paddingTop: '16px' }}>
               <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>测试连接</div>
