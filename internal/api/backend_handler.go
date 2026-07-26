@@ -94,7 +94,9 @@ func (s *APIServer) handleRegisterBackend(c *gin.Context) {
 	if req.Type == "ilink_proxy" {
 		accountID := "gw_" + req.ID
 		userID := accountID + "@im.wechat"
-		baseURL := "http://localhost:8080"
+		// 虚拟 Bot 的 BaseURL 应指向真实 iLink API，而非 Gateway 自身
+		// 这样 sendmessage 等请求才能正确转发到腾讯服务器
+		baseURL := "https://ilinkai.weixin.qq.com"
 
 		vb := database.VirtualBot{
 			ID:        req.ID,
@@ -237,7 +239,7 @@ func (s *APIServer) reloadAdapters() {
 
 	vbots, _ := s.db.ListVirtualBots()
 	for _, vb := range vbots {
-		s.adapters.RegisterConnection(adapter.NewILinkProxyAdapter(vb.ID, vb.ID, vb.BaseURL))
+		s.adapters.RegisterConnection(adapter.NewILinkProxyAdapter(vb.ID, vb.ID, vb.AccountID, vb.UserID, vb.BaseURL))
 	}
 
 	s.adapters.Register(adapter.NewEchoAdapter("echo", "Echo Debug"))

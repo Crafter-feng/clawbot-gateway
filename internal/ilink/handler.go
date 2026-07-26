@@ -1,6 +1,7 @@
 package ilink
 
 import (
+	"bytes"
 	"io"
 	"net/http"
 	"time"
@@ -10,13 +11,11 @@ import (
 
 // iLink 协议端点列表
 var ilinkEndpoints = map[string]bool{
-	"ilink/bot/getupdates":        true,
-	"ilink/bot/sendmessage":       true,
-	"ilink/bot/sendtyping":        true,
-	"ilink/bot/getconfig":         true,
-	"ilink/bot/getuploadurl":      true,
-	"ilink/bot/get_bot_qrcode":    true,
-	"ilink/bot/get_qrcode_status": true,
+	"ilink/bot/getupdates":   true,
+	"ilink/bot/sendmessage":  true,
+	"ilink/bot/sendtyping":   true,
+	"ilink/bot/getconfig":    true,
+	"ilink/bot/getuploadurl": true,
 }
 
 // handleProxy 透明代理 - 直接转发到真实 iLink API
@@ -28,23 +27,30 @@ func (s *Server) handleProxy(c *gin.Context) {
 		return
 	}
 
-	// 2. 获取虚拟 Bot 的 base URL
-	bot := s.registry.Get(accountID)
-	if bot == nil {
+	// 2. 获取虚拟 Bot 的配置
+	vbot := s.registry.Get(accountID)
+	if vbot == nil {
 		c.JSON(400, gin.H{"ret": -1, "errmsg": "bot not registered"})
 		return
 	}
 
-	// 3. 读取原始请求体
+	// 3. 获取真实微信账号的凭证（用于转发到真实 iLink API）
+	realBotToken := s.bot.GetAccountTokenByVirtualID(accountID)
+	if realBotToken == "" {
+		c.JSON(500, gin.H{"ret": -1, "errmsg": "no real bot credentials found"})
+		return
+	}
+
+	// 4. 读取原始请求体
 	body, err := io.ReadAll(io.LimitReader(c.Request.Body, 1<<20))
 	if err != nil {
 		c.JSON(500, gin.H{"ret": -1, "errmsg": "failed to read request body"})
 		return
 	}
 
-	// 4. 转发到真实 iLink API
+	// 5. 转发到真实 iLink API
 	endpoint := c.FullPath()
-	resp, err := s.forwardToILink(endpoint, body, bot.BaseURL)
+	resp, err := s.forwardToILink(endpoint, body, vbot.BaseURL, realBotToken)
 	if err != nil {
 		s.log.Warn("proxy forward failed", "error", err)
 		c.JSON(502, gin.H{"ret": -1, "errmsg": err.Error()})
@@ -52,25 +58,27 @@ func (s *Server) handleProxy(c *gin.Context) {
 	}
 	defer resp.Body.Close()
 
-	// 5. 直接返回响应（透明管道）
+	// 6. 直接返回响应（透明管道）
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	c.Data(resp.StatusCode, "application/json", respBody)
 }
 
-// forwardToILink 转发请求到真实 iLink API
-func (s *Server) forwardToILink(endpoint string, body []byte, baseURL string) (*http.Response, error) {
+// forwardToILink 转发请求到真实 iLink API（透明代理）
+func (s *Server) forwardToILink(endpoint string, body []byte, baseURL string, botToken string) (*http.Response, error) {
 	url := baseURL + "/" + endpoint
 
-	req, err := http.NewRequest("POST", url, nil)
+	// 使用 bytes.NewReader(body) 确保请求体被正确转发
+	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
 
-	// 复制原始请求头
+	// 设置请求头（与 Connector 保持一致）
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+botToken)
 	req.Header.Set("AuthorizationType", "ilink_bot_token")
-	req.Header.Set("iLink-App-Id", "")
-	req.Header.Set("iLink-App-ClientVersion", "65547")
+	req.Header.Set("iLink-App-Id", "bot")
+	req.Header.Set("iLink-App-ClientVersion", "131584")
 
 	// 发送请求
 	client := &http.Client{Timeout: 60 * time.Second}

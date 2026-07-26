@@ -46,7 +46,7 @@ type BackendAdapter interface {
 type ConnectionInfo struct {
 	AccountID string `json:"account_id"` // 虚拟 Bot ID（如 gw_a1b2c3d4）
 	UserID    string `json:"user_id"`    // 用户 ID（如 gw_a1b2c3d4@im.wechat）
-	BaseURL   string `json:"base_url"`   // Gateway 地址（如 http://localhost:8080）
+	BaseURL   string `json:"base_url"`   // iLink API 地址（如 https://ilinkai.weixin.qq.com）
 }
 
 // ConnectionAdapter 连接适配器接口（提供外部服务连接配置）

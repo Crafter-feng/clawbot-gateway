@@ -114,6 +114,22 @@ func (c *Connector) GetBroadcaster() MessageBroadcaster {
 	return c.broadcaster
 }
 
+// GetAccountTokenByVirtualID 根据虚拟 Bot ID 获取真实账号的 token
+// 虚拟 Bot 的 accountID 格式为 "gw_xxx"，这里返回第一个可用的真实账号 token
+func (c *Connector) GetAccountTokenByVirtualID(virtualAccountID string) string {
+	c.accountMu.RLock()
+	defer c.accountMu.RUnlock()
+
+	// 目前简单返回第一个可用账号的 token
+	// 后续可以实现更复杂的映射逻辑
+	for _, a := range c.accounts {
+		if a.Credentials != nil && a.Credentials.Token != "" {
+			return a.Credentials.Token
+		}
+	}
+	return ""
+}
+
 // ── context_token 缓存 ──
 
 func (c *Connector) SetContextToken(accountID, userID, token string) {

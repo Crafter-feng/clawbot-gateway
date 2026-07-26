@@ -98,7 +98,7 @@ func main() {
 	vbots, err := db.ListVirtualBots()
 	if err == nil {
 		for _, vb := range vbots {
-			af.RegisterConnection(adapter.NewILinkProxyAdapter(vb.ID, vb.ID, vb.BaseURL))
+			af.RegisterConnection(adapter.NewILinkProxyAdapter(vb.ID, vb.ID, vb.AccountID, vb.UserID, vb.BaseURL))
 		}
 	}
 
@@ -125,7 +125,7 @@ func main() {
 	log.Info("ClawBot connector initialized")
 
 	// 8. 初始化 ClientRegistry（虚拟 Bot 管理）
-	clientRegistry := ilink.NewClientRegistry("data/queues")
+	clientRegistry := ilink.NewClientRegistry()
 
 	// 8a. 注册虚拟 Bot
 	for _, vb := range vbots {
@@ -133,13 +133,10 @@ func main() {
 		log.Info("registered virtual bot", "id", vb.ID, "account_id", vb.AccountID)
 	}
 
-	// 8b. 设置 Connector 的消息广播器
-	conn.SetBroadcaster(clientRegistry)
+	// 8b. 设置 Connector 的同步缓冲区存储
 	conn.SetSyncBufStore(db)
-
-	// 8c. 启动重试工作器
-	retryWorker := ilink.NewRetryWorker(clientRegistry, 30*time.Second, log.Info)
-	retryWorker.Start()
+	// 注意：透明代理模式下，不需要设置消息广播器
+	// 虚拟 Bot 通过 iLink 服务端直接访问真实 iLink API
 
 	// 9. 从数据库恢复微信账号
 	accounts, err := db.ListAccounts()
@@ -182,7 +179,6 @@ func main() {
 	<-quit
 
 	log.Info("shutting down")
-	retryWorker.Stop()
 	pipelineCancel()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

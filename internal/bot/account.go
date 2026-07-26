@@ -164,17 +164,14 @@ func (c *Connector) accountPollLoop(ctx context.Context, creds *Credentials) {
 			msg := normalize(raw)
 			msg.AccountID = creds.AccountID
 
-			// 1. 发送到 Pipeline（内置 AI 处理）
+			// 发送到 Pipeline（内置 AI 处理）
 			select {
 			case c.msgChan <- msg:
 			default:
 				c.log.Warn("msg channel full, dropping msg", "account_id", creds.AccountID)
 			}
-
-			// 2. 广播到所有虚拟 Bot（代理模式）
-			if b := c.GetBroadcaster(); b != nil {
-				b.Broadcast(msg)
-			}
+			// 注意：透明代理模式下，不需要广播到虚拟 Bot
+			// 虚拟 Bot 通过 iLink 服务端直接访问真实 iLink API
 		}
 
 		buf = resp.GetUpdatesBuf

@@ -2,8 +2,6 @@ package adapter
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"time"
 )
 
@@ -14,15 +12,13 @@ type ILinkProxyAdapter struct {
 	name      string
 	accountID string    // 虚拟 Bot ID（如 gw_a1b2c3d4）
 	userID    string    // 用户 ID（如 gw_a1b2c3d4@im.wechat）
-	baseURL   string    // Gateway 地址
+	baseURL   string    // iLink API 地址
 	createdAt time.Time
 }
 
 // NewILinkProxyAdapter 创建 iLink 代理适配器
-func NewILinkProxyAdapter(id, name, baseURL string) *ILinkProxyAdapter {
-	accountID := "gw_" + generateID()
-	userID := accountID + "@im.wechat"
-
+// accountID 和 userID 必须由调用者提供（从数据库加载或生成确定性 ID）
+func NewILinkProxyAdapter(id, name, accountID, userID, baseURL string) *ILinkProxyAdapter {
 	return &ILinkProxyAdapter{
 		id:        id,
 		name:      name,
@@ -59,10 +55,4 @@ func (a *ILinkProxyAdapter) GetAccountID() string {
 // GetUserID 获取虚拟 Bot 的 user_id
 func (a *ILinkProxyAdapter) GetUserID() string {
 	return a.userID
-}
-
-func generateID() string {
-	b := make([]byte, 4)
-	rand.Read(b)
-	return hex.EncodeToString(b)
 }

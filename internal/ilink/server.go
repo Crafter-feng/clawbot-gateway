@@ -10,7 +10,7 @@ import (
 )
 
 // Server iLink API 服务器
-// 在同一端口提供 /ilink/bot/* 端点，让外部服务无缝接入
+// 透明代理模式：转发外部服务的请求到真实 iLink API
 type Server struct {
 	bot      *bot.Connector
 	registry *ClientRegistry
