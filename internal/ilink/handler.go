@@ -58,8 +58,8 @@ func (s *Server) handleProxy(c *gin.Context) {
 // forwardToILink 转发请求到真实 iLink API（透明代理）
 func (s *Server) forwardToILink(endpoint string, body []byte, baseURL string, botToken string) (*http.Response, error) {
 	// c.FullPath() 返回带前导斜杠的路径（如 /ilink/bot/getupdates）
-	// 拼接时去掉 endpoint 的前导斜杠，避免双斜杠
-	url := baseURL + strings.TrimLeft(endpoint, "/")
+	// 确保 baseURL 无尾随斜杠 + endpoint 有前导斜杠 = 正确 URL
+	url := strings.TrimRight(baseURL, "/") + endpoint
 
 	// 使用 bytes.NewReader(body) 确保请求体被正确转发
 	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
