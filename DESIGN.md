@@ -930,23 +930,254 @@ func generateID() string {
 
 ## 路由引擎
 
-### 两层优先级
+### 三层优先级
 
 1. **用户会话级覆写**（`/use` 设置）— 最高优先级
-2. **默认后端兜底** — 未设置时使用配置的 `default_backend`
+2. **关键词规则匹配** — 按优先级遍历规则
+3. **默认后端兜底** — 未匹配时使用配置的 `default_backend`
+
+### 路由规则数据模型
+
+#### 规则条件
+
+```go
+// RouteCondition 单个匹配条件
+type RouteCondition struct {
+    ID            string `json:"id"`             // 条件 ID
+    Field         string `json:"field"`          // 匹配字段
+    Operator      string `json:"operator"`       // 匹配操作符
+    Value         string `json:"value"`          // 匹配值
+    CaseSensitive bool   `json:"case_sensitive"` // 是否区分大小写
+    Negate        bool   `json:"negate"`         // 是否取反（非逻辑）
+}
+
+// 匹配字段
+const (
+    FieldMessage  = "message"  // 消息内容
+    FieldFromUser = "from_user" // 发送者
+    FieldToUser   = "to_user"  // 接收者
+    FieldMsgType  = "msg_type" // 消息类型
+)
+
+// 匹配操作符
+const (
+    OpExact      = "exact"       // 精确匹配
+    OpContains   = "contains"    // 包含
+    OpStartsWith = "starts_with" // 前缀
+    OpEndsWith   = "ends_with"   // 后缀
+    OpRegex      = "regex"       // 正则表达式
+)
+```
+
+#### 规则组
+
+```go
+// RouteRuleGroup 规则组（支持 AND/OR 逻辑）
+type RouteRuleGroup struct {
+    ID         string           `json:"id"`          // 组 ID
+    Logic      string           `json:"logic"`       // 组内逻辑：and/or
+    Conditions []RouteCondition `json:"conditions"`  // 条件列表
+}
+
+// RouteRule 路由规则
+type RouteRule struct {
+    ID          int              `json:"id"`
+    Name        string           `json:"name"`        // 规则名称
+    BackendID   string           `json:"backend_id"`  // 目标后端
+    Priority    int              `json:"priority"`    // 优先级（越小越优先）
+    Enabled     bool             `json:"enabled"`     // 是否启用
+    Description string           `json:"description"` // 规则描述
+    Groups      []RouteRuleGroup `json:"groups"`      // 规则组列表
+    GroupLogic  string           `json:"group_logic"` // 组间逻辑：and/or
+    CreatedAt   time.Time        `json:"created_at"`
+    UpdatedAt   time.Time        `json:"updated_at"`
+}
+```
+
+### 逻辑运算说明
+
+| 逻辑 | 符号 | 说明 | 示例 |
+|------|------|------|------|
+| AND (且) | `&&` | 所有条件必须满足 | 消息包含"天气" AND 发送者是"admin" |
+| OR (或) | `\|\|` | 任一条件满足即可 | 消息包含"天气" OR 消息包含"预报" |
+| NOT (非) | `!` | 条件不满足时生效 | NOT 消息包含"测试" |
+
+**组合示例**：
+```
+(消息包含"天气" OR 消息包含"预报") AND NOT 消息包含"测试"
+= ((消息包含"天气") OR (消息包含"预报")) AND (NOT 消息包含"测试")
+```
 
 ### 路由决策
 
 ```go
-func (r *Router) Route(message string, userID string) RouteDecision {
-    // 1. 检查用户覆写
+func (r *Router) Route(message string, userID string, msgType string) RouteDecision {
+    // 1. 检查用户会话级覆写（最高优先级）
     if backendID, ok := r.userBackends[userID]; ok {
         return RouteDecision{BackendID: backendID, MatchedBy: "session"}
     }
-    // 2. 返回空（由 pipeline 决定是否使用默认后端）
-    return RouteDecision{BackendID: "", MatchedBy: "none"}
+
+    // 2. 按优先级遍历路由规则
+    for _, rule := range r.keywordRules {
+        if !rule.Enabled {
+            continue
+        }
+        if r.matchRule(message, userID, msgType, rule) {
+            return RouteDecision{
+                BackendID: rule.BackendID,
+                MatchedBy: "keyword",
+                RuleID:    rule.ID,
+            }
+        }
+    }
+
+    // 3. 返回默认后端
+    return RouteDecision{BackendID: r.defaultBackend, MatchedBy: "default"}
+}
+
+// matchRule 检查消息是否匹配规则（支持 AND/OR/NOT 逻辑）
+func (r *Router) matchRule(message, userID, msgType string, rule RouteRule) bool {
+    if len(rule.Groups) == 0 {
+        return false
+    }
+
+    // 评估每个组
+    groupResults := make([]bool, len(rule.Groups))
+    for i, group := range rule.Groups {
+        groupResults[i] = r.evaluateGroup(message, userID, msgType, group)
+    }
+
+    // 根据组间逻辑合并结果
+    if rule.GroupLogic == "and" {
+        for _, result := range groupResults {
+            if !result {
+                return false
+            }
+        }
+        return true
+    }
+    // OR 逻辑
+    for _, result := range groupResults {
+        if result {
+            return true
+        }
+    }
+    return false
+}
+
+// evaluateGroup 评估单个规则组
+func (r *Router) evaluateGroup(message, userID, msgType string, group RouteRuleGroup) bool {
+    if len(group.Conditions) == 0 {
+        return false
+    }
+
+    // 评估每个条件
+    conditionResults := make([]bool, len(group.Conditions))
+    for i, condition := range group.Conditions {
+        result := r.evaluateCondition(message, userID, msgType, condition)
+        conditionResults[i] = result
+    }
+
+    // 根据组内逻辑合并结果
+    if group.Logic == "and" {
+        for _, result := range conditionResults {
+            if !result {
+                return false
+            }
+        }
+        return true
+    }
+    // OR 逻辑
+    for _, result := range conditionResults {
+        if result {
+            return true
+        }
+    }
+    return false
+}
+
+// evaluateCondition 评估单个条件（支持 NOT 逻辑）
+func (r *Router) evaluateCondition(message, userID, msgType string, condition RouteCondition) bool {
+    var result bool
+
+    // 根据字段获取值
+    var fieldValue string
+    switch condition.Field {
+    case FieldMessage:
+        fieldValue = message
+    case FieldFromUser:
+        fieldValue = userID
+    case FieldToUser:
+        fieldValue = "" // 需要从上下文获取
+    case FieldMsgType:
+        fieldValue = msgType
+    }
+
+    // 根据操作符匹配
+    switch condition.Operator {
+    case OpExact:
+        result = fieldValue == condition.Value
+    case OpContains:
+        if condition.CaseSensitive {
+            result = strings.Contains(fieldValue, condition.Value)
+        } else {
+            result = strings.Contains(strings.ToLower(fieldValue), strings.ToLower(condition.Value))
+        }
+    case OpStartsWith:
+        if condition.CaseSensitive {
+            result = strings.HasPrefix(fieldValue, condition.Value)
+        } else {
+            result = strings.HasPrefix(strings.ToLower(fieldValue), strings.ToLower(condition.Value))
+        }
+    case OpEndsWith:
+        if condition.CaseSensitive {
+            result = strings.HasSuffix(fieldValue, condition.Value)
+        } else {
+            result = strings.HasSuffix(strings.ToLower(fieldValue), strings.ToLower(condition.Value))
+        }
+    case OpRegex:
+        if compiled, ok := r.compiledRegex[condition.Value]; ok {
+            result = compiled.MatchString(fieldValue)
+        }
+    }
+
+    // NOT 逻辑：取反
+    if condition.Negate {
+        result = !result
+    }
+
+    return result
 }
 ```
+
+### 路由匹配流程
+
+```
+用户消息
+    ↓
+┌─────────────────────────────────────────────┐
+│ 1. 检查用户会话级覆写（/use 设置）            │
+│    如果有 → 使用覆写的后端                    │
+└─────────────────────────────────────────────┘
+    ↓ (无覆写)
+┌─────────────────────────────────────────────┐
+│ 2. 按优先级遍历路由规则                       │
+│    - 检查规则是否启用                         │
+│    - 根据匹配类型检查消息                      │
+│    - 第一个匹配的规则生效                      │
+└─────────────────────────────────────────────┘
+    ↓ (无匹配)
+┌─────────────────────────────────────────────┐
+│ 3. 使用默认后端                              │
+└─────────────────────────────────────────────┘
+```
+
+### 正则表达式安全
+
+- 长度限制：200 字符
+- 禁止嵌套量词（如 `(a+)+`）
+- 执行超时：100ms
+- 使用 `regexp.Compile` 预编译
 
 ### 多后端路由模式
 
@@ -1337,12 +1568,12 @@ clawbot-gateway/
 | 8 | `ilink/registry.go` | 超出设计：支持消息持久化、重试、统计 |
 | 9 | `bot/client.go:69` | `msgChan` 容量仍为 100（设计文档 P2 问题 #12） |
 
-### 重新设计
+### 当前实现（已完成）
 
-#### 1. Adapter 层重构
+#### 1. Adapter 层
 
 ```go
-// adapter.go - 新增 ConnectionAdapter 接口
+// adapter.go - 两种适配器接口
 
 // BackendAdapter 处理消息的后端适配器
 type BackendAdapter interface {
@@ -1366,40 +1597,7 @@ type ConnectionAdapter interface {
 type ConnectionInfo struct {
     AccountID string  // 虚拟 Bot ID
     UserID    string  // 用户 ID
-    BaseURL   string  // Gateway 地址
-}
-```
-
-```go
-// factory.go - 支持两种适配器
-
-type AdapterFactory struct {
-    mu       sync.RWMutex
-    backends map[string]BackendAdapter    // 后端适配器
-    conns    map[string]ConnectionAdapter // 连接适配器
-}
-
-func (f *AdapterFactory) RegisterConnection(adapter ConnectionAdapter) {
-    f.mu.Lock()
-    defer f.mu.Unlock()
-    f.conns[adapter.ID()] = adapter
-}
-
-func (f *AdapterFactory) GetConnection(id string) (ConnectionAdapter, bool) {
-    f.mu.RLock()
-    defer f.mu.RUnlock()
-    a, ok := f.conns[id]
-    return a, ok
-}
-
-func (f *AdapterFactory) ListConnections() []ConnectionAdapter {
-    f.mu.RLock()
-    defer f.mu.RUnlock()
-    result := make([]ConnectionAdapter, 0, len(f.conns))
-    for _, a := range f.conns {
-        result = append(result, a)
-    }
-    return result
+    BaseURL   string  // iLink API 地址
 }
 ```
 
@@ -1408,19 +1606,14 @@ func (f *AdapterFactory) ListConnections() []ConnectionAdapter {
 ```go
 // ilink_proxy.go
 
-type ILinkProxyAdapter struct {
-    id        string
-    name      string
-    accountID string  // 虚拟 Bot ID（如 gw_a1b2c3d4）
-    userID    string  // 用户 ID（如 gw_a1b2c3d4@im.wechat）
-    baseURL   string  // Gateway 地址
-}
-
-func (a *ILinkProxyAdapter) GetConnectionInfo() *ConnectionInfo {
-    return &ConnectionInfo{
-        AccountID: a.accountID,
-        UserID:    a.userID,
-        BaseURL:   a.baseURL,
+func NewILinkProxyAdapter(id, name, accountID, userID, baseURL string) *ILinkProxyAdapter {
+    return &ILinkProxyAdapter{
+        id:        id,
+        name:      name,
+        accountID: accountID,
+        userID:    userID,
+        baseURL:   baseURL,
+        createdAt: time.Now(),
     }
 }
 ```
@@ -1428,13 +1621,14 @@ func (a *ILinkProxyAdapter) GetConnectionInfo() *ConnectionInfo {
 #### 3. ClientRegistry（虚拟 Bot 管理）
 
 ```go
-// ilink/registry.go - 新增文件
+// ilink/registry.go - 透明代理模式
 
 type VirtualBot struct {
     AccountID  string
-    Queue      *MessageQueue
-    UpdateBuf  string
+    UserID     string
+    BaseURL    string
     LastActive time.Time
+    CreatedAt  time.Time
 }
 
 type ClientRegistry struct {
@@ -1442,36 +1636,25 @@ type ClientRegistry struct {
     bots map[string]*VirtualBot
 }
 
-func (r *ClientRegistry) Register(accountID string) *VirtualBot {
+func (r *ClientRegistry) Register(accountID, userID, baseURL string) *VirtualBot {
     r.mu.Lock()
     defer r.mu.Unlock()
     bot := &VirtualBot{
-        AccountID: accountID,
-        Queue:     NewMessageQueue(200),
+        AccountID:  accountID,
+        UserID:     userID,
+        BaseURL:    baseURL,
+        LastActive: time.Now(),
+        CreatedAt:  time.Now(),
     }
     r.bots[accountID] = bot
     return bot
 }
-
-func (r *ClientRegistry) Broadcast(msg bot.NormalizedMessage) {
-    r.mu.RLock()
-    defer r.mu.RUnlock()
-    for _, bot := range r.bots {
-        bot.Queue.Enqueue(msg)
-    }
-}
 ```
 
-#### 4. iLink Server 重构
+#### 4. iLink Server（透明代理）
 
 ```go
-// ilink/server.go - 重构
-
-type Server struct {
-    bot      *bot.Connector
-    registry *ClientRegistry
-    log      *log.Logger
-}
+// ilink/server.go
 
 func (s *Server) RegisterRoutes(r *gin.Engine) {
     ilink := r.Group("/ilink/bot")
@@ -1481,134 +1664,47 @@ func (s *Server) RegisterRoutes(r *gin.Engine) {
         ilink.POST("/sendtyping", s.handleSendTyping)
         ilink.POST("/getconfig", s.handleGetConfig)
         ilink.POST("/getuploadurl", s.handleGetUploadURL)
-        // 注意：虚拟 Bot 不需要 QR 扫码，因此不注册 get_bot_qrcode 和 get_qrcode_status
     }
 }
-```
 
-#### 5. handleGetUpdates 重构
-
-```go
-func (s *Server) handleGetUpdates(c *gin.Context) {
+// handler.go - 透明代理
+func (s *Server) handleProxy(c *gin.Context) {
     // 1. 验证虚拟 Bot token
-    accountID := s.validateToken(c)
-    if accountID == "" {
-        c.JSON(401, gin.H{"ret": -1, "errmsg": "unauthorized"})
-        return
-    }
-
-    // 2. 获取虚拟 Bot 的消息队列
-    bot := s.registry.Get(accountID)
-    if bot == nil {
-        c.JSON(400, gin.H{"ret": -1, "errmsg": "bot not registered"})
-        return
-    }
-
-    // 3. 从队列取消息（长轮询）
-    timeout := 35 * time.Second
-    msgs := bot.Queue.dequeueAll(timeout)
-
-    // 4. 转换为 iLink 格式
-    ilinkMsgs := make([]Message, 0, len(msgs))
-    for _, msg := range msgs {
-        ilinkMsgs = append(ilinkMsgs, s.convertToILinkMessage(msg))
-    }
-
-    c.JSON(200, GetUpdatesResponse{
-        Ret:           0,
-        Msgs:          ilinkMsgs,
-        GetUpdatesBuf: bot.UpdateBuf,
-    })
+    // 2. 获取真实 bot_token
+    // 3. 读取请求体
+    // 4. 转发到真实 iLink API
+    // 5. 返回响应
 }
 ```
 
-#### 6. handleSendMessage 重构
+#### 5. Connector
 
 ```go
-func (s *Server) handleSendMessage(c *gin.Context) {
-    // 1. 验证虚拟 Bot token
-    accountID := s.validateToken(c)
-    if accountID == "" {
-        c.JSON(401, gin.H{"ret": -1, "errmsg": "unauthorized"})
-        return
-    }
-
-    // 2. 解析请求（支持所有消息类型）
-    var req SendMessageRequest
-    if err := c.ShouldBindJSON(&req); err != nil {
-        c.JSON(400, gin.H{"ret": -1, "errmsg": "invalid request"})
-        return
-    }
-
-    // 3. 转发到真实 iLink API
-    creds := s.bot.GetAccountCredentials(accountID)
-    if creds == nil {
-        c.JSON(500, gin.H{"ret": -1, "errmsg": "no credentials"})
-        return
-    }
-
-    // 4. 发送（支持所有消息类型）
-    err := s.bot.SendMessageWithCreds(ctx, creds, req)
-    if err != nil {
-        c.JSON(500, gin.H{"ret": -1, "errmsg": err.Error()})
-        return
-    }
-
-    c.JSON(200, gin.H{"ret": 0, "message_id": 0})
-}
-```
-
-#### 7. Connector 广播机制
-
-```go
-// bot/client.go - 新增
-
-// MessageBroadcaster 消息广播接口（避免循环依赖）
-type MessageBroadcaster interface {
-    Broadcast(msg NormalizedMessage)
-}
+// bot/client.go
 
 type Connector struct {
-    // ... 现有字段 ...
-    broadcaster MessageBroadcaster  // 新增
+    // ... 字段 ...
+    broadcaster MessageBroadcaster
+    syncBufStore SyncBufStore
 }
 
-// SetBroadcaster 注入消息广播器
-func (c *Connector) SetBroadcaster(b MessageBroadcaster) {
-    c.broadcaster = b
-}
-
-// GetBroadcaster 获取消息广播器
-func (c *Connector) GetBroadcaster() MessageBroadcaster {
-    return c.broadcaster
-}
-```
-
-```go
-// bot/account.go - 修改 accountPollLoop
-
-func (c *Connector) accountPollLoop(ctx context.Context, creds *Credentials) {
-    // ... 现有轮询逻辑 ...
-    for _, raw := range resp.Msgs {
-        msg := normalize(raw)
-        msg.AccountID = creds.AccountID
-
-        // 1. 发送到 Pipeline（内置 AI 处理）
-        select {
-        case c.msgChan <- msg:
-        default:
-            c.log.Warn("msg channel full, dropping msg")
-        }
-
-        // 2. 广播到所有虚拟 Bot（代理模式）
-        if b := c.GetBroadcaster(); b != nil {
-            b.Broadcast(msg)
+// GetAccountTokenByVirtualID 根据虚拟 Bot ID 获取真实账号的 token
+func (c *Connector) GetAccountTokenByVirtualID(virtualAccountID string) string {
+    c.accountMu.RLock()
+    defer c.accountMu.RUnlock()
+    for _, a := range c.accounts {
+        if a.Credentials != nil && a.Credentials.Token != "" {
+            return a.Credentials.Token
         }
     }
+    return ""
 }
 ```
 
-**注意**：使用接口模式（`MessageBroadcaster`）而非直接引用 `*ilink.ClientRegistry`，避免 `bot` 包和 `ilink` 包之间的循环依赖。
+**透明代理模式特点**：
+- 不需要消息队列
+- 不需要广播机制
+- 直接转发到真实 iLink API
 
 ## 实现状态
 

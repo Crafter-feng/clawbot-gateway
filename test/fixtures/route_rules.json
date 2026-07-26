@@ -1,0 +1,140 @@
+{
+  "rules": [
+    {
+      "name": "天气查询",
+      "backend_id": "hermes",
+      "priority": 1,
+      "enabled": true,
+      "description": "匹配包含'天气'的消息",
+      "groups": [
+        {
+          "id": "g1",
+          "logic": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "field": "message",
+              "operator": "contains",
+              "value": "天气",
+              "case_sensitive": false,
+              "negate": false
+            }
+          ]
+        }
+      ],
+      "group_logic": "and"
+    },
+    {
+      "name": "帮助命令",
+      "backend_id": "echo",
+      "priority": 2,
+      "enabled": true,
+      "description": "匹配以 /help 开头的消息",
+      "groups": [
+        {
+          "id": "g1",
+          "logic": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "field": "message",
+              "operator": "regex",
+              "value": "^/help.*",
+              "case_sensitive": false,
+              "negate": false
+            }
+          ]
+        }
+      ],
+      "group_logic": "and"
+    },
+    {
+      "name": "管理员天气查询",
+      "backend_id": "admin",
+      "priority": 3,
+      "enabled": true,
+      "description": "匹配包含'天气'且发送者是'admin'的消息",
+      "groups": [
+        {
+          "id": "g1",
+          "logic": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "field": "message",
+              "operator": "contains",
+              "value": "天气",
+              "case_sensitive": false,
+              "negate": false
+            },
+            {
+              "id": "c2",
+              "field": "from_user",
+              "operator": "exact",
+              "value": "admin",
+              "case_sensitive": false,
+              "negate": false
+            }
+          ]
+        }
+      ],
+      "group_logic": "and"
+    },
+    {
+      "name": "天气或预报",
+      "backend_id": "weather",
+      "priority": 4,
+      "enabled": true,
+      "description": "匹配包含'天气'或'预报'的消息",
+      "groups": [
+        {
+          "id": "g1",
+          "logic": "or",
+          "conditions": [
+            {
+              "id": "c1",
+              "field": "message",
+              "operator": "contains",
+              "value": "天气",
+              "case_sensitive": false,
+              "negate": false
+            },
+            {
+              "id": "c2",
+              "field": "message",
+              "operator": "contains",
+              "value": "预报",
+              "case_sensitive": false,
+              "negate": false
+            }
+          ]
+        }
+      ],
+      "group_logic": "and"
+    },
+    {
+      "name": "非测试消息",
+      "backend_id": "ai",
+      "priority": 5,
+      "enabled": true,
+      "description": "匹配不包含'测试'的消息",
+      "groups": [
+        {
+          "id": "g1",
+          "logic": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "field": "message",
+              "operator": "contains",
+              "value": "测试",
+              "case_sensitive": false,
+              "negate": true
+            }
+          ]
+        }
+      ],
+      "group_logic": "and"
+    }
+  ]
+}

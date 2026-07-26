@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useBackendsStore } from '../stores/backends'
-import { useRoutesStore } from '../stores/routes'
+import { useRoutesStore, type RouteRule } from '../stores/routes'
 import { useToast } from '../components/Toast'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
@@ -10,6 +10,8 @@ import Modal from '../components/ui/Modal'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 import EmptyState from '../components/ui/EmptyState'
 import { ListItemSkeleton } from '../components/ui/Skeleton'
+import RouteRuleForm from '../components/ui/RouteRuleForm'
+import RouteRuleList from '../components/ui/RouteRuleList'
 
 interface BackendForm {
   id: string
@@ -52,11 +54,9 @@ export default function ManagePage() {
   /* Delete confirm */
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'backend' | 'route'; id: string | number } | null>(null)
 
-  /* Route form */
-  const [rKeyword, setRKeyword] = useState('')
-  const [rBackend, setRBackend] = useState('')
-  const [rIsRegexp, setRIsRegexp] = useState(false)
-  const [rLoading, setRLoading] = useState(false)
+  /* Route rule form */
+  const [showRouteForm, setShowRouteForm] = useState(false)
+  const [editingRule, setEditingRule] = useState<RouteRule | null>(null)
 
   useEffect(() => {
     backends.fetch()
@@ -160,22 +160,6 @@ export default function ManagePage() {
       setTestResult({ loading: false, result: { healthy: false, error: '测试失败' } })
     }
   }, [backends])
-
-  const handleAddRoute = useCallback(async () => {
-    if (!rKeyword.trim() || !rBackend.trim()) return
-    setRLoading(true)
-    try {
-      await routes.add(rKeyword.trim(), rBackend.trim(), rIsRegexp)
-      setRKeyword('')
-      setRBackend('')
-      setRIsRegexp(false)
-      toast('路由规则添加成功', 'success')
-    } catch {
-      toast('添加路由规则失败', 'error')
-    } finally {
-      setRLoading(false)
-    }
-  }, [rKeyword, rBackend, rIsRegexp, routes, toast])
 
   const handleRemoveRoute = useCallback(async (id: number) => {
     try {
@@ -326,90 +310,18 @@ WEIXIN_ACCOUNT_ID=gw_${bId || '<id>'}`}</pre>
         <div className="card">
           <div className="card-header">
             <h2 className="card-title">路由规则</h2>
-          </div>
-          <p className="card-description">根据消息内容自动路由到指定后端</p>
-
-          <div className="manage-form" style={{ marginTop: 'var(--space-4)' }}>
-            <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr auto' }}>
-              <Input
-                label="关键词"
-                placeholder="匹配关键词"
-                value={rKeyword}
-                onChange={(e) => setRKeyword(e.target.value)}
-              />
-              <Select
-                label="目标后端"
-                value={rBackend}
-                onChange={(e) => setRBackend(e.target.value)}
-              >
-                <option value="">选择后端</option>
-                {backends.items.map((b) => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </Select>
-              <div className="checkbox-group" style={{ paddingTop: '24px' }}>
-                <input
-                  type="checkbox"
-                  id="is-regexp"
-                  className="checkbox"
-                  checked={rIsRegexp}
-                  onChange={(e) => setRIsRegexp(e.target.checked)}
-                />
-                <label htmlFor="is-regexp" className="checkbox-label">正则</label>
-              </div>
-            </div>
-            <Button
-              variant="secondary"
-              onClick={handleAddRoute}
-              loading={rLoading}
-              disabled={!rKeyword.trim() || !rBackend.trim()}
-            >
+            <Button size="sm" onClick={() => { setEditingRule(null); setShowRouteForm(true) }}>
               添加规则
             </Button>
           </div>
-
-          <div className="divider" />
-
-          <div className="card-header">
-            <h3 className="card-title" style={{ fontSize: 'var(--text-sm)' }}>现有规则</h3>
-          </div>
+          <p className="card-description">根据消息内容自动路由到指定后端，支持且/或/非逻辑组合</p>
 
           {routes.loading ? (
             <div className="list-section">
               <ListItemSkeleton />
             </div>
-          ) : routes.items.length === 0 ? (
-            <EmptyState
-              icon={
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="16 3 21 3 21 8" />
-                  <line x1="4" y1="20" x2="21" y2="3" />
-                </svg>
-              }
-              title="暂无路由规则"
-              description="添加规则以自动分发消息到指定后端"
-            />
           ) : (
-            <div className="list-section">
-              {routes.items.map((r, i) => (
-                <div key={i} className="list-item">
-                  <div className="list-item-content">
-                    <div className="list-item-info">
-                      <div className="list-item-title font-mono">
-                        {r.keyword}
-                        {r.is_regexp && <Tag variant="warning" style={{ marginLeft: '8px' }}>正则</Tag>}
-                      </div>
-                      <div className="list-item-subtitle">
-                        转发至: {r.backend_id}
-                      </div>
-                    </div>
-                  </div>
-                  <Button variant="ghost-danger" size="sm" onClick={() => setDeleteTarget({ type: 'route', id: r.id })}>
-                    删除
-                  </Button>
-                </div>
-              ))}
-            </div>
+            <RouteRuleList onEdit={(rule) => { setEditingRule(rule); setShowRouteForm(true) }} />
           )}
         </div>
       </div>
@@ -571,6 +483,20 @@ WEIXIN_ACCOUNT_ID=gw_${infoModal.backend.id}`}</pre>
           : '确定要删除此路由规则吗？此操作不可撤销。'
         }
       />
+
+      {/* 路由规则表单模态框 */}
+      <Modal
+        open={showRouteForm}
+        onClose={() => { setShowRouteForm(false); setEditingRule(null) }}
+        title={editingRule ? '编辑路由规则' : '添加路由规则'}
+        maxWidth="680px"
+      >
+        <RouteRuleForm
+          rule={editingRule}
+          onClose={() => { setShowRouteForm(false); setEditingRule(null) }}
+          onSave={() => { setShowRouteForm(false); setEditingRule(null); routes.fetch() }}
+        />
+      </Modal>
     </div>
   )
 }

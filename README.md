@@ -43,7 +43,7 @@
 | **虚拟 Bot** | 基于一个真实微信账号，虚拟出多个独立 Bot 实例 |
 | **命令切换** | `/use hermes` 切换后端，`/hermes` 一次性转发 |
 | **OpenAI 兼容** | 支持 Claude、DeepSeek、GPT 等所有 OpenAI 兼容 API |
-| **Webhook 通知** | 单向推送通知到外部系统 |
+| **Webhook 通知** | 允许外部系统向微信用户发送消息 |
 | **Web 管理** | React SPA，支持后端管理、路由配置、账号管理 |
 
 ## 两种转发模式

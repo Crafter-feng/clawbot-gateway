@@ -57,13 +57,22 @@ func main() {
 	}
 
 	// 3. 初始化路由引擎
-	r := route.NewRouter(db.GetSetting("route.default_backend"))
+	r := route.NewRouter()
+	r.SetDefaultBackend(db.GetSetting("route.default_backend"))
 
 	// 3a. 从数据库加载路由规则
-	routes, err := db.ListRoutes()
+	routeRules, err := db.ListRouteRules()
 	if err == nil {
-		for _, rule := range routes {
-			r.AddKeywordRule(rule.Keyword, rule.BackendID, rule.IsRegexp)
+		for _, rule := range routeRules {
+			r.AddRule(route.RouteRule{
+				ID:         rule.ID,
+				Name:       rule.Name,
+				BackendID:  rule.BackendID,
+				Priority:   rule.Priority,
+				Enabled:    rule.Enabled,
+				Groups:     convertGroups(rule.Groups),
+				GroupLogic: rule.GroupLogic,
+			})
 		}
 	}
 
@@ -217,4 +226,28 @@ func getJSONString(jsonStr, key string) string {
 		return v
 	}
 	return ""
+}
+
+// convertGroups 将数据库的路由组转换为路由引擎格式
+func convertGroups(dbGroups []database.RouteRuleGroup) []route.RouteRuleGroup {
+	groups := make([]route.RouteRuleGroup, len(dbGroups))
+	for i, dbGroup := range dbGroups {
+		conditions := make([]route.RouteCondition, len(dbGroup.Conditions))
+		for j, dbCond := range dbGroup.Conditions {
+			conditions[j] = route.RouteCondition{
+				ID:            dbCond.ID,
+				Field:         dbCond.Field,
+				Operator:      dbCond.Operator,
+				Value:         dbCond.Value,
+				CaseSensitive: dbCond.CaseSensitive,
+				Negate:        dbCond.Negate,
+			}
+		}
+		groups[i] = route.RouteRuleGroup{
+			ID:         dbGroup.ID,
+			Logic:      dbGroup.Logic,
+			Conditions: conditions,
+		}
+	}
+	return groups
 }

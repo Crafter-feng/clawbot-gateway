@@ -62,14 +62,6 @@ func (db *DB) migrate() error {
 			created_at TEXT DEFAULT (datetime('now')),
 			updated_at TEXT DEFAULT (datetime('now'))
 		)`,
-		`CREATE TABLE IF NOT EXISTS routes (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			keyword TEXT NOT NULL,
-			backend_id TEXT NOT NULL,
-			is_regexp INTEGER DEFAULT 0,
-			priority INTEGER DEFAULT 0,
-			created_at TEXT DEFAULT (datetime('now'))
-		)`,
 		`CREATE TABLE IF NOT EXISTS accounts (
 			account_id TEXT PRIMARY KEY,
 			user_id TEXT NOT NULL,
@@ -103,6 +95,19 @@ func (db *DB) migrate() error {
 			token TEXT NOT NULL UNIQUE,
 			enabled INTEGER DEFAULT 1,
 			created_at TEXT DEFAULT (datetime('now'))
+		)`,
+		// 新的路由规则表（支持且/或/非逻辑）
+		`CREATE TABLE IF NOT EXISTS route_rules (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			backend_id TEXT NOT NULL,
+			priority INTEGER DEFAULT 0,
+			enabled INTEGER DEFAULT 1,
+			description TEXT DEFAULT '',
+			groups TEXT NOT NULL DEFAULT '[]',
+			group_logic TEXT DEFAULT 'and',
+			created_at TEXT DEFAULT (datetime('now')),
+			updated_at TEXT DEFAULT (datetime('now'))
 		)`,
 	}
 

@@ -120,10 +120,14 @@ func (s *APIServer) Start(addr string) error {
 
 	// 路由规则
 	rt := api.Group("/routes")
-	rt.GET("", s.handleListRoutes)
-	rt.POST("", s.handleAddRoute)
-	rt.PUT("/:id", s.handleUpdateRoute)
-	rt.DELETE("/:id", s.handleRemoveRoute)
+	rt.GET("", s.handleListRouteRules)
+	rt.GET("/:id", s.handleGetRouteRule)
+	rt.POST("", s.handleCreateRouteRule)
+	rt.PUT("/:id", s.handleUpdateRouteRule)
+	rt.DELETE("/:id", s.handleDeleteRouteRule)
+	rt.PUT("/:id/toggle", s.handleToggleRouteRule)
+	rt.PUT("/reorder", s.handleReorderRouteRules)
+	rt.POST("/test", s.handleTestRouteRule)
 
 	// 微信账号
 	wc := api.Group("/accounts")

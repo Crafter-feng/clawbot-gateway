@@ -6,91 +6,243 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"clawbot-gateway/internal/database"
+	"clawbot-gateway/internal/route"
 )
 
-func (s *APIServer) handleListRoutes(c *gin.Context) {
-	routes, err := s.db.ListRoutes()
+// handleListRouteRules 列出所有路由规则
+func (s *APIServer) handleListRouteRules(c *gin.Context) {
+	rules, err := s.db.ListRouteRules()
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(200, gin.H{"routes": routes})
+	c.JSON(200, gin.H{"rules": rules})
 }
 
-func (s *APIServer) handleAddRoute(c *gin.Context) {
-	var req struct {
-		Keyword   string `json:"keyword"`
-		BackendID string `json:"backend_id"`
-		IsRegexp  bool   `json:"is_regexp"`
-		Priority  int    `json:"priority"`
+// handleGetRouteRule 获取单个路由规则
+func (s *APIServer) handleGetRouteRule(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid rule id"})
+		return
 	}
-	if err := c.ShouldBindJSON(&req); err != nil {
+
+	rule, err := s.db.GetRouteRule(id)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "rule not found"})
+		return
+	}
+	c.JSON(200, rule)
+}
+
+// handleCreateRouteRule 创建路由规则
+func (s *APIServer) handleCreateRouteRule(c *gin.Context) {
+	var rule database.RouteRule
+	if err := c.ShouldBindJSON(&rule); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
 
-	route := database.Route{
-		Keyword:   req.Keyword,
-		BackendID: req.BackendID,
-		IsRegexp:  req.IsRegexp,
-		Priority:  req.Priority,
+	// 验证必填字段
+	if rule.Name == "" {
+		c.JSON(400, gin.H{"error": "name is required"})
+		return
+	}
+	if rule.BackendID == "" {
+		c.JSON(400, gin.H{"error": "backend_id is required"})
+		return
 	}
 
-	if err := s.db.CreateRoute(route); err != nil {
+	// 验证正则表达式
+	for _, group := range rule.Groups {
+		for _, cond := range group.Conditions {
+			if cond.Operator == "regex" {
+				if err := route.ValidateRegexp(cond.Value); err != nil {
+					c.JSON(400, gin.H{"error": "invalid regex: " + cond.Value})
+					return
+				}
+			}
+		}
+	}
+
+	id, err := s.db.CreateRouteRule(rule)
+	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
 
 	// 同步到内存路由引擎
-	s.router.AddKeywordRule(req.Keyword, req.BackendID, req.IsRegexp)
+	rule.ID = int(id)
+	s.router.AddRule(convertToRouteRule(rule))
+
+	c.JSON(200, gin.H{"success": true, "id": id})
+}
+
+// handleUpdateRouteRule 更新路由规则
+func (s *APIServer) handleUpdateRouteRule(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid rule id"})
+		return
+	}
+
+	var rule database.RouteRule
+	if err := c.ShouldBindJSON(&rule); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 验证正则表达式
+	for _, group := range rule.Groups {
+		for _, cond := range group.Conditions {
+			if cond.Operator == "regex" {
+				if err := route.ValidateRegexp(cond.Value); err != nil {
+					c.JSON(400, gin.H{"error": "invalid regex: " + cond.Value})
+					return
+				}
+			}
+		}
+	}
+
+	if err := s.db.UpdateRouteRule(id, rule); err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 同步到内存路由引擎
+	rule.ID = id
+	s.router.UpdateRule(convertToRouteRule(rule))
 
 	c.JSON(200, gin.H{"success": true})
 }
 
-func (s *APIServer) handleUpdateRoute(c *gin.Context) {
+// handleDeleteRouteRule 删除路由规则
+func (s *APIServer) handleDeleteRouteRule(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		c.JSON(400, gin.H{"error": "invalid route id"})
+		c.JSON(400, gin.H{"error": "invalid rule id"})
 		return
 	}
 
+	if err := s.db.DeleteRouteRule(id); err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 同步到内存路由引擎
+	s.router.RemoveRule(id)
+
+	c.JSON(200, gin.H{"success": true})
+}
+
+// handleToggleRouteRule 切换路由规则启用状态
+func (s *APIServer) handleToggleRouteRule(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid rule id"})
+		return
+	}
+
+	if err := s.db.ToggleRouteRule(id); err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 重新加载规则到内存
+	s.reloadRouteRules()
+
+	c.JSON(200, gin.H{"success": true})
+}
+
+// handleReorderRouteRules 重新排序路由规则
+func (s *APIServer) handleReorderRouteRules(c *gin.Context) {
 	var req struct {
-		Keyword   string `json:"keyword"`
-		BackendID string `json:"backend_id"`
-		IsRegexp  bool   `json:"is_regexp"`
-		Priority  int    `json:"priority"`
+		IDs []int `json:"ids"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
 
-	route := database.Route{
-		ID:        id,
-		Keyword:   req.Keyword,
-		BackendID: req.BackendID,
-		IsRegexp:  req.IsRegexp,
-		Priority:  req.Priority,
-	}
-
-	if err := s.db.UpdateRoute(id, route); err != nil {
+	if err := s.db.ReorderRouteRules(req.IDs); err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
+
+	// 重新加载规则到内存
+	s.reloadRouteRules()
 
 	c.JSON(200, gin.H{"success": true})
 }
 
-func (s *APIServer) handleRemoveRoute(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		c.JSON(400, gin.H{"error": "invalid route id"})
+// handleTestRouteRule 测试路由匹配
+func (s *APIServer) handleTestRouteRule(c *gin.Context) {
+	var req struct {
+		Message  string `json:"message"`
+		UserID   string `json:"user_id"`
+		FromUser string `json:"from_user"`
+		ToUser   string `json:"to_user"`
+		MsgType  string `json:"msg_type"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
 
-	if err := s.db.DeleteRoute(id); err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+	decision := s.router.Route(req.Message, req.UserID, req.FromUser, req.ToUser, req.MsgType)
+
+	c.JSON(200, gin.H{
+		"matched":    decision.MatchedBy != "none",
+		"backend_id": decision.BackendID,
+		"matched_by": decision.MatchedBy,
+		"rule_id":    decision.RuleID,
+	})
+}
+
+// reloadRouteRules 重新加载路由规则到内存
+func (s *APIServer) reloadRouteRules() {
+	rules, err := s.db.ListRouteRules()
+	if err != nil {
 		return
 	}
-	c.JSON(200, gin.H{"success": true})
+
+	// 清空并重新加载
+	routeRules := make([]route.RouteRule, 0, len(rules))
+	for _, rule := range rules {
+		routeRules = append(routeRules, convertToRouteRule(rule))
+	}
+	s.router.LoadRules(routeRules)
+}
+
+// convertToRouteRule 将数据库路由规则转换为路由引擎格式
+func convertToRouteRule(dbRule database.RouteRule) route.RouteRule {
+	groups := make([]route.RouteRuleGroup, len(dbRule.Groups))
+	for i, dbGroup := range dbRule.Groups {
+		conditions := make([]route.RouteCondition, len(dbGroup.Conditions))
+		for j, dbCond := range dbGroup.Conditions {
+			conditions[j] = route.RouteCondition{
+				ID:            dbCond.ID,
+				Field:         dbCond.Field,
+				Operator:      dbCond.Operator,
+				Value:         dbCond.Value,
+				CaseSensitive: dbCond.CaseSensitive,
+				Negate:        dbCond.Negate,
+			}
+		}
+		groups[i] = route.RouteRuleGroup{
+			ID:         dbGroup.ID,
+			Logic:      dbGroup.Logic,
+			Conditions: conditions,
+		}
+	}
+
+	return route.RouteRule{
+		ID:         dbRule.ID,
+		Name:       dbRule.Name,
+		BackendID:  dbRule.BackendID,
+		Priority:   dbRule.Priority,
+		Enabled:    dbRule.Enabled,
+		Groups:     groups,
+		GroupLogic: dbRule.GroupLogic,
+	}
 }

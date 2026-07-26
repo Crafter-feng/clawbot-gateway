@@ -218,13 +218,13 @@ export default function DashboardPage() {
             />
           ) : (
             <div className="list-section">
-              {routes.items.map((r, i) => (
-                <div key={i} className="list-item">
+              {routes.items.map((r) => (
+                <div key={r.id} className="list-item">
                   <div className="list-item-content">
                     <div className="list-item-info">
-                      <div className="list-item-title font-mono">
-                        {r.keyword}
-                        {r.is_regexp && <Tag variant="warning" style={{ marginLeft: '8px' }}>正则</Tag>}
+                      <div className="list-item-title">
+                        {r.name}
+                        {!r.enabled && <Tag variant="neutral" style={{ marginLeft: '8px' }}>停用</Tag>}
                       </div>
                       <div className="list-item-subtitle">
                         转发至: {r.backend_id}

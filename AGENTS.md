@@ -47,7 +47,7 @@
 
 ## 配置规则
 
-### 5. 配置管理方式
+### 6. 配置管理方式
 
 | 类型 | 方式 | 说明 |
 |------|------|------|
@@ -58,7 +58,7 @@
 - 使用 YAML/JSON 配置文件存储业务配置
 - 通过配置文件管理后端适配器、路由规则等
 
-### 6. 配置项分类
+### 7. 配置项分类
 
 **启动配置（.env）**：
 - `CLAWBOT_DB_PATH`：数据库路径
@@ -75,7 +75,7 @@
 
 ## 代码规则
 
-### 7. 包依赖方向
+### 8. 包依赖方向
 
 ```
 internal/api → internal/bot, internal/ilink, internal/adapter, internal/database
@@ -88,20 +88,6 @@ internal/database → (无外部依赖)
 **禁止**：
 - `internal/bot` 依赖 `internal/ilink`（会导致循环依赖）
 - `internal/ilink` 依赖 `internal/api`
-
-### 8. 消息广播使用接口
-
-```go
-// 正确：使用接口避免循环依赖
-type MessageBroadcaster interface {
-    Broadcast(msg NormalizedMessage)
-}
-
-// 错误：直接引用会导致循环依赖
-type Connector struct {
-    clientRegistry *ilink.ClientRegistry  // ❌ 禁止
-}
-```
 
 ### 9. 错误处理
 

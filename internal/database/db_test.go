@@ -107,45 +107,59 @@ func TestBackendsCRUD(t *testing.T) {
 	}
 }
 
-func TestRoutesCRUD(t *testing.T) {
+func TestRouteRulesCRUD(t *testing.T) {
 	db := setupTestDB(t)
 
 	// Create
-	r := Route{
-		Keyword:   "天气",
-		BackendID: "openclaw",
-		IsRegexp:  false,
-		Priority:  0,
+	r := RouteRule{
+		Name:       "天气查询",
+		BackendID:  "openclaw",
+		Priority:   1,
+		Enabled:    true,
+		GroupLogic: "and",
+		Groups: []RouteRuleGroup{
+			{
+				ID:    "g1",
+				Logic: "and",
+				Conditions: []RouteCondition{
+					{ID: "c1", Field: "message", Operator: "contains", Value: "天气"},
+				},
+			},
+		},
 	}
-	if err := db.CreateRoute(r); err != nil {
-		t.Fatalf("CreateRoute failed: %v", err)
+	id, err := db.CreateRouteRule(r)
+	if err != nil {
+		t.Fatalf("CreateRouteRule failed: %v", err)
+	}
+	if id == 0 {
+		t.Error("CreateRouteRule should return non-zero ID")
 	}
 
 	// List
-	routes, err := db.ListRoutes()
+	rules, err := db.ListRouteRules()
 	if err != nil {
-		t.Fatalf("ListRoutes failed: %v", err)
+		t.Fatalf("ListRouteRules failed: %v", err)
 	}
-	if len(routes) != 1 {
-		t.Errorf("ListRoutes want 1, got %d", len(routes))
+	if len(rules) != 1 {
+		t.Errorf("ListRouteRules want 1, got %d", len(rules))
 	}
-	if routes[0].Keyword != "天气" {
-		t.Errorf("Route keyword want '天气', got '%s'", routes[0].Keyword)
+	if rules[0].Name != "天气查询" {
+		t.Errorf("RouteRule name want '天气查询', got '%s'", rules[0].Name)
 	}
 
 	// Update
-	routes[0].Keyword = "温度"
-	if err := db.UpdateRoute(routes[0].ID, routes[0]); err != nil {
-		t.Fatalf("UpdateRoute failed: %v", err)
+	rules[0].Name = "温度查询"
+	if err := db.UpdateRouteRule(rules[0].ID, rules[0]); err != nil {
+		t.Fatalf("UpdateRouteRule failed: %v", err)
 	}
 
 	// Delete
-	if err := db.DeleteRoute(routes[0].ID); err != nil {
-		t.Fatalf("DeleteRoute failed: %v", err)
+	if err := db.DeleteRouteRule(rules[0].ID); err != nil {
+		t.Fatalf("DeleteRouteRule failed: %v", err)
 	}
-	routes, _ = db.ListRoutes()
-	if len(routes) != 0 {
-		t.Errorf("ListRoutes after delete want 0, got %d", len(routes))
+	rules, _ = db.ListRouteRules()
+	if len(rules) != 0 {
+		t.Errorf("ListRouteRules after delete want 0, got %d", len(rules))
 	}
 }
 
