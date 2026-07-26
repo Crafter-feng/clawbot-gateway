@@ -45,7 +45,6 @@
   --text-muted: var(--n-500);
   --border: var(--n-700);
   --border-light: var(--n-800);
-}
 
   /* Typography */
   --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', 'Noto Sans SC', sans-serif;
@@ -95,6 +94,7 @@
   /* Layout */
   --sidebar-width: 240px;
   --header-height: 56px;
+}
 
 
 /* --- Light Theme --- */
@@ -102,7 +102,6 @@
   --bg-primary: var(--n-50);
   --bg-secondary: #ffffff;
   --bg-card: #ffffff;
-  --bg-card-hover: var(--n-50);
   --bg-elevated: #ffffff;
   --text-primary: var(--n-900);
   --text-secondary: var(--n-500);
