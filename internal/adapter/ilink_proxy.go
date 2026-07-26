@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
 
@@ -55,4 +56,22 @@ func (a *ILinkProxyAdapter) GetAccountID() string {
 // GetUserID 获取虚拟 Bot 的 user_id
 func (a *ILinkProxyAdapter) GetUserID() string {
 	return a.userID
+}
+
+// ILinkProxyBackendAdapter iLink 代理后端适配器（仅用于展示和健康检查）
+// 不处理消息，所有 Handle 调用返回错误
+type ILinkProxyBackendAdapter struct {
+	id   string
+	name string
+}
+
+func (a *ILinkProxyBackendAdapter) ID() string                           { return a.id }
+func (a *ILinkProxyBackendAdapter) Name() string                         { return a.name }
+func (a *ILinkProxyBackendAdapter) Type() string                         { return "ilink_proxy" }
+func (a *ILinkProxyBackendAdapter) HealthCheck(ctx context.Context) bool { return true }
+func (a *ILinkProxyBackendAdapter) Handle(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
+	return nil, fmt.Errorf("ilink_proxy backend does not support message handling")
+}
+func (a *ILinkProxyBackendAdapter) HandleStream(ctx context.Context, req *ChatRequest, ch chan<- string) error {
+	return fmt.Errorf("ilink_proxy backend does not support message handling")
 }

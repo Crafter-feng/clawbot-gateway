@@ -6,12 +6,14 @@ import (
 	"crypto/aes"
 	"crypto/md5"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 // ── 发送媒体文件（完整流程：加密上传 → 发送） ──
@@ -76,8 +78,11 @@ func (c *Connector) UploadAndSendMedia(ctx context.Context, accountID, toUser st
 
 	// 2. 生成随机 AES Key
 	aesKey := make([]byte, 16)
-	rand.Read(aesKey)
-
+	if _, err := rand.Read(aesKey); err != nil {
+		// 极端情况下的 fallback：sha256(时间戳)
+		h := sha256.Sum256([]byte(fmt.Sprintf("%d", time.Now().UnixNano())))
+		copy(aesKey, h[:16])
+	}
 	// 3. 加密文件数据
 	encrypted, err := aesEncrypt(fileData, aesKey)
 	if err != nil {

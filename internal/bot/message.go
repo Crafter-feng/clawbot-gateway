@@ -269,6 +269,8 @@ func extractText(items []RawMessageItem_Item) string {
 // GenerateClientID 生成客户端 ID（格式：openclaw-weixin:<ms>-<rand>）
 func GenerateClientID() string {
 	b := make([]byte, 4)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		return "openclaw-weixin:" + time.Now().Format("20060102150405.000") + "-fallback"
+	}
 	return "openclaw-weixin:" + time.Now().Format("20060102150405.000") + "-" + hex.EncodeToString(b)
 }

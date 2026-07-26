@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -163,6 +164,8 @@ func (c *Connector) SetSyncBufStore(store SyncBufStore) {
 
 func randomUIN() string {
 	buf := make([]byte, 4)
-	rand.Read(buf)
+	if _, err := rand.Read(buf); err != nil {
+		return base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%d", time.Now().UnixNano())))
+	}
 	return base64.StdEncoding.EncodeToString(buf)
 }

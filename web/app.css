@@ -122,8 +122,10 @@ body {
 }
 
 button, input, select, textarea {
-  font: inherit;
-  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--text-primary);
+  background: var(--bg-primary);
 }
 
 button {
@@ -376,23 +378,34 @@ a {
   box-shadow: 0 0 0 3px var(--danger-dim);
 }
 
-/* Select */
+/* Select - 不使用 height/line-height，完全由 padding 决定垂直居中 */
 .select {
-  background: var(--bg-primary);
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  box-sizing: border-box;
+  margin: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: var(--space-3) var(--space-4);
-  color: var(--text-primary);
-  width: 100%;
-  height: 40px;
-  outline: none;
-  transition: border-color var(--duration-fast) var(--easing);
-  font-size: var(--text-base);
-  appearance: none;
+  background: var(--bg-primary);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M4.646 5.646a.5.5 0 0 1 .708 0L8 8.293l2.646-2.647a.5.5 0 0 1 .708.708l-3 3a.5.5 0 0 1-.708 0l-3-3a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 12px center;
-  padding-right: 36px;
+  background-size: 16px;
+  padding: 13px 36px 13px 16px;
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  font-family: inherit;
+  width: 100%;
+  outline: none;
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--easing);
+}
+
+.select option,
+.select optgroup {
+  background: var(--n-800);
+  color: var(--text-primary);
 }
 
 .select:focus {
@@ -647,10 +660,18 @@ textarea.input {
   max-width: 480px;
   width: 100%;
   max-height: 85vh;
-  overflow-y: auto;
+  /* 使用 visible 确保原生 select 下拉选项不被裁剪 */
+  overflow: visible;
   box-shadow: var(--shadow-lg);
   animation: slideIn var(--duration-normal) var(--easing);
   position: relative;
+}
+
+/* 模态框内容内部滚动，避免裁剪 select 下拉 */
+.modal-body {
+  max-height: calc(85vh - 140px);
+  overflow-y: auto;
+  margin-bottom: var(--space-6);
 }
 
 .modal-header {
@@ -681,10 +702,6 @@ textarea.input {
 .modal-close:hover {
   background: var(--bg-card-hover);
   color: var(--text-primary);
-}
-
-.modal-body {
-  margin-bottom: var(--space-6);
 }
 
 .modal-footer {

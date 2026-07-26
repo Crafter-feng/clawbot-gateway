@@ -38,12 +38,15 @@ func (s *APIServer) handleGetQRCode(c *gin.Context) {
 	}
 
 	// 启动二维码状态轮询（使用独立 context，不随请求结束）
+	// 注意：不能 defer cancel()，goroutine 在 CreateScan 内部自己管理生命周期
 	scanCtx, scanCancel := context.WithCancel(context.Background())
-	defer scanCancel()
 	if err := qrManager.CreateScan(scanCtx, qrData.QRCode); err != nil {
+		scanCancel()
 		c.JSON(500, gin.H{"error": fmt.Sprintf("创建扫描会话失败: %v", err)})
 		return
 	}
+	// 不 defer scanCancel()——轮询 goroutine 在 CreateScan 内创建自己的派生 context 并管理生命周期
+	_ = scanCancel
 
 	c.JSON(200, gin.H{
 		"success": true,

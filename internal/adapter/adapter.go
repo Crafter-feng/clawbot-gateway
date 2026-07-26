@@ -90,6 +90,11 @@ func CreateAdapterFromDB(b database.Backend) BackendAdapter {
 			model = "gpt-4o"
 		}
 		return NewOpenAICompatibleAdapter(b.ID, b.Name, apiKey, baseURL, model)
+	case "ilink_proxy":
+		return &ILinkProxyBackendAdapter{
+			id:   b.ID,
+			name: b.Name,
+		}
 	default:
 		return nil
 	}

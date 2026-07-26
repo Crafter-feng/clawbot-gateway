@@ -1,4 +1,4 @@
-FROM golang:1.25-alpine AS builder
+FROM golang:1.22-alpine AS builder
 
 WORKDIR /build
 
@@ -25,6 +25,9 @@ COPY web/ web/
 # 数据目录
 VOLUME ["/app/data"]
 
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser
+
 EXPOSE 8080
 
 # 环境变量（可通过 docker-compose 或 -e 传入）
@@ -34,5 +37,3 @@ ENV CLAWBOT_PORT=8080
 ENV CLAWBOT_LOG_LEVEL=info
 
 CMD ["./clawbot-gateway"]
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-USER appuser
