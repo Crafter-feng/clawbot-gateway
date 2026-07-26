@@ -17,6 +17,11 @@ func (s *APIServer) handleListConnections(c *gin.Context) {
 
 	for _, conn := range connections {
 		info := conn.GetConnectionInfo()
+		// 从 ClientRegistry 获取虚拟 Bot 的认证 token
+		token := ""
+		if vbot := s.clientReg.Get(info.AccountID); vbot != nil {
+			token = vbot.Token
+		}
 		result = append(result, gin.H{
 			"id":         conn.ID(),
 			"name":       conn.Name(),
@@ -24,6 +29,7 @@ func (s *APIServer) handleListConnections(c *gin.Context) {
 			"account_id": info.AccountID,
 			"user_id":    info.UserID,
 			"base_url":   info.BaseURL,
+			"token":      token,
 			"healthy":    conn.HealthCheck(c.Request.Context()),
 		})
 	}
@@ -45,6 +51,11 @@ func (s *APIServer) handleGetConnection(c *gin.Context) {
 	}
 
 	info := conn.GetConnectionInfo()
+	// 从 ClientRegistry 获取虚拟 Bot 的认证 token
+	token := ""
+	if vbot := s.clientReg.Get(info.AccountID); vbot != nil {
+		token = vbot.Token
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"id":         conn.ID(),
 		"name":       conn.Name(),
@@ -52,6 +63,7 @@ func (s *APIServer) handleGetConnection(c *gin.Context) {
 		"account_id": info.AccountID,
 		"user_id":    info.UserID,
 		"base_url":   info.BaseURL,
+		"token":      token,
 		"healthy":    conn.HealthCheck(c.Request.Context()),
 	})
 }

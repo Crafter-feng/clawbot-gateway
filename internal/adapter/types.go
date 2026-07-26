@@ -39,6 +39,15 @@ type Attachment struct {
 	URL      string `json:"url,omitempty"`
 }
 
+// ConnectionInfo 外部服务连接配置
+type ConnectionInfo struct {
+	AccountID string `json:"account_id"` // 虚拟 Bot ID（如 gw_a1b2c3d4）
+	UserID    string `json:"user_id"`    // 用户 ID（如 gw_a1b2c3d4@im.wechat）
+	BaseURL   string `json:"base_url"`   // iLink API 地址（如 https://ilinkai.weixin.qq.com）
+}
+
+// ── 接口定义 ──
+
 // BackendAdapter 后端适配器接口（处理消息，返回 AI 响应）
 type BackendAdapter interface {
 	ID() string
@@ -47,13 +56,6 @@ type BackendAdapter interface {
 	Handle(ctx context.Context, req *ChatRequest) (*ChatResponse, error)
 	HandleStream(ctx context.Context, req *ChatRequest, ch chan<- string) error
 	HealthCheck(ctx context.Context) bool
-}
-
-// ConnectionInfo 外部服务连接配置
-type ConnectionInfo struct {
-	AccountID string `json:"account_id"` // 虚拟 Bot ID（如 gw_a1b2c3d4）
-	UserID    string `json:"user_id"`    // 用户 ID（如 gw_a1b2c3d4@im.wechat）
-	BaseURL   string `json:"base_url"`   // iLink API 地址（如 https://ilinkai.weixin.qq.com）
 }
 
 // ConnectionAdapter 连接适配器接口（提供外部服务连接配置）
@@ -65,6 +67,13 @@ type ConnectionAdapter interface {
 	HealthCheck(ctx context.Context) bool
 }
 
+// ── 适配器工厂函数类型 ──
+
+// AdapterCreator 从数据库记录创建后端适配器的工厂函数
+type AdapterCreator func(b database.Backend) BackendAdapter
+
+// ── 工具函数 ──
+
 // GetJSONString 从 JSON 字符串中提取指定 key 的值
 func GetJSONString(jsonStr, key string) string {
 	var m map[string]interface{}
@@ -75,27 +84,4 @@ func GetJSONString(jsonStr, key string) string {
 		return v
 	}
 	return ""
-}
-
-// CreateAdapterFromDB 从数据库后端记录创建适配器实例
-func CreateAdapterFromDB(b database.Backend) BackendAdapter {
-	switch b.Type {
-	case "echo":
-		return NewEchoAdapter(b.ID, b.Name)
-	case "openai_compatible":
-		apiKey := GetJSONString(b.Config, "api_key")
-		baseURL := GetJSONString(b.Config, "base_url")
-		model := GetJSONString(b.Config, "model")
-		if model == "" {
-			model = "gpt-4o"
-		}
-		return NewOpenAICompatibleAdapter(b.ID, b.Name, apiKey, baseURL, model)
-	case "ilink_proxy":
-		return &ILinkProxyBackendAdapter{
-			id:   b.ID,
-			name: b.Name,
-		}
-	default:
-		return nil
-	}
 }

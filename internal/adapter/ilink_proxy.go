@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"clawbot-gateway/internal/database"
 )
 
 // ILinkProxyAdapter iLink 代理适配器（虚拟 Bot）
@@ -74,4 +76,11 @@ func (a *ILinkProxyBackendAdapter) Handle(ctx context.Context, req *ChatRequest)
 }
 func (a *ILinkProxyBackendAdapter) HandleStream(ctx context.Context, req *ChatRequest, ch chan<- string) error {
 	return fmt.Errorf("ilink_proxy backend does not support message handling")
+}
+
+// 自注册
+func init() {
+	RegisterAdapter("ilink_proxy", func(b database.Backend) BackendAdapter {
+		return &ILinkProxyBackendAdapter{id: b.ID, name: b.Name}
+	})
 }
