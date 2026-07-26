@@ -11,6 +11,7 @@ interface Account {
 interface AccountsState {
   items: Account[]
   loading: boolean
+  error: string | null
   fetch(): Promise<void>
   disconnect(id: string): Promise<void>
 }
@@ -18,14 +19,15 @@ interface AccountsState {
 export const useAccountsStore = create<AccountsState>((set, get) => ({
   items: [],
   loading: false,
-
+  error: null,
   async fetch() {
     set({ loading: true })
     try {
       const data = await api.get<{ accounts: Account[] }>('/api/v1/accounts')
       set({ items: data.accounts || [], loading: false })
-    } catch {
-      set({ items: [], loading: false })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '获取账号列表失败'
+      set({ items: [], loading: false, error: msg })
     }
   },
 

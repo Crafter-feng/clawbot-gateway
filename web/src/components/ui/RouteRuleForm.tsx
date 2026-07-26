@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react'
-import { useRoutesStore, type RouteRule, type RouteRuleGroup, type RouteCondition, type ConditionField, type ConditionOperator } from '../../stores/routes'
+import { useRoutesStore, type RouteRule, type RouteRuleGroup, type RouteCondition, type ConditionField, type ConditionOperator, CONDITION_FIELDS, CONDITION_OPERATORS } from '../../stores/routes'
 import { useBackendsStore } from '../../stores/backends'
 import Button from './Button'
 import Input from './Input'
 import Select from './Select'
-import { CONDITION_FIELDS, CONDITION_OPERATORS } from '../../stores/routes'
 
 interface RouteRuleFormProps {
   rule?: RouteRule | null
@@ -38,7 +37,6 @@ export default function RouteRuleForm({ rule, onClose, onSave }: RouteRuleFormPr
     const result = await testMatch(testMessage, 'test_user')
     setTestResult(result)
   }
-
   const handleAddGroup = () => {
     setGroups([
       ...groups,
@@ -107,9 +105,14 @@ export default function RouteRuleForm({ rule, onClose, onSave }: RouteRuleFormPr
   }
 
   const handleSave = async () => {
-    if (!name.trim() || !backendId || groups.length === 0) return
+    // 过滤掉值为空的条件
+    const filteredGroups: RouteRuleGroup[] = groups.map((g) => ({
+      ...g,
+      conditions: g.conditions.filter((c) => c.value.trim() !== ''),
+    })).filter((g) => g.conditions.length > 0)
 
-    setSaving(true)
+    if (!name.trim() || !backendId || filteredGroups.length === 0) return
+
     try {
       const ruleData = {
         name: name.trim(),
@@ -117,7 +120,7 @@ export default function RouteRuleForm({ rule, onClose, onSave }: RouteRuleFormPr
         priority,
         enabled,
         description: description.trim(),
-        groups,
+        groups: filteredGroups,
         group_logic: groupLogic,
       }
 
@@ -127,8 +130,11 @@ export default function RouteRuleForm({ rule, onClose, onSave }: RouteRuleFormPr
         await add(ruleData)
       }
       onSave()
-    } catch {
-      // 错误处理
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '保存失败'
+      // 错误处理 - 使用 toast 或 setError
+      console.error('保存路由规则失败:', msg)
+      alert('保存失败: ' + msg)
     } finally {
       setSaving(false)
     }

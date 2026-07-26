@@ -1,6 +1,7 @@
 package api
 
 import (
+	"log"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -9,11 +10,11 @@ import (
 	"clawbot-gateway/internal/route"
 )
 
-// handleListRouteRules 列出所有路由规则
 func (s *APIServer) handleListRouteRules(c *gin.Context) {
 	rules, err := s.db.ListRouteRules()
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		log.Printf("ERROR: failed to list route rules: %v", err)
+		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
 	c.JSON(200, gin.H{"rules": rules})
@@ -67,7 +68,8 @@ func (s *APIServer) handleCreateRouteRule(c *gin.Context) {
 
 	id, err := s.db.CreateRouteRule(rule)
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		log.Printf("ERROR: failed to create route rule: %v", err)
+		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
 
@@ -103,9 +105,9 @@ func (s *APIServer) handleUpdateRouteRule(c *gin.Context) {
 			}
 		}
 	}
-
 	if err := s.db.UpdateRouteRule(id, rule); err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		log.Printf("ERROR: failed to update route rule %d: %v", id, err)
+		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
 
@@ -123,9 +125,9 @@ func (s *APIServer) handleDeleteRouteRule(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "invalid rule id"})
 		return
 	}
-
 	if err := s.db.DeleteRouteRule(id); err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		log.Printf("ERROR: failed to delete route rule %d: %v", id, err)
+		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
 
@@ -144,10 +146,10 @@ func (s *APIServer) handleToggleRouteRule(c *gin.Context) {
 	}
 
 	if err := s.db.ToggleRouteRule(id); err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		log.Printf("ERROR: failed to toggle route rule %d: %v", id, err)
+		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
-
 	// 重新加载规则到内存
 	s.reloadRouteRules()
 
@@ -165,10 +167,10 @@ func (s *APIServer) handleReorderRouteRules(c *gin.Context) {
 	}
 
 	if err := s.db.ReorderRouteRules(req.IDs); err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		log.Printf("ERROR: failed to reorder route rules: %v", err)
+		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
-
 	// 重新加载规则到内存
 	s.reloadRouteRules()
 

@@ -19,6 +19,9 @@ const (
 
 // SplitMessage 将长消息拆分为多条消息
 func SplitMessage(text string, maxLen int) []string {
+	if text == "" {
+		return []string{}
+	}
 	if maxLen <= 0 {
 		maxLen = MaxMessageLength
 	}

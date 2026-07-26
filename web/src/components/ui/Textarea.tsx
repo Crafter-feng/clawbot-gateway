@@ -21,7 +21,7 @@ const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           ref={ref}
           id={textareaId}
           className={`input ${error ? 'input-error-state' : ''} ${className}`}
-          aria-describedby={hint ? `${textareaId}-hint` : error ? `${textareaId}-error` : undefined}
+          aria-describedby={error ? `${textareaId}-error` : hint ? `${textareaId}-hint` : undefined}
           aria-invalid={!!error}
           {...props}
         />

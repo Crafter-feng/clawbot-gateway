@@ -271,3 +271,223 @@ func TestSyncBuf(t *testing.T) {
 		t.Errorf("GetSyncBuf after delete want empty, got '%s'", buf)
 	}
 }
+
+func TestGetRouteRule(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Create a route rule
+	r := RouteRule{
+		Name:        "Test Rule",
+		BackendID:   "test-backend",
+		Priority:    5,
+		Enabled:     true,
+		Description: "A test rule",
+		GroupLogic:  "and",
+		Groups: []RouteRuleGroup{
+			{
+				ID:    "g1",
+				Logic: "and",
+				Conditions: []RouteCondition{
+					{ID: "c1", Field: "message", Operator: "contains", Value: "test"},
+				},
+			},
+		},
+	}
+	id, err := db.CreateRouteRule(r)
+	if err != nil {
+		t.Fatalf("CreateRouteRule failed: %v", err)
+	}
+	if id == 0 {
+		t.Fatal("CreateRouteRule returned zero ID")
+	}
+
+	// Get by ID
+	got, err := db.GetRouteRule(int(id))
+	if err != nil {
+		t.Fatalf("GetRouteRule failed: %v", err)
+	}
+	if got.Name != "Test Rule" {
+		t.Errorf("GetRouteRule name want 'Test Rule', got '%s'", got.Name)
+	}
+	if got.BackendID != "test-backend" {
+		t.Errorf("GetRouteRule backend_id want 'test-backend', got '%s'", got.BackendID)
+	}
+	if got.Priority != 5 {
+		t.Errorf("GetRouteRule priority want 5, got %d", got.Priority)
+	}
+	if got.Enabled != true {
+		t.Error("GetRouteRule enabled want true")
+	}
+	if got.GroupLogic != "and" {
+		t.Errorf("GetRouteRule group_logic want 'and', got '%s'", got.GroupLogic)
+	}
+	if len(got.Groups) != 1 {
+		t.Errorf("GetRouteRule groups want 1, got %d", len(got.Groups))
+	}
+	if got.Groups[0].Conditions[0].Value != "test" {
+		t.Errorf("GetRouteRule condition value want 'test', got '%s'", got.Groups[0].Conditions[0].Value)
+	}
+
+	// Get non-existent
+	_, err = db.GetRouteRule(99999)
+	if err == nil {
+		t.Error("GetRouteRule on non-existent ID should return error")
+	}
+}
+
+func TestToggleRouteRule(t *testing.T) {
+	db := setupTestDB(t)
+
+	r := RouteRule{
+		Name:       "Toggle Test",
+		BackendID:  "test-backend",
+		Priority:   1,
+		Enabled:    true,
+		GroupLogic: "and",
+		Groups:     []RouteRuleGroup{},
+	}
+	id, err := db.CreateRouteRule(r)
+	if err != nil {
+		t.Fatalf("CreateRouteRule failed: %v", err)
+	}
+
+	// Toggle off
+	if err := db.ToggleRouteRule(int(id)); err != nil {
+		t.Fatalf("ToggleRouteRule failed: %v", err)
+	}
+	got, _ := db.GetRouteRule(int(id))
+	if got.Enabled != false {
+		t.Error("ToggleRouteRule: enabled should be false after toggle")
+	}
+
+	// Toggle back on
+	if err := db.ToggleRouteRule(int(id)); err != nil {
+		t.Fatalf("ToggleRouteRule second toggle failed: %v", err)
+	}
+	got, _ = db.GetRouteRule(int(id))
+	if got.Enabled != true {
+		t.Error("ToggleRouteRule: enabled should be true after second toggle")
+	}
+
+	// Toggle non-existent (should not error)
+	if err := db.ToggleRouteRule(99999); err != nil {
+		t.Errorf("ToggleRouteRule on non-existent ID should not error, got: %v", err)
+	}
+}
+
+func TestNotifyTokensCRUD(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Initially empty
+	tokens, err := db.ListNotifyTokens()
+	if err != nil {
+		t.Fatalf("ListNotifyTokens failed: %v", err)
+	}
+	if len(tokens) != 0 {
+		t.Errorf("ListNotifyTokens initially want 0, got %d", len(tokens))
+	}
+
+	// Create
+	t1 := NotifyToken{
+		ID:        "token1",
+		AccountID: "",
+		Name:      "Token One",
+		Token:     "tok_abc123",
+		Enabled:   true,
+		CreatedAt: "2025-01-01 00:00:00",
+	}
+	if err := db.CreateNotifyToken(t1); err != nil {
+		t.Fatalf("CreateNotifyToken failed: %v", err)
+	}
+
+	// List after create
+	tokens, err = db.ListNotifyTokens()
+	if err != nil {
+		t.Fatalf("ListNotifyTokens failed: %v", err)
+	}
+	if len(tokens) != 1 {
+		t.Errorf("ListNotifyTokens after create want 1, got %d", len(tokens))
+	}
+	if tokens[0].Name != "Token One" {
+		t.Errorf("NotifyToken name want 'Token One', got '%s'", tokens[0].Name)
+	}
+	if tokens[0].Enabled != true {
+		t.Error("NotifyToken enabled should be true")
+	}
+	if tokens[0].Token != "tok_abc123" {
+		t.Errorf("NotifyToken token want 'tok_abc123', got '%s'", tokens[0].Token)
+	}
+
+	// Create second token
+	t2 := NotifyToken{
+		ID:        "token2",
+		AccountID: "account_x",
+		Name:      "Token Two",
+		Token:     "tok_xyz789",
+		Enabled:   false,
+		CreatedAt: "2025-01-02 00:00:00",
+	}
+	if err := db.CreateNotifyToken(t2); err != nil {
+		t.Fatalf("CreateNotifyToken second failed: %v", err)
+	}
+	tokens, _ = db.ListNotifyTokens()
+	if len(tokens) != 2 {
+		t.Errorf("ListNotifyTokens after second create want 2, got %d", len(tokens))
+	}
+
+	// Delete
+	if err := db.DeleteNotifyToken("token1"); err != nil {
+		t.Fatalf("DeleteNotifyToken failed: %v", err)
+	}
+	tokens, _ = db.ListNotifyTokens()
+	if len(tokens) != 1 {
+		t.Errorf("ListNotifyTokens after delete want 1, got %d", len(tokens))
+	}
+	if tokens[0].ID != "token2" {
+		t.Errorf("Remaining token should be 'token2', got '%s'", tokens[0].ID)
+	}
+
+	// Delete non-existent (should not error)
+	if err := db.DeleteNotifyToken("nonexistent"); err != nil {
+		t.Errorf("DeleteNotifyToken on non-existent should not error, got: %v", err)
+	}
+}
+
+func TestGetAllSettings(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Get all settings should return defaults
+	settings := db.GetAllSettings()
+	if settings == nil {
+		t.Fatal("GetAllSettings returned nil")
+	}
+
+	// Check some defaults
+	if settings["server.host"] != "0.0.0.0" {
+		t.Errorf("server.host default want '0.0.0.0', got '%s'", settings["server.host"])
+	}
+	if settings["server.port"] != "8080" {
+		t.Errorf("server.port default want '8080', got '%s'", settings["server.port"])
+	}
+	if settings["clawbot.base_url"] != "https://ilinkai.weixin.qq.com" {
+		t.Errorf("clawbot.base_url default want 'https://ilinkai.weixin.qq.com', got '%s'", settings["clawbot.base_url"])
+	}
+
+	// Set a custom setting, it should appear
+	if err := db.SetSetting("my.custom.key", "my_value"); err != nil {
+		t.Fatalf("SetSetting failed: %v", err)
+	}
+	settings = db.GetAllSettings()
+	if settings["my.custom.key"] != "my_value" {
+		t.Errorf("GetAllSettings custom key want 'my_value', got '%s'", settings["my.custom.key"])
+	}
+
+	// Override a default in DB (not in envMapping, so env var won't interfere)
+	if err := db.SetSetting("clawbot.poll_timeout", "60"); err != nil {
+		t.Fatalf("SetSetting failed: %v", err)
+	}
+	settings = db.GetAllSettings()
+	if settings["clawbot.poll_timeout"] != "60" {
+		t.Errorf("GetAllSettings override poll_timeout want '60', got '%s'", settings["clawbot.poll_timeout"])
+	}
+}

@@ -283,8 +283,8 @@ curl -X POST http://localhost:8080/api/v1/notify/send \
 
 1. **一个真实账号**：用户通过 QR 扫码登录一个真实的微信账号（仅主客户端需要）
 2. **代理转发**：Gateway 作为 iLink 客户端轮询真实微信，接收所有消息
-3. **虚拟分发**：消息通过 `ClientRegistry.Broadcast()` 分发到所有虚拟 Bot 的队列
-4. **独立使用**：每个外部服务从自己的虚拟 Bot 队列取消息，互不干扰
+3. **透明代理**：虚拟 Bot 通过 iLink 服务端直接转发到真实 iLink API，无需消息队列或广播机制
+4. **独立使用**：每个外部服务通过独立的虚拟 Bot token 认证，互不干扰
 5. **统一发送**：外部服务发送的消息通过 Gateway 代理转发到真实微信
 
 **注意**：虚拟 Bot 不需要 QR 扫码登录。Gateway 直接生成连接配置（account_id、user_id、base_url），用户复制到外部服务即可使用。
@@ -292,7 +292,7 @@ curl -X POST http://localhost:8080/api/v1/notify/send \
 #### 优势
 
 - **资源复用**：一个真实微信账号可供多个外部服务使用
-- **隔离性**：每个外部服务有独立的消息队列，互不影响
+- **隔离性**：每个外部服务有独立的认证 token，互不影响
 - **扩展性**：可以创建无限个虚拟 Bot，不受微信登录限制
 - **安全性**：外部服务不需要知道真实微信凭证
 
@@ -320,15 +320,10 @@ curl -X POST http://localhost:8080/api/v1/notify/send \
 │  │  │  SendTextWithCreds 发送消息到微信                       │  │  │
 │  │  └────────────────────────────────────────────────────────┘  │  │
 │  │                                                               │  │
-│  │  ┌─── iLink 服务端 ──────────────────────────────────────┐  │  │
-│  │  │  Server            对外提供 iLink 兼容 API              │  │  │
-│  │  │  ClientRegistry    虚拟 Bot 注册管理                    │  │  │
-│  │  │  MessageQueue      每个虚拟 Bot 独立消息队列            │  │  │
-│  │  └────────────────────────────────────────────────────────┘  │  │
+│  │  │  ClientRegistry    虚拟 Bot 注册管理（透明代理）              │  │  │
 │  │                                                               │  │
 │  │  ┌─── 消息处理 ──────────────────────────────────────────┐  │  │
 │  │  │  MessagePipeline   消息处理管道（命令→路由→后端→回复）   │  │  │
-│  │  │  MessageBroadcaster 消息广播接口（客户端→服务端）        │  │  │
 │  │  └────────────────────────────────────────────────────────┘  │  │
 │  │                                                               │  │
 │  └──────────────────────────────────────────────────────────────┘  │
@@ -356,8 +351,6 @@ curl -X POST http://localhost:8080/api/v1/notify/send \
 │  ┌─── 基础设施层 ───────────────────────────────────────────────┐  │
 │  │  SessionContext    用户会话上下文管理                          │  │
 │  │  Store             持久化存储（路由规则/用户设置/API Token）   │  │
-│  │  RelayManager      文件中转（Local/Obsidian）                 │  │
-│  │  Logger            结构化日志（log/slog）                     │  │
 │  └──────────────────────────────────────────────────────────────┘  │
 │                                                                      │
 └─────────────────────────────────────────────────────────────────────┘
@@ -400,12 +393,33 @@ curl -X POST http://localhost:8080/api/v1/notify/send \
     │  内置 AI 处理    │  │  虚拟 Bot 代理   │  │  文件中转       │
     └────────┬────────┘  └────────┬────────┘  └────────┬────────┘
              │                    │                    │
-             ▼                    ▼                    ▼
-    ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-    │ MessagePipeline │  │ ClientRegistry  │  │ RelayManager    │
-    │ → CommandProc   │  │ → Broadcast()   │  │ → Forward()     │
-    │ → Router        │  │ → Queue.Enqueue │  │                 │
-    └────────┬────────┘  └────────┬────────┘  └────────┬────────┘
+    ┌─────────────────┐  ┌─────────────────┐
+    │ MessagePipeline │  │  iLink 服务端    │
+    │ → CommandProc   │  │  → 透明代理      │
+    │ → Router        │  │  → 直接转发      │
+    └────────┬────────┘  └────────┬────────┘
+             │                    │
+             │                    │
+             ▼                    ▼
+    ┌─────────────────┐  ┌─────────────────┐
+    │ Adapter         │  │  腾讯 iLink API  │
+    │ (OpenAI/Webhook)│  │  (直接转发)      │
+    └────────┬────────┘  └────────┬────────┘
+             │                    │
+             └──────────┬─────────┘
+                        │
+             ┌──────────▼──────────┐
+             │  Connector.Send()   │
+             │  转发到真实 iLink    │
+             └──────────┬──────────┘
+                        │
+             ┌──────────▼──────────┐
+             │  iLink API (腾讯)   │
+             └──────────┬──────────┘
+                        │
+             ┌──────────▼──────────┐
+             │    微信用户          │
+             └─────────────────────┘
              │                    │                    │
              ▼                    ▼                    ▼
     ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
@@ -444,8 +458,8 @@ curl -X POST http://localhost:8080/api/v1/notify/send \
 
 **路径 B：虚拟 Bot 代理（ConnectionAdapter）**
 ```
-微信消息 → Connector → ClientRegistry.Broadcast() → VirtualBot.Queue
-    → 外部服务 getupdates → 外部服务处理 → sendmessage → 回复
+微信消息 → Connector → iLink 服务端透明代理 → 外部服务 getupdates
+    → 外部服务处理 → sendmessage → 回复
 ```
 
 #### 关键数据结构流转
@@ -1438,13 +1452,7 @@ clawbot-gateway/
 │   │   ├── client.go            # Connector 核心结构 + MessageBroadcaster 接口
 │   │   ├── message.go           # 消息模型 + 解析
 │   │   ├── send.go              # 消息发送
-│   │   ├── media.go             # 媒体文件上传
-│   │   ├── qrlogin.go           # 扫码登录
-│   │   ├── syncbuf.go           # 同步缓冲区
-│   │   └── account.go           # 多账号管理 + 轮询 + 广播
-│   │
-│   ├── config/                  # 配置加载
-│   │   └── config.go            # 配置结构 + 环境变量加载
+│   │   ├── registry.go          # ClientRegistry + VirtualBot
 │   │
 │   ├── database/                # 数据库层
 │   │   ├── db.go                # SQLite 数据库初始化
@@ -1518,25 +1526,18 @@ clawbot-gateway/
 │
 └── data/                        # 运行时数据
     ├── clawbot.db               # SQLite 数据库
-    ├── accounts/                # 账号凭证
-    └── queues/                  # 消息队列持久化
-```
-
-## 代码审查结果
-
-### 审查范围
-
-对 `internal/adapter/`、`internal/ilink/`、`internal/bot/`、`internal/config/` 进行全面审查。
+| `ClientRegistry` 虚拟 Bot 管理 | ✅ 已实现 | `ilink/registry.go` |
+| `VirtualBot` 透明代理 | ✅ 已实现 | 直接转发到真实 iLink API |
+| `accountPollLoop` 消息轮询 | ✅ 已实现 | `bot/account.go` |
 
 ### 实现状态（2026-07-26 更新）
+#### 当前存在的问题
 
-#### 已完成的 P0 架构
-
-| 组件 | 状态 | 说明 |
-|------|------|------|
-| `ConnectionAdapter` 接口 | ✅ 已实现 | `adapter/adapter.go` |
-| `AdapterFactory` 支持 `ConnectionAdapter` | ✅ 已实现 | `adapter/factory.go` |
-| `ilink_proxy` 适配器 | ✅ 已实现 | `adapter/ilink_proxy.go` |
+| 严重度 | 位置 | 描述 | 原因 |
+|-------|------|------|------|
+| 1 | `ilink/handler.go` | `forwardToILink()` 请求体为空 | 已修复 |
+| 2 | `ilink/handler.go` | `handleGetUpdates` 直接代理而非使用队列 | 已修复 - 透明代理模式，无需队列 |
+| 3 | `ilink/handler.go` | 自引用 URL 循环 | 虚拟 Bot 的 `BaseURL` 配置错误可能导致循环 |
 | `ClientRegistry` 虚拟 Bot 管理 | ✅ 已实现 | `ilink/registry.go` |
 | `MessageQueue` 消息队列 | ✅ 已实现 | 支持持久化和重试 |
 | `MessageBroadcaster` 接口 | ✅ 已实现 | `bot/client.go` |

@@ -25,7 +25,7 @@ export default function DashboardPage() {
   }, [])
 
   const onlineBackends = backends.items.filter((b) => b.healthy).length
-  const isLoading = stats.loading || backends.loading
+  const isLoading = stats.loading || backends.loading || accounts.loading || routes.loading
 
   return (
     <div>

@@ -16,6 +16,8 @@ type RateLimiter struct {
 	rate     int                     // 每秒产生的令牌数
 	burst    int                     // 桶容量
 	cleanup  time.Duration           // 清理间隔
+	stopMu   sync.Mutex
+	stopped  bool
 	stopCh   chan struct{}
 }
 
@@ -73,10 +75,13 @@ func (rl *RateLimiter) Allow(key string) bool {
 
 	return false
 }
-
-// Stop 停止清理协程
 func (rl *RateLimiter) Stop() {
-	close(rl.stopCh)
+	rl.stopMu.Lock()
+	defer rl.stopMu.Unlock()
+	if !rl.stopped {
+		close(rl.stopCh)
+		rl.stopped = true
+	}
 }
 
 func (rl *RateLimiter) cleanupLoop() {

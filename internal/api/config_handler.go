@@ -1,8 +1,6 @@
 package api
 
 import (
-	"strings"
-
 	"github.com/gin-gonic/gin"
 )
 
@@ -86,9 +84,4 @@ func (s *APIServer) handleSetConfig(c *gin.Context) {
 
 	s.db.SetSetting(key, req.Value)
 	c.JSON(200, gin.H{"success": true})
-}
-
-// isSensitiveKey 检查是否为敏感配置
-func isSensitiveKey(key string) bool {
-	return sensitiveKeys[key] || strings.HasPrefix(key, "syncbuf:")
 }

@@ -80,7 +80,11 @@ func TestLoadFromDBWithEnvVars(t *testing.T) {
 }
 
 func TestLoadFromDBPasswordPriority(t *testing.T) {
-	// Test: env var > database > auto-generate
+	// Clean up any existing env var to ensure clean state
+	origPassword := os.Getenv("CLAWBOT_LOGIN_PASSWORD")
+	os.Unsetenv("CLAWBOT_LOGIN_PASSWORD")
+	defer os.Setenv("CLAWBOT_LOGIN_PASSWORD", origPassword)
+
 
 	// 1. Auto-generate
 	dbPath := t.TempDir() + "/test.db"

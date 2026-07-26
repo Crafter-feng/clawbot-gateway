@@ -4,19 +4,11 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
-
-// iLink 协议端点列表
-var ilinkEndpoints = map[string]bool{
-	"ilink/bot/getupdates":   true,
-	"ilink/bot/sendmessage":  true,
-	"ilink/bot/sendtyping":   true,
-	"ilink/bot/getconfig":    true,
-	"ilink/bot/getuploadurl": true,
-}
 
 // handleProxy 透明代理 - 直接转发到真实 iLink API
 func (s *Server) handleProxy(c *gin.Context) {
@@ -65,7 +57,9 @@ func (s *Server) handleProxy(c *gin.Context) {
 
 // forwardToILink 转发请求到真实 iLink API（透明代理）
 func (s *Server) forwardToILink(endpoint string, body []byte, baseURL string, botToken string) (*http.Response, error) {
-	url := baseURL + "/" + endpoint
+	// c.FullPath() 返回带前导斜杠的路径（如 /ilink/bot/getupdates）
+	// 拼接时去掉 endpoint 的前导斜杠，避免双斜杠
+	url := baseURL + strings.TrimLeft(endpoint, "/")
 
 	// 使用 bytes.NewReader(body) 确保请求体被正确转发
 	req, err := http.NewRequest("POST", url, bytes.NewReader(body))

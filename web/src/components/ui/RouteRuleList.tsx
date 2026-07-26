@@ -4,10 +4,11 @@ import Tag from './Tag'
 
 interface RouteRuleListProps {
   onEdit: (rule: RouteRule) => void
+  onDelete: (id: number) => void
 }
 
-export default function RouteRuleList({ onEdit }: RouteRuleListProps) {
-  const { items, remove, toggleEnabled } = useRoutesStore()
+export default function RouteRuleList({ onEdit, onDelete }: RouteRuleListProps) {
+  const { items, toggleEnabled } = useRoutesStore()
 
   const formatCondition = (condition: RouteCondition): string => {
     const fieldLabels: Record<string, string> = {
@@ -73,7 +74,7 @@ export default function RouteRuleList({ onEdit }: RouteRuleListProps) {
             <Button variant="ghost" size="sm" onClick={() => onEdit(rule)}>
               编辑
             </Button>
-            <Button variant="ghost-danger" size="sm" onClick={() => remove(rule.id)}>
+            <Button variant="ghost-danger" size="sm" onClick={() => onDelete(rule.id)}>
               删除
             </Button>
           </div>

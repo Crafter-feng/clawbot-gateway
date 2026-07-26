@@ -10,7 +10,9 @@ import (
 
 // handleListConnections 列出所有连接适配器（虚拟 Bot 配置）
 func (s *APIServer) handleListConnections(c *gin.Context) {
+	s.mu.RLock()
 	connections := s.adapters.ListConnections()
+	s.mu.RUnlock()
 	result := make([]gin.H, 0, len(connections))
 
 	for _, conn := range connections {
@@ -31,11 +33,12 @@ func (s *APIServer) handleListConnections(c *gin.Context) {
 	})
 }
 
-// handleGetConnection 获取单个连接适配器详情
 func (s *APIServer) handleGetConnection(c *gin.Context) {
 	id := c.Param("id")
 
+	s.mu.RLock()
 	conn, ok := s.adapters.GetConnection(id)
+	s.mu.RUnlock()
 	if !ok {
 		c.JSON(http.StatusNotFound, gin.H{"error": "connection not found"})
 		return

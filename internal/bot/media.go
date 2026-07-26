@@ -21,6 +21,8 @@ func (c *Connector) SendMediaMessage(ctx context.Context, toUser, fileKey string
 	if len(accounts) == 0 {
 		return fmt.Errorf("no accounts available")
 	}
+	// 注意：当前实现只使用第一个账号的凭证
+	// 未来需要根据 replyID 或其他标识匹配正确的账号
 	creds := accounts[0].Credentials
 
 	clientID := GenerateClientID()

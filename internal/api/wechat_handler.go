@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -10,7 +11,6 @@ import (
 	"clawbot-gateway/internal/bot"
 	"clawbot-gateway/internal/database"
 )
-
 // handleGetQRCode 获取微信登录二维码（通过 Connector 调用真实 iLink API）
 func (s *APIServer) handleGetQRCode(c *gin.Context) {
 	qrManager := s.connector.QRManager()
@@ -38,7 +38,9 @@ func (s *APIServer) handleGetQRCode(c *gin.Context) {
 	}
 
 	// 启动二维码状态轮询（使用独立 context，不随请求结束）
-	if err := qrManager.CreateScan(context.Background(), qrData.QRCode); err != nil {
+	scanCtx, scanCancel := context.WithCancel(context.Background())
+	defer scanCancel()
+	if err := qrManager.CreateScan(scanCtx, qrData.QRCode); err != nil {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("创建扫描会话失败: %v", err)})
 		return
 	}
@@ -100,7 +102,8 @@ func (s *APIServer) handleQRStatus(c *gin.Context) {
 func (s *APIServer) handleDisconnectAccount(c *gin.Context) {
 	id := c.Param("id")
 	if err := s.db.DeleteAccount(id); err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		log.Printf("ERROR: failed to delete account %s: %v", id, err)
+		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
 	s.connector.RemoveAccount(id)
@@ -111,7 +114,8 @@ func (s *APIServer) handleDisconnectAccount(c *gin.Context) {
 func (s *APIServer) handleListWechatAccounts(c *gin.Context) {
 	accounts, err := s.db.ListAccounts()
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		log.Printf("ERROR: failed to list wechat accounts: %v", err)
+		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
 
@@ -157,7 +161,8 @@ func (s *APIServer) handleSaveWechatAccount(c *gin.Context) {
 		AccountName: req.AccountName,
 	}
 	if err := s.db.SaveAccount(acct); err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		log.Printf("ERROR: failed to save wechat account: %v", err)
+		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
 

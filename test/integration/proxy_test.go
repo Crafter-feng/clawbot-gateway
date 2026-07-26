@@ -1,3 +1,8 @@
+// Package integration contains mock-based integration tests for the clawbot-gateway proxy.
+// These tests simulate the WeClawBot-API backend using a mock server and do NOT exercise
+// a real Gateway deployment. They verify basic forwarding, multi-message, and clear-message
+// behavior against the mock. For production confidence, implement real Gateway integration
+// tests that target a live or containerized Gateway instance with actual backend connectivity.
 package integration
 
 import (

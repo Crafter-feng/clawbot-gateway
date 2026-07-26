@@ -8,7 +8,9 @@ import Select from '../components/ui/Select'
 import Skeleton from '../components/ui/Skeleton'
 
 interface Settings {
-  [key: string]: string
+  default_backend?: string
+  notify_token?: string
+  [key: string]: string | undefined
 }
 
 export default function SettingsPage() {

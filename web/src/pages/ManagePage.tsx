@@ -321,7 +321,7 @@ WEIXIN_ACCOUNT_ID=gw_${bId || '<id>'}`}</pre>
               <ListItemSkeleton />
             </div>
           ) : (
-            <RouteRuleList onEdit={(rule) => { setEditingRule(rule); setShowRouteForm(true) }} />
+            <RouteRuleList onEdit={(rule) => { setEditingRule(rule); setShowRouteForm(true) }} onDelete={(id) => setDeleteTarget({ type: 'route', id })} />
           )}
         </div>
       </div>

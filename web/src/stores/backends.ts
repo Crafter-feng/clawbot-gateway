@@ -21,6 +21,7 @@ interface BackendsState {
   items: Backend[]
   defaultBackend: string
   loading: boolean
+  error: string | null
   fetch(): Promise<void>
   get(id: string): Promise<Backend | null>
   register(data: BackendForm): Promise<void>
@@ -34,14 +35,16 @@ export const useBackendsStore = create<BackendsState>((set, get) => ({
   items: [],
   defaultBackend: '',
   loading: false,
+  error: null,
 
   async fetch() {
     set({ loading: true })
     try {
       const data = await api.get<{ backends: Backend[]; default: string }>('/api/v1/backends')
       set({ items: data.backends || [], defaultBackend: data.default ?? '', loading: false })
-    } catch {
-      set({ items: [], defaultBackend: '', loading: false })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '获取后端列表失败'
+      set({ items: [], defaultBackend: '', loading: false, error: msg })
     }
   },
 

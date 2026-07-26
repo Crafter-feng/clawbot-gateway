@@ -1,6 +1,8 @@
 package api
 
 import (
+	"log"
+
 	"github.com/gin-gonic/gin"
 
 	"clawbot-gateway/internal/database"
@@ -9,7 +11,8 @@ import (
 func (s *APIServer) handleListAccounts(c *gin.Context) {
 	accounts, err := s.db.ListAccounts()
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		log.Printf("ERROR: failed to list accounts: %v", err)
+		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
 	c.JSON(200, gin.H{"accounts": accounts})
@@ -35,9 +38,9 @@ func (s *APIServer) handleAddAccount(c *gin.Context) {
 		BaseURL:     req.BaseURL,
 		AccountName: req.AccountName,
 	}
-
 	if err := s.db.SaveAccount(acct); err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		log.Printf("ERROR: failed to save account: %v", err)
+		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
 
@@ -47,7 +50,8 @@ func (s *APIServer) handleAddAccount(c *gin.Context) {
 func (s *APIServer) handleDeleteAccount(c *gin.Context) {
 	id := c.Param("id")
 	if err := s.db.DeleteAccount(id); err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		log.Printf("ERROR: failed to delete account %s: %v", id, err)
+		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
 	c.JSON(200, gin.H{"success": true})

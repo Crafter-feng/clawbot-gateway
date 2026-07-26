@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
@@ -18,7 +17,6 @@ import (
 	"clawbot-gateway/internal/database"
 	"clawbot-gateway/internal/ilink"
 	"clawbot-gateway/internal/log"
-	"clawbot-gateway/internal/relay"
 	"clawbot-gateway/internal/route"
 	"clawbot-gateway/internal/session"
 )
@@ -96,7 +94,7 @@ func main() {
 			if !b.Enabled {
 				continue
 			}
-			adapterInstance := createAdapterFromDB(b)
+			adapterInstance := adapter.CreateAdapterFromDB(b)
 			if adapterInstance != nil {
 				af.Register(adapterInstance)
 			}
@@ -115,12 +113,7 @@ func main() {
 	af.Register(adapter.NewEchoAdapter("echo", "Echo Debug"))
 	log.Info("adapter factory initialized", "backends", len(af.List()), "connections", len(af.ListConnections()))
 
-	// 5. 初始化文件中转管理器
-	relayMgr := relay.NewRelayManager()
-	relayMgr.SetLogger(log)
-	log.Info("relay manager initialized")
-
-	// 6. 初始化上下文管理器
+	// 5. 初始化上下文管理器
 	ttl := time.Duration(cfg.Context.TTL) * time.Second
 	cm := session.NewContextManager(cfg.Context.MaxHistory, cfg.Context.SwitchStrategy, ttl)
 
@@ -201,31 +194,11 @@ func main() {
 }
 
 func createAdapterFromDB(b database.Backend) adapter.BackendAdapter {
-	switch b.Type {
-	case "echo":
-		return adapter.NewEchoAdapter(b.ID, b.Name)
-	case "openai_compatible":
-		apiKey := getJSONString(b.Config, "api_key")
-		baseURL := getJSONString(b.Config, "base_url")
-		model := getJSONString(b.Config, "model")
-		if model == "" {
-			model = "gpt-4o"
-		}
-		return adapter.NewOpenAICompatibleAdapter(b.ID, b.Name, apiKey, baseURL, model)
-	default:
-		return nil
-	}
+	return adapter.CreateAdapterFromDB(b)
 }
 
 func getJSONString(jsonStr, key string) string {
-	var m map[string]interface{}
-	if err := json.Unmarshal([]byte(jsonStr), &m); err != nil {
-		return ""
-	}
-	if v, ok := m[key].(string); ok {
-		return v
-	}
-	return ""
+	return adapter.GetJSONString(jsonStr, key)
 }
 
 // convertGroups 将数据库的路由组转换为路由引擎格式

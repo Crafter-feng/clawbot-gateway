@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 
 	"github.com/gin-gonic/gin"
 
@@ -12,7 +13,8 @@ import (
 func (s *APIServer) handleListBackends(c *gin.Context) {
 	backends, err := s.db.ListBackends()
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		log.Printf("ERROR: failed to list backends: %v", err)
+		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
 
@@ -49,7 +51,7 @@ func (s *APIServer) handleGetBackend(c *gin.Context) {
 		"id":      b.ID,
 		"name":    b.Name,
 		"type":    b.Type,
-		"config":  b.Config,
+		"config":  sanitizeBackendConfig(b.Config),
 		"enabled": b.Enabled,
 	})
 }
@@ -84,9 +86,8 @@ func (s *APIServer) handleRegisterBackend(c *gin.Context) {
 		Config:  string(configJSON),
 		Enabled: enabled,
 	}
-
 	if err := s.db.CreateBackend(b); err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
 
@@ -144,9 +145,8 @@ func (s *APIServer) handleUpdateBackend(c *gin.Context) {
 	if req.Enabled != nil {
 		existing.Enabled = *req.Enabled
 	}
-
 	if err := s.db.UpdateBackend(id, *existing); err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
 
@@ -156,9 +156,17 @@ func (s *APIServer) handleUpdateBackend(c *gin.Context) {
 
 func (s *APIServer) handleRemoveBackend(c *gin.Context) {
 	id := c.Param("id")
-	s.db.DeleteVirtualBot(id)
+	if err := s.db.DeleteVirtualBot(id); err != nil {
+		log.Printf("ERROR: failed to delete virtual bot %s: %v", id, err)
+		c.JSON(500, gin.H{"error": "internal server error"})
+		return
+	}
 	s.clientReg.Unregister("gw_" + id)
-	s.db.DeleteBackend(id)
+	if err := s.db.DeleteBackend(id); err != nil {
+		log.Printf("ERROR: failed to delete backend %s: %v", id, err)
+		c.JSON(500, gin.H{"error": "internal server error"})
+		return
+	}
 	s.reloadAdapters()
 	c.JSON(200, gin.H{"success": true})
 }
@@ -207,23 +215,13 @@ func (s *APIServer) handleSetDefaultBackend(c *gin.Context) {
 }
 
 func (s *APIServer) getAdapterFromDB(b database.Backend) adapter.BackendAdapter {
-	switch b.Type {
-	case "echo":
-		return adapter.NewEchoAdapter(b.ID, b.Name)
-	case "openai_compatible":
-		apiKey := getJSONString(b.Config, "api_key")
-		baseURL := getJSONString(b.Config, "base_url")
-		model := getJSONString(b.Config, "model")
-		if model == "" {
-			model = "gpt-4o"
-		}
-		return adapter.NewOpenAICompatibleAdapter(b.ID, b.Name, apiKey, baseURL, model)
-	default:
-		return nil
-	}
+	return adapter.CreateAdapterFromDB(b)
 }
 
 func (s *APIServer) reloadAdapters() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	s.adapters = adapter.NewAdapterFactory()
 
 	backends, _ := s.db.ListBackends()
@@ -231,7 +229,7 @@ func (s *APIServer) reloadAdapters() {
 		if !b.Enabled {
 			continue
 		}
-		adapterInstance := s.getAdapterFromDB(b)
+		adapterInstance := adapter.CreateAdapterFromDB(b)
 		if adapterInstance != nil {
 			s.adapters.Register(adapterInstance)
 		}
@@ -244,14 +242,13 @@ func (s *APIServer) reloadAdapters() {
 
 	s.adapters.Register(adapter.NewEchoAdapter("echo", "Echo Debug"))
 }
-
-func getJSONString(jsonStr, key string) string {
+func sanitizeBackendConfig(config string) string {
 	var m map[string]interface{}
-	if err := json.Unmarshal([]byte(jsonStr), &m); err != nil {
-		return ""
+	if err := json.Unmarshal([]byte(config), &m); err != nil {
+		return config
 	}
-	if v, ok := m[key].(string); ok {
-		return v
-	}
-	return ""
+	// 移除敏感字段
+	delete(m, "api_key")
+	sanitized, _ := json.Marshal(m)
+	return string(sanitized)
 }

@@ -8,6 +8,7 @@ interface AuthState {
   authenticated: boolean
   loginError: string
   loginLoading: boolean
+  error: string | null
   // API Token 管理
   apiToken: string
   apiTokenLoading: boolean
@@ -24,6 +25,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   authenticated: false,
   loginError: '',
   loginLoading: false,
+  error: null,
   apiToken: '',
   apiTokenLoading: false,
 
@@ -79,7 +81,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const res = await api.get<{ token: string }>('/api/v1/auth/token')
       set({ apiToken: res.token })
-    } catch {
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '获取 API Token 失败'
+      set({ error: msg })
       // 静默失败（可能无权限或网络错误）
     }
   },

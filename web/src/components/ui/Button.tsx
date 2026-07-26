@@ -25,12 +25,13 @@ const sizeClass: Record<ButtonSize, string> = {
 }
 
 const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ variant = 'primary', size = 'md', loading, icon, children, className = '', disabled, ...props }, ref) => {
+  ({ variant = 'primary', size = 'md', loading, icon, children, className = '', disabled, type, ...props }, ref) => {
     return (
       <button
         ref={ref}
         className={`btn ${variantClass[variant]} ${sizeClass[size]} ${className}`}
         disabled={disabled || loading}
+        type={type || 'button'}
         {...props}
       >
         {loading ? <span className="spinner spinner-sm spinner-white" /> : icon}

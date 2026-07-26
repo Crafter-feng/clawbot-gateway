@@ -34,3 +34,5 @@ ENV CLAWBOT_PORT=8080
 ENV CLAWBOT_LOG_LEVEL=info
 
 CMD ["./clawbot-gateway"]
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser

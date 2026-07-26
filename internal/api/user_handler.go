@@ -1,15 +1,17 @@
 package api
 
 import (
+	"log"
+
 	"github.com/gin-gonic/gin"
 
 	"clawbot-gateway/internal/database"
 )
-
 func (s *APIServer) handleListUsers(c *gin.Context) {
 	sessions, err := s.db.GetAllUserSessions()
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		log.Printf("ERROR: failed to list users: %v", err)
+		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
 	c.JSON(200, gin.H{"users": sessions})

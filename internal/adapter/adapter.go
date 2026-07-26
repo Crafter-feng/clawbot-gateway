@@ -2,9 +2,16 @@ package adapter
 
 import (
 	"context"
+	"encoding/json"
 
-	"clawbot-gateway/internal/session"
+	"clawbot-gateway/internal/database"
 )
+
+// ChatMessage 聊天消息
+type ChatMessage struct {
+	Role    string `json:"role"` // "user" | "assistant"
+	Content string `json:"content"`
+}
 
 // ChatRequest 聊天请求
 type ChatRequest struct {
@@ -12,7 +19,7 @@ type ChatRequest struct {
 	UserID      string
 	SessionID   string
 	BackendID   string
-	History     []session.ChatMessage
+	History     []ChatMessage
 	Attachments []Attachment
 	Stream      bool // 是否流式输出
 }
@@ -56,4 +63,34 @@ type ConnectionAdapter interface {
 	Type() string
 	GetConnectionInfo() *ConnectionInfo
 	HealthCheck(ctx context.Context) bool
+}
+
+// GetJSONString 从 JSON 字符串中提取指定 key 的值
+func GetJSONString(jsonStr, key string) string {
+	var m map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonStr), &m); err != nil {
+		return ""
+	}
+	if v, ok := m[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+// CreateAdapterFromDB 从数据库后端记录创建适配器实例
+func CreateAdapterFromDB(b database.Backend) BackendAdapter {
+	switch b.Type {
+	case "echo":
+		return NewEchoAdapter(b.ID, b.Name)
+	case "openai_compatible":
+		apiKey := GetJSONString(b.Config, "api_key")
+		baseURL := GetJSONString(b.Config, "base_url")
+		model := GetJSONString(b.Config, "model")
+		if model == "" {
+			model = "gpt-4o"
+		}
+		return NewOpenAICompatibleAdapter(b.ID, b.Name, apiKey, baseURL, model)
+	default:
+		return nil
+	}
 }

@@ -1,6 +1,8 @@
 package api
 
 import (
+	"log"
+
 	"github.com/gin-gonic/gin"
 
 	"clawbot-gateway/internal/bot"
@@ -30,7 +32,8 @@ func (s *APIServer) handlePushSend(c *gin.Context) {
 				BaseURL: acct.BaseURL,
 			}, req.ToUser, req.Content, "")
 			if err != nil {
-				c.JSON(500, gin.H{"error": err.Error()})
+				log.Printf("ERROR: failed to send message via connector: %v", err)
+				c.JSON(500, gin.H{"error": "internal server error"})
 				return
 			}
 			c.JSON(200, gin.H{"success": true})

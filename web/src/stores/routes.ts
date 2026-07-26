@@ -58,6 +58,7 @@ export const CONDITION_OPERATORS: { value: ConditionOperator; label: string }[] 
 interface RoutesState {
   items: RouteRule[]
   loading: boolean
+  error: string | null
   fetch(): Promise<void>
   add(rule: Omit<RouteRule, 'id' | 'created_at' | 'updated_at'>): Promise<void>
   update(id: number, rule: Partial<RouteRule>): Promise<void>
@@ -70,14 +71,16 @@ interface RoutesState {
 export const useRoutesStore = create<RoutesState>((set, get) => ({
   items: [],
   loading: false,
+  error: null,
 
   async fetch() {
     set({ loading: true })
     try {
       const data = await api.get<{ rules: RouteRule[] }>('/api/v1/routes')
       set({ items: data.rules || [], loading: false })
-    } catch {
-      set({ items: [], loading: false })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '获取路由规则失败'
+      set({ items: [], loading: false, error: msg })
     }
   },
 

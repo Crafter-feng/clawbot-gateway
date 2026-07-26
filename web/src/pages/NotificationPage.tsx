@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { api } from '../api/client'
 import { useToast } from '../components/Toast'
 import Button from '../components/ui/Button'
@@ -35,6 +35,8 @@ export default function NotificationPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [showToken, setShowToken] = useState<{ id: string; token: string } | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+
 
   useEffect(() => {
     fetchData()
@@ -93,11 +95,15 @@ export default function NotificationPage() {
     try {
       await navigator.clipboard.writeText(text)
       setCopiedId(id)
-      setTimeout(() => setCopiedId(null), 2000)
+      clearTimeout(copyTimerRef.current)
+      copyTimerRef.current = setTimeout(() => setCopiedId(null), 2000)
     } catch {
       toast('复制失败', 'error')
     }
   }, [toast])
+  useEffect(() => {
+    return () => clearTimeout(copyTimerRef.current)
+  }, [])
 
   const getAccountName = (accountId: string) => {
     if (!accountId) return '全部账号'

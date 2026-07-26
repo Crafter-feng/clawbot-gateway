@@ -1,3 +1,9 @@
+// Package integration contains unit-level integration tests for the clawbot-gateway router.
+// These tests exercise the route matching logic (exact, contains, prefix, suffix, regex,
+// boolean logic, priority, overrides) in isolation from the database and HTTP API layers.
+// They validate correctness of the routing engine itself. For complete coverage, implement
+// database-backed integration scenarios (rules loaded from DB) and full API integration
+// scenarios (end-to-end request routing via the Gateway HTTP handlers).
 package integration
 
 import (

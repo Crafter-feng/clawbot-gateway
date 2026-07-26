@@ -3,6 +3,7 @@ package notify
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -57,20 +58,20 @@ func (h *Handler) HandleSend(c *gin.Context) {
 		return
 	}
 
-	// 发送消息
 	if err := h.sendFunc(c.Request.Context(), req.ToUser, req.Content, notifyToken.AccountID); err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		log.Printf("ERROR: failed to send notify message: %v", err)
+		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
 
 	c.JSON(200, gin.H{"success": true})
 }
 
-// HandleListTokens 列出所有 Token
 func (h *Handler) HandleListTokens(c *gin.Context) {
 	tokens, err := h.db.ListNotifyTokens()
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		log.Printf("ERROR: failed to list notify tokens: %v", err)
+		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
 	c.JSON(200, gin.H{"tokens": tokens})
@@ -105,7 +106,8 @@ func (h *Handler) HandleCreateToken(c *gin.Context) {
 	}
 
 	if err := h.db.CreateNotifyToken(t); err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		log.Printf("ERROR: failed to create notify token: %v", err)
+		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
 
@@ -120,7 +122,8 @@ func (h *Handler) HandleCreateToken(c *gin.Context) {
 func (h *Handler) HandleDeleteToken(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.db.DeleteNotifyToken(id); err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		log.Printf("ERROR: failed to delete notify token %s: %v", id, err)
+		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
 	c.JSON(200, gin.H{"success": true})

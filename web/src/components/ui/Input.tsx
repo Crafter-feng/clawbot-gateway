@@ -21,7 +21,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
           ref={ref}
           id={inputId}
           className={`input ${error ? 'input-error-state' : ''} ${className}`}
-          aria-describedby={hint ? `${inputId}-hint` : error ? `${inputId}-error` : undefined}
+          aria-describedby={error ? `${inputId}-error` : hint ? `${inputId}-hint` : undefined}
           aria-invalid={!!error}
           {...props}
         />

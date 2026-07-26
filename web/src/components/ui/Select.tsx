@@ -21,7 +21,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
           ref={ref}
           id={selectId}
           className={`select ${error ? 'input-error-state' : ''} ${className}`}
-          aria-describedby={hint ? `${selectId}-hint` : error ? `${selectId}-error` : undefined}
+          aria-describedby={error ? `${selectId}-error` : hint ? `${selectId}-hint` : undefined}
           aria-invalid={!!error}
           {...props}
         >

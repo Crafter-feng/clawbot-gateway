@@ -160,7 +160,7 @@ func (p *MessagePipeline) processMessage(ctx context.Context, msg bot.Normalized
 		Message:   content,
 		UserID:    msg.FromUser,
 		BackendID: backendID,
-		History:   ctxSession.GetHistory(),
+		History:   convertChatHistory(ctxSession.GetHistory()),
 	})
 	if err != nil {
 		p.log.Warn("backend error", "seq", seq, "backend", backendID, "error", err)
@@ -168,7 +168,7 @@ func (p *MessagePipeline) processMessage(ctx context.Context, msg bot.Normalized
 		creds := p.connector.GetAccountCredentials(msg.AccountID)
 		if creds != nil {
 			contextToken := p.connector.GetContextToken(msg.AccountID, msg.FromUser)
-			_ = p.connector.SendTextWithCreds(context.Background(), creds, msg.FromUser, reply, contextToken)
+			_ = p.connector.SendTextWithCreds(context.WithoutCancel(ctx), creds, msg.FromUser, reply, contextToken)
 		}
 		return
 	}
@@ -198,7 +198,7 @@ func (p *MessagePipeline) forwardToBackend(ctx context.Context, msg bot.Normaliz
 		creds := p.connector.GetAccountCredentials(msg.AccountID)
 		if creds != nil {
 			contextToken := p.connector.GetContextToken(msg.AccountID, msg.FromUser)
-			_ = p.connector.SendTextWithCreds(context.Background(), creds, msg.FromUser, reply, contextToken)
+			_ = p.connector.SendTextWithCreds(context.WithoutCancel(ctx), creds, msg.FromUser, reply, contextToken)
 		}
 		return
 	}
@@ -212,7 +212,7 @@ func (p *MessagePipeline) forwardToBackend(ctx context.Context, msg bot.Normaliz
 		Message:   content,
 		UserID:    msg.FromUser,
 		BackendID: backendID,
-		History:   ctxSession.GetHistory(),
+		History:   convertChatHistory(ctxSession.GetHistory()),
 	})
 	if err != nil {
 		p.log.Warn("backend error", "seq", seq, "backend", backendID, "error", err)
@@ -220,7 +220,7 @@ func (p *MessagePipeline) forwardToBackend(ctx context.Context, msg bot.Normaliz
 		creds := p.connector.GetAccountCredentials(msg.AccountID)
 		if creds != nil {
 			contextToken := p.connector.GetContextToken(msg.AccountID, msg.FromUser)
-			_ = p.connector.SendTextWithCreds(context.Background(), creds, msg.FromUser, reply, contextToken)
+			_ = p.connector.SendTextWithCreds(context.WithoutCancel(ctx), creds, msg.FromUser, reply, contextToken)
 		}
 		return
 	}
@@ -307,7 +307,7 @@ func (p *MessagePipeline) HandleDirectMessage(ctx context.Context, content, user
 			Message:   content,
 			UserID:    userID,
 			BackendID: bid,
-			History:   ctxSession.GetHistory(),
+		History:   convertChatHistory(ctxSession.GetHistory()),
 		})
 		if err != nil {
 			replies = append(replies, fmt.Sprintf("[%s] 错误: %s", bid, err.Error()))
@@ -484,4 +484,13 @@ func matchPrefix(text string, prefixes ...string) string {
 		}
 	}
 	return ""
+}
+
+// convertChatHistory 将 session.ChatMessage 转换为 adapter.ChatMessage
+func convertChatHistory(history []session.ChatMessage) []adapter.ChatMessage {
+	result := make([]adapter.ChatMessage, len(history))
+	for i, h := range history {
+		result[i] = adapter.ChatMessage{Role: h.Role, Content: h.Content}
+	}
+	return result
 }

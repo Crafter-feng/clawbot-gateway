@@ -250,7 +250,7 @@ a {
 }
 
 .btn-danger:hover:not(:disabled) {
-  background: #f87171;
+  background: var(--danger);
   transform: translateY(-1px);
 }
 
@@ -608,21 +608,21 @@ textarea.input {
 }
 
 .toast.success {
-  background: rgba(6, 95, 70, 0.92);
-  color: #a7f3d0;
-  border: 1px solid rgba(167, 243, 208, 0.15);
+  background: var(--success-dim);
+  color: var(--success);
+  border: 1px solid rgba(34, 197, 94, 0.15);
 }
 
 .toast.error {
-  background: rgba(153, 27, 27, 0.92);
-  color: #fca5a5;
-  border: 1px solid rgba(252, 165, 165, 0.15);
+  background: var(--danger-dim);
+  color: var(--danger);
+  border: 1px solid rgba(239, 68, 68, 0.15);
 }
 
 .toast.info {
-  background: rgba(30, 64, 175, 0.92);
-  color: #bfdbfe;
-  border: 1px solid rgba(191, 219, 254, 0.15);
+  background: var(--info-dim);
+  color: var(--info);
+  border: 1px solid rgba(59, 130, 246, 0.15);
 }
 
 /* --- Modal / Dialog --- */
@@ -872,7 +872,7 @@ textarea.input {
 }
 
 .avatar-green {
-  background: linear-gradient(135deg, #34d399, #22c55e);
+  background: linear-gradient(135deg, var(--success), var(--success));
 }
 
 .avatar-accent {
@@ -1034,7 +1034,7 @@ textarea.input {
   width: 40px;
   height: 40px;
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, var(--accent), #818cf8);
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1356,7 +1356,7 @@ textarea.input {
   max-width: 320px;
   margin: 0 auto;
   border-radius: var(--radius-lg);
-  background: #ffffff;
+  background: var(--n-100);
   border: 1px solid var(--border);
   display: flex;
   flex-direction: column;

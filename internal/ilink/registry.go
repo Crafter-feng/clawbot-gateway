@@ -1,6 +1,8 @@
 package ilink
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"sync"
 	"time"
 )
@@ -13,6 +15,7 @@ type VirtualBot struct {
 	AccountID  string         // 虚拟 Bot ID（如 gw_a1b2c3d4）
 	UserID     string         // 用户 ID（如 gw_a1b2c3d4@im.wechat）
 	BaseURL    string         // iLink API 地址
+	Token      string         // 随机生成的认证 token
 	LastActive time.Time      // 最后活跃时间
 	CreatedAt  time.Time      // 创建时间
 }
@@ -42,10 +45,18 @@ func (r *ClientRegistry) Register(accountID, userID, baseURL string) *VirtualBot
 		return existing
 	}
 
+	// 生成随机 token
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		tokenBytes = []byte(accountID) // fallback: 使用 accountID 作为 token
+	}
+	token := hex.EncodeToString(tokenBytes)
+
 	bot := &VirtualBot{
 		AccountID:  accountID,
 		UserID:     userID,
 		BaseURL:    baseURL,
+		Token:      token,
 		LastActive: time.Now(),
 		CreatedAt:  time.Now(),
 	}
@@ -67,11 +78,16 @@ func (r *ClientRegistry) Get(accountID string) *VirtualBot {
 	return r.bots[accountID]
 }
 
-// GetByToken 通过 token 查找虚拟 Bot（token 就是 accountID）
+// GetByToken 通过 token 查找虚拟 Bot
 func (r *ClientRegistry) GetByToken(token string) *VirtualBot {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.bots[token]
+	for _, bot := range r.bots {
+		if bot.Token == token {
+			return bot
+		}
+	}
+	return nil
 }
 
 // List 列出所有虚拟 Bot

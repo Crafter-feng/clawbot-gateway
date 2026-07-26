@@ -407,11 +407,10 @@ func (r *Router) sortRules() {
 	}
 }
 
-// ValidateRegexp 验证正则表达式安全性
 func ValidateRegexp(pattern string) error {
 	// 长度限制
 	if len(pattern) > 200 {
-		return &RegexpError{Pattern: pattern, Err: "pattern too long"}
+		return &RegexpError{Err: "pattern too long"}
 	}
 
 	// 编译测试
@@ -421,8 +420,7 @@ func ValidateRegexp(pattern string) error {
 
 // RegexpError 正则表达式错误
 type RegexpError struct {
-	Pattern string
-	Err     string
+	Err string
 }
 
 func (e *RegexpError) Error() string {

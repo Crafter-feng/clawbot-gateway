@@ -35,10 +35,12 @@ type APIServer struct {
 	connector    *bot.Connector
 	clientReg    *ilink.ClientRegistry
 
-	wsClients    map[string]*websocket.Conn
-	wsMu         sync.RWMutex
-	restServer   *http.Server
-	log          *log.Logger
+	wsClients     map[string]*websocket.Conn
+	wsMu          sync.RWMutex
+	restServer    *http.Server
+	log           *log.Logger
+	mu            sync.RWMutex
+	loginAttempts sync.Map
 }
 
 func NewAPIServer(
