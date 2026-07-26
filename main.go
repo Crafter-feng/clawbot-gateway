@@ -51,6 +51,11 @@ func main() {
 	cfg := config.LoadFromDB(db)
 	log.Info("config loaded")
 
+	// 打印登录密码（仅首次生成时）
+	if os.Getenv("CLAWBOT_LOGIN_PASSWORD") == "" {
+		log.Info("login password (auto-generated)", "password", cfg.API.LoginPassword)
+	}
+
 	// 3. 初始化路由引擎
 	r := route.NewRouter(db.GetSetting("route.default_backend"))
 

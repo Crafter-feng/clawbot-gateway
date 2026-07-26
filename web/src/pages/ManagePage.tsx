@@ -2,6 +2,14 @@ import { useEffect, useState, useCallback } from 'react'
 import { useBackendsStore } from '../stores/backends'
 import { useRoutesStore } from '../stores/routes'
 import { useToast } from '../components/Toast'
+import Button from '../components/ui/Button'
+import Input from '../components/ui/Input'
+import Select from '../components/ui/Select'
+import Tag from '../components/ui/Tag'
+import Modal from '../components/ui/Modal'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
+import EmptyState from '../components/ui/EmptyState'
+import { ListItemSkeleton } from '../components/ui/Skeleton'
 
 interface BackendForm {
   id: string
@@ -11,8 +19,6 @@ interface BackendForm {
     api_key?: string
     base_url?: string
     model?: string
-    url?: string
-    headers?: Record<string, string>
   }
 }
 
@@ -42,6 +48,9 @@ export default function ManagePage() {
   /* Info modal */
   const [infoModal, setInfoModal] = useState<{ open: boolean; backend: { id: string; name: string; type: string; healthy: boolean } | null }>({ open: false, backend: null })
   const [testResult, setTestResult] = useState<{ loading: boolean; result?: { healthy: boolean; reply?: string; error?: string } }>({ loading: false })
+
+  /* Delete confirm */
+  const [deleteTarget, setDeleteTarget] = useState<{ type: 'backend' | 'route'; id: string | number } | null>(null)
 
   /* Route form */
   const [rKeyword, setRKeyword] = useState('')
@@ -80,12 +89,13 @@ export default function ManagePage() {
   }, [bId, bName, bType, bApiKey, bBaseUrl, bModel, backends, toast])
 
   const handleRemoveBackend = useCallback(async (id: string) => {
-    if (!confirm('确定删除此后端？')) return
     try {
       await backends.remove(id)
       toast('后端已删除', 'success')
     } catch {
       toast('删除失败', 'error')
+    } finally {
+      setDeleteTarget(null)
     }
   }, [backends, toast])
 
@@ -94,7 +104,6 @@ export default function ManagePage() {
     setEditModal({ open: true, backend: { id: b.id, name: b.name, type: b.type, config: {} } })
     setEditName(b.name)
     setEditType(b.type)
-    // 从获取的详情中加载配置
     if (detail?.config) {
       try {
         const config = JSON.parse(detail.config)
@@ -137,7 +146,7 @@ export default function ManagePage() {
     }
   }, [editModal, editName, editType, editApiKey, editBaseUrl, editModel, backends, toast])
 
-  const handleOpenInfo = useCallback(async (b: { id: string; name: string; type: string; healthy: boolean }) => {
+  const handleOpenInfo = useCallback((b: { id: string; name: string; type: string; healthy: boolean }) => {
     setInfoModal({ open: true, backend: b })
     setTestResult({ loading: false })
   }, [])
@@ -174,6 +183,8 @@ export default function ManagePage() {
       toast('路由规则已删除', 'success')
     } catch {
       toast('删除失败', 'error')
+    } finally {
+      setDeleteTarget(null)
     }
   }, [routes, toast])
 
@@ -184,316 +195,325 @@ export default function ManagePage() {
         <p>后端服务配置与路由规则</p>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-
+      <div className="dashboard-content">
         {/* 后端管理 */}
         <div className="card">
-          <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px' }}>
-            后端管理
+          <div className="card-header">
+            <h2 className="card-title">后端管理</h2>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>ID</label>
-              <input className="input" placeholder="唯一标识（如 hermes, openclaw）" value={bId} onChange={(e) => setBId(e.target.value)} />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>名称</label>
-              <input className="input" placeholder="显示名称" value={bName} onChange={(e) => setBName(e.target.value)} />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>类型</label>
-              <select className="select" value={bType} onChange={(e) => setBType(e.target.value)}>
+          <div className="manage-form">
+            <div className="form-grid form-grid-2">
+              <Input
+                label="ID"
+                placeholder="唯一标识（如 hermes, openclaw）"
+                value={bId}
+                onChange={(e) => setBId(e.target.value)}
+              />
+              <Input
+                label="名称"
+                placeholder="显示名称"
+                value={bName}
+                onChange={(e) => setBName(e.target.value)}
+              />
+              <Select
+                label="类型"
+                value={bType}
+                onChange={(e) => setBType(e.target.value)}
+              >
                 <option value="echo">Echo 调试</option>
                 <option value="openai_compatible">OpenAI 兼容</option>
                 <option value="ilink_proxy">iLink 代理</option>
-              </select>
+              </Select>
             </div>
-          </div>
 
-          {bType === 'openai_compatible' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>API Key</label>
-                <input className="input" type="password" placeholder="sk-..." value={bApiKey} onChange={(e) => setBApiKey(e.target.value)} />
+            {bType === 'openai_compatible' && (
+              <div className="form-grid form-grid-2">
+                <Input
+                  label="API Key"
+                  type="password"
+                  placeholder="sk-..."
+                  value={bApiKey}
+                  onChange={(e) => setBApiKey(e.target.value)}
+                />
+                <Input
+                  label="Base URL"
+                  placeholder="https://api.openai.com/v1"
+                  value={bBaseUrl}
+                  onChange={(e) => setBBaseUrl(e.target.value)}
+                />
+                <Input
+                  label="模型"
+                  placeholder="gpt-4o"
+                  value={bModel}
+                  onChange={(e) => setBModel(e.target.value)}
+                />
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>Base URL</label>
-                <input className="input" placeholder="https://api.openai.com/v1" value={bBaseUrl} onChange={(e) => setBBaseUrl(e.target.value)} />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>模型</label>
-                <input className="input" placeholder="gpt-4o" value={bModel} onChange={(e) => setBModel(e.target.value)} />
-              </div>
-            </div>
-          )}
+            )}
 
-          {bType === 'ilink_proxy' && (
-            <div style={{
-              padding: '16px',
-              background: 'var(--bg-primary)',
-              borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--border)',
-              marginBottom: '16px',
-            }}>
-              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>
-                iLink 代理配置预览
-              </div>
-              <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px' }}>
-                外部服务需要配置以下环境变量连接到此 Gateway
-              </p>
-              <pre style={{
-                fontSize: '12px',
-                fontFamily: 'monospace',
-                padding: '12px',
-                background: 'var(--bg-secondary)',
-                borderRadius: 'var(--radius-sm)',
-                overflow: 'auto',
-              }}>{`# ${bName || '后端名称'} 配置
+            {bType === 'ilink_proxy' && (
+              <div className="manage-config-preview">
+                <div className="manage-config-title">iLink 代理配置预览</div>
+                <p className="manage-config-hint">外部服务需要配置以下环境变量连接到此 Gateway</p>
+                <pre className="code-block">{`# ${bName || '后端名称'} 配置
 # 外部服务需要配置以下环境变量
 
 WEIXIN_BASE_URL=http://localhost:8080
 WEIXIN_TOKEN=gw_${bId || '<id>'}
 WEIXIN_ACCOUNT_ID=gw_${bId || '<id>'}`}</pre>
-            </div>
-          )}
-
-          <button className="btn btn-primary btn-sm" onClick={handleAddBackend} disabled={bLoading || !bId.trim() || !bName.trim()}>
-            {bLoading ? <span className="spinner spinner-sm" /> : null}
-            添加后端
-          </button>
-
-          <div style={{ borderTop: '1px solid var(--border)', marginTop: '16px', paddingTop: '16px' }}>
-            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '12px' }}>已注册后端</div>
-            {backends.items.length === 0 ? (
-              <div className="empty-state">暂无后端</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {backends.items.map((b) => (
-                  <div key={b.id} style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '12px 16px',
-                    background: 'var(--bg-primary)',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border)',
-                  }}>
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: '14px' }}>{b.name}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>{b.id} · {b.type}</div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span className={`tag ${b.healthy ? 'tag-success' : 'tag-danger'}`}>
-                        {b.healthy ? '健康' : '异常'}
-                      </span>
-                      <button className="btn btn-secondary btn-sm" onClick={() => handleOpenInfo(b)}>详情</button>
-                      <button className="btn btn-secondary btn-sm" onClick={() => handleOpenEdit(b)}>编辑</button>
-                      <button className="btn btn-danger btn-sm" onClick={() => handleRemoveBackend(b.id)}>删除</button>
-                    </div>
-                  </div>
-                ))}
               </div>
             )}
+
+            <Button
+              onClick={handleAddBackend}
+              loading={bLoading}
+              disabled={!bId.trim() || !bName.trim()}
+            >
+              添加后端
+            </Button>
           </div>
+
+          <div className="divider" />
+
+          <div className="card-header">
+            <h3 className="card-title" style={{ fontSize: 'var(--text-sm)' }}>已注册后端</h3>
+          </div>
+
+          {backends.loading ? (
+            <div className="list-section">
+              <ListItemSkeleton />
+              <ListItemSkeleton />
+            </div>
+          ) : backends.items.length === 0 ? (
+            <EmptyState
+              icon={
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
+                  <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
+                </svg>
+              }
+              title="暂无后端"
+              description="添加后端服务以处理消息"
+            />
+          ) : (
+            <div className="list-section">
+              {backends.items.map((b) => (
+                <div key={b.id} className="list-item">
+                  <div className="list-item-content">
+                    <div className="status-dot" style={{ background: b.healthy ? 'var(--success)' : 'var(--danger)' }} />
+                    <div className="list-item-info">
+                      <div className="list-item-title">{b.name}</div>
+                      <div className="list-item-subtitle">
+                        {b.id} · <Tag variant="neutral">{b.type}</Tag>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="list-item-actions">
+                    <Tag variant={b.healthy ? 'success' : 'danger'}>
+                      {b.healthy ? '健康' : '异常'}
+                    </Tag>
+                    <Button variant="ghost" size="sm" onClick={() => handleOpenInfo(b)}>详情</Button>
+                    <Button variant="ghost" size="sm" onClick={() => handleOpenEdit(b)}>编辑</Button>
+                    <Button variant="ghost-danger" size="sm" onClick={() => setDeleteTarget({ type: 'backend', id: b.id })}>删除</Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* 路由规则 */}
         <div className="card">
-          <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px' }}>
-            路由规则
+          <div className="card-header">
+            <h2 className="card-title">路由规则</h2>
           </div>
-          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-            根据消息内容自动路由到指定后端
-          </p>
+          <p className="card-description">根据消息内容自动路由到指定后端</p>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '12px', alignItems: 'end', marginBottom: '16px' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>关键词</label>
-              <input className="input" placeholder="匹配关键词" value={rKeyword} onChange={(e) => setRKeyword(e.target.value)} />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>目标后端</label>
-              <select className="select" value={rBackend} onChange={(e) => setRBackend(e.target.value)}>
+          <div className="manage-form" style={{ marginTop: 'var(--space-4)' }}>
+            <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr auto' }}>
+              <Input
+                label="关键词"
+                placeholder="匹配关键词"
+                value={rKeyword}
+                onChange={(e) => setRKeyword(e.target.value)}
+              />
+              <Select
+                label="目标后端"
+                value={rBackend}
+                onChange={(e) => setRBackend(e.target.value)}
+              >
                 <option value="">选择后端</option>
                 {backends.items.map((b) => (
                   <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
-              </select>
+              </Select>
+              <div className="checkbox-group" style={{ paddingTop: '24px' }}>
+                <input
+                  type="checkbox"
+                  id="is-regexp"
+                  className="checkbox"
+                  checked={rIsRegexp}
+                  onChange={(e) => setRIsRegexp(e.target.checked)}
+                />
+                <label htmlFor="is-regexp" className="checkbox-label">正则</label>
+              </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingBottom: '4px' }}>
-              <input
-                type="checkbox"
-                id="is-regexp"
-                checked={rIsRegexp}
-                onChange={(e) => setRIsRegexp(e.target.checked)}
-                style={{ accentColor: 'var(--accent)' }}
-              />
-              <label htmlFor="is-regexp" style={{ fontSize: '13px', color: 'var(--text-secondary)', cursor: 'pointer' }}>正则</label>
-            </div>
+            <Button
+              variant="secondary"
+              onClick={handleAddRoute}
+              loading={rLoading}
+              disabled={!rKeyword.trim() || !rBackend.trim()}
+            >
+              添加规则
+            </Button>
           </div>
-          <button className="btn btn-primary btn-sm" onClick={handleAddRoute} disabled={rLoading || !rKeyword.trim() || !rBackend.trim()}>
-            {rLoading ? <span className="spinner spinner-sm" /> : null}
-            添加规则
-          </button>
 
-          <div style={{ borderTop: '1px solid var(--border)', marginTop: '16px', paddingTop: '16px' }}>
-            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '12px' }}>现有规则</div>
-            {routes.items.length === 0 ? (
-              <div className="empty-state">暂无路由规则</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {routes.items.map((r, i) => (
-                  <div key={i} style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '12px 16px',
-                    background: 'var(--bg-primary)',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border)',
-                  }}>
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: '14px' }}>
+          <div className="divider" />
+
+          <div className="card-header">
+            <h3 className="card-title" style={{ fontSize: 'var(--text-sm)' }}>现有规则</h3>
+          </div>
+
+          {routes.loading ? (
+            <div className="list-section">
+              <ListItemSkeleton />
+            </div>
+          ) : routes.items.length === 0 ? (
+            <EmptyState
+              icon={
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="16 3 21 3 21 8" />
+                  <line x1="4" y1="20" x2="21" y2="3" />
+                </svg>
+              }
+              title="暂无路由规则"
+              description="添加规则以自动分发消息到指定后端"
+            />
+          ) : (
+            <div className="list-section">
+              {routes.items.map((r, i) => (
+                <div key={i} className="list-item">
+                  <div className="list-item-content">
+                    <div className="list-item-info">
+                      <div className="list-item-title font-mono">
                         {r.keyword}
-                        {r.is_regexp && <span className="tag tag-warning" style={{ marginLeft: '8px' }}>正则</span>}
+                        {r.is_regexp && <Tag variant="warning" style={{ marginLeft: '8px' }}>正则</Tag>}
                       </div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                      <div className="list-item-subtitle">
                         转发至: {r.backend_id}
                       </div>
                     </div>
-                    <button className="btn btn-danger btn-sm" onClick={() => handleRemoveRoute(r.id)}>删除</button>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+                  <Button variant="ghost-danger" size="sm" onClick={() => setDeleteTarget({ type: 'route', id: r.id })}>
+                    删除
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-
       </div>
 
       {/* 编辑模态框 */}
-      {editModal.open && editModal.backend && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-        }} onClick={() => setEditModal({ open: false, backend: null })}>
-          <div className="card" style={{ width: '480px', maxHeight: '80vh', overflow: 'auto' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>
-              编辑后端: {editModal.backend.id}
-            </div>
+      <Modal
+        open={editModal.open}
+        onClose={() => setEditModal({ open: false, backend: null })}
+        title={`编辑后端: ${editModal.backend?.id}`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setEditModal({ open: false, backend: null })}>
+              取消
+            </Button>
+            <Button onClick={handleSaveEdit} loading={editLoading}>
+              保存
+            </Button>
+          </>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+          <Input
+            label="名称"
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+          />
+          <Select
+            label="类型"
+            value={editType}
+            onChange={(e) => setEditType(e.target.value)}
+          >
+            <option value="echo">Echo 调试</option>
+            <option value="openai_compatible">OpenAI 兼容</option>
+            <option value="ilink_proxy">iLink 代理</option>
+          </Select>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>名称</label>
-                <input className="input" value={editName} onChange={(e) => setEditName(e.target.value)} />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>类型</label>
-                <select className="select" value={editType} onChange={(e) => setEditType(e.target.value)}>
-                  <option value="echo">Echo 调试</option>
-                  <option value="openai_compatible">OpenAI 兼容</option>
-                  <option value="ilink_proxy">iLink 代理</option>
-                </select>
-              </div>
-
-              {editType === 'openai_compatible' && (
-                <>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>API Key</label>
-                    <input className="input" type="password" placeholder="留空则不修改" value={editApiKey} onChange={(e) => setEditApiKey(e.target.value)} />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>Base URL</label>
-                    <input className="input" placeholder="留空则不修改" value={editBaseUrl} onChange={(e) => setEditBaseUrl(e.target.value)} />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>模型</label>
-                    <input className="input" placeholder="留空则不修改" value={editModel} onChange={(e) => setEditModel(e.target.value)} />
-                  </div>
-                </>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '20px' }}>
-              <button className="btn btn-secondary btn-sm" onClick={() => setEditModal({ open: false, backend: null })}>取消</button>
-              <button className="btn btn-primary btn-sm" onClick={handleSaveEdit} disabled={editLoading}>
-                {editLoading ? <span className="spinner spinner-sm" /> : null}
-                保存
-              </button>
-            </div>
-          </div>
+          {editType === 'openai_compatible' && (
+            <>
+              <Input
+                label="API Key"
+                type="password"
+                placeholder="留空则不修改"
+                value={editApiKey}
+                onChange={(e) => setEditApiKey(e.target.value)}
+              />
+              <Input
+                label="Base URL"
+                placeholder="留空则不修改"
+                value={editBaseUrl}
+                onChange={(e) => setEditBaseUrl(e.target.value)}
+              />
+              <Input
+                label="模型"
+                placeholder="留空则不修改"
+                value={editModel}
+                onChange={(e) => setEditModel(e.target.value)}
+              />
+            </>
+          )}
         </div>
-      )}
+      </Modal>
 
       {/* 详情模态框 */}
-      {infoModal.open && infoModal.backend && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-        }} onClick={() => setInfoModal({ open: false, backend: null })}>
-          <div className="card" style={{ width: '400px' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>
-              后端详情
+      <Modal
+        open={infoModal.open}
+        onClose={() => setInfoModal({ open: false, backend: null })}
+        title="后端详情"
+        footer={
+          <Button variant="secondary" onClick={() => setInfoModal({ open: false, backend: null })}>
+            关闭
+          </Button>
+        }
+      >
+        {infoModal.backend && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+            <div className="manage-info-row">
+              <span className="text-muted">ID</span>
+              <span className="font-mono">{infoModal.backend.id}</span>
+            </div>
+            <div className="manage-info-row">
+              <span className="text-muted">名称</span>
+              <span>{infoModal.backend.name}</span>
+            </div>
+            <div className="manage-info-row">
+              <span className="text-muted">类型</span>
+              <span>{infoModal.backend.type}</span>
+            </div>
+            <div className="manage-info-row">
+              <span className="text-muted">状态</span>
+              <Tag variant={infoModal.backend.healthy ? 'success' : 'danger'}>
+                {infoModal.backend.healthy ? '健康' : '异常'}
+              </Tag>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '13px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>ID</span>
-                <span style={{ fontFamily: 'monospace' }}>{infoModal.backend.id}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>名称</span>
-                <span>{infoModal.backend.name}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>类型</span>
-                <span>{infoModal.backend.type}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>状态</span>
-                <span className={`tag ${infoModal.backend.healthy ? 'tag-success' : 'tag-danger'}`}>
-                  {infoModal.backend.healthy ? '健康' : '异常'}
-                </span>
-              </div>
-            </div>
-
-            {/* iLink 代理配置显示 */}
             {infoModal.backend.type === 'ilink_proxy' && (
-              <div style={{ marginTop: '16px' }}>
-                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>
-                  连接配置
-                </div>
-                <div style={{
-                  padding: '12px',
-                  background: 'var(--bg-secondary)',
-                  borderRadius: 'var(--radius-sm)',
-                  fontFamily: 'monospace',
-                  fontSize: '12px',
-                  marginBottom: '8px',
-                }}>
-                  <div>WEIXIN_BASE_URL=http://localhost:8080</div>
-                  <div>WEIXIN_TOKEN=gw_{infoModal.backend.id}</div>
-                  <div>WEIXIN_ACCOUNT_ID=gw_{infoModal.backend.id}</div>
-                </div>
-                <button
-                  className="btn btn-secondary btn-sm"
+              <>
+                <div className="divider" />
+                <div className="input-label">连接配置</div>
+                <pre className="code-block">{`WEIXIN_BASE_URL=http://localhost:8080
+WEIXIN_TOKEN=gw_${infoModal.backend.id}
+WEIXIN_ACCOUNT_ID=gw_${infoModal.backend.id}`}</pre>
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => {
                     const config = `WEIXIN_BASE_URL=http://localhost:8080\nWEIXIN_TOKEN=gw_${infoModal.backend!.id}\nWEIXIN_ACCOUNT_ID=gw_${infoModal.backend!.id}`
                     navigator.clipboard.writeText(config)
@@ -501,43 +521,56 @@ WEIXIN_ACCOUNT_ID=gw_${bId || '<id>'}`}</pre>
                   }}
                 >
                   复制配置
-                </button>
-              </div>
+                </Button>
+              </>
             )}
 
-            <div style={{ borderTop: '1px solid var(--border)', marginTop: '16px', paddingTop: '16px' }}>
-              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>测试连接</div>
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => handleTestBackend(infoModal.backend!.id)}
-                disabled={testResult.loading}
+            <div className="divider" />
+            <div className="input-label">测试连接</div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => handleTestBackend(infoModal.backend!.id)}
+              loading={testResult.loading}
+            >
+              发送测试消息
+            </Button>
+            {testResult.result && (
+              <div
+                className="code-block"
+                style={{
+                  background: testResult.result.healthy ? 'var(--success-dim)' : 'var(--danger-dim)',
+                }}
               >
-                {testResult.loading ? <span className="spinner spinner-sm" /> : null}
-                发送测试消息
-              </button>
-              {testResult.result && (
-                <div style={{
-                  marginTop: '8px',
-                  padding: '8px 12px',
-                  background: testResult.result.healthy ? 'var(--success-bg)' : 'var(--danger-bg)',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: '12px',
-                }}>
-                  {testResult.result.healthy ? (
-                    <span>测试成功: {testResult.result.reply || 'OK'}</span>
-                  ) : (
-                    <span>测试失败: {testResult.result.error || '未知错误'}</span>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
-              <button className="btn btn-secondary btn-sm" onClick={() => setInfoModal({ open: false, backend: null })}>关闭</button>
-            </div>
+                {testResult.result.healthy ? (
+                  `测试成功: ${testResult.result.reply || 'OK'}`
+                ) : (
+                  `测试失败: ${testResult.result.error || '未知错误'}`
+                )}
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
+
+      {/* 删除确认 */}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (!deleteTarget) return
+          if (deleteTarget.type === 'backend') {
+            handleRemoveBackend(deleteTarget.id as string)
+          } else {
+            handleRemoveRoute(deleteTarget.id as number)
+          }
+        }}
+        title={deleteTarget?.type === 'backend' ? '删除后端' : '删除路由规则'}
+        description={deleteTarget?.type === 'backend'
+          ? '确定要删除此后端吗？此操作不可撤销，相关路由规则将失效。'
+          : '确定要删除此路由规则吗？此操作不可撤销。'
+        }
+      />
     </div>
   )
 }

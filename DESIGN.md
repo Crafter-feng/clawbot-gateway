@@ -38,7 +38,6 @@ HermesClaw 通过 iLink 协议连接到 Gateway
 |------|------|-------------------|
 | `ilink_proxy` | 外部 iLink 服务（Hermes、OpenClaw） | 是（虚拟 Bot） |
 | `openai_compatible` | OpenAI 兼容 API（Claude、DeepSeek） | 否（内置处理） |
-| `webhook` | 单向通知推送 | 否 |
 | `echo` | 调试回显 | 否 |
 
 ### 虚拟 Bot
@@ -326,77 +325,92 @@ Gateway 验证 token 是否匹配某个虚拟 Bot 的 account_id。
 // server.go - 路由注册
 func (s *Server) RegisterRoutes(r *gin.Engine) {
     ilink := r.Group("/ilink/bot")
-    ilink.POST("/sendmessage", s.handleSendMessage)
-    ilink.POST("/sendtyping", s.handleSendTyping)
-    ilink.GET("/getupdates", s.handleGetUpdates)
-    ilink.GET("/get_bot_qrcode", s.handleGetQRCode)
-    ilink.GET("/get_qrcode_status", s.handleGetQRCodeStatus)
-    ilink.POST("/getuploadurl", s.handleGetUploadURL)
+    ilink.Use(s.rateLimitMiddleware())
+    ilink.Use(maxBodySizeMiddleware(MaxRequestBodySize))
+    {
+        ilink.POST("/getupdates", s.handleGetUpdates)
+        ilink.POST("/sendmessage", s.handleSendMessage)
+        ilink.POST("/sendtyping", s.handleSendTyping)
+        ilink.POST("/getconfig", s.handleGetConfig)
+        ilink.POST("/getuploadurl", s.handleGetUploadURL)
+    }
 }
 ```
 
 #### 当前限制
 
-1. **单消息通道**：`handleGetUpdates` 从 `s.bot.Messages()` 读取，这是全局共享的 channel，多个外部服务会竞争消费
-2. **无消息队列**：没有为每个外部客户端维护独立的消息队列
-3. **sendmessage 只支持文本**：`SendMessageRequest` 的 `ItemList` 只定义了 `TextItem`
-4. **无 client_id 跟踪**：无法区分不同的外部客户端
+1. **透明代理模式**：所有 handler 直接代理到真实 iLink API，未使用 `ClientRegistry` 的消息队列
+2. **自引用 URL 循环**：虚拟 Bot 的 `BaseURL` 是 `http://localhost:8080`，代理到自身会死循环
+3. **请求体丢失**：`forwardToILink()` 创建请求时未附加请求体
 
-#### 需要改进
+#### 需要修复
 
-1. 添加 `ClientRegistry` 管理外部客户端
-2. 为每个客户端维护独立的 `MessageQueue`
-3. `handleGetUpdates` 从客户端自己的队列取消息
-4. `handleSendMessage` 支持所有消息类型并转发到真实 iLink
+1. `forwardToILink()` 需要正确附加请求体
+2. `handleGetUpdates` 需要从 `ClientRegistry` 的消息队列取消息
+3. 虚拟 Bot 的 `BaseURL` 需要指向真实 iLink API 而非 Gateway 自身
 
 ### 消息队列系统
 
-每个外部客户端拥有独立的消息队列：
+每个虚拟 Bot 拥有独立的消息队列，支持持久化和重试：
 
 ```go
 type MessageQueue struct {
-    mu    sync.Mutex
-    msgs  []Message      // 缓存的消息
-    event chan struct{}   // 通知有新消息
-    cap   int            // 队列容量（默认 200）
+    mu           sync.Mutex
+    messages     []*PersistedMessage
+    event        chan struct{}
+    cap          int
+    persistDir   string
+    retryConfig  RetryConfig
 }
 
-type ClientSession struct {
-    AccountID  string         // 客户端标识
-    Queue      *MessageQueue  // 独立消息队列
-    UpdateBuf  string         // get_updates 游标
+type PersistedMessage struct {
+    ID        string
+    Message   NormalizedMessage
+    Status    string  // "pending" | "sent" | "failed"
+    CreatedAt time.Time
+    RetryCount int
+}
+
+type VirtualBot struct {
+    AccountID  string
+    UserID     string
+    BaseURL    string
+    Queue      *MessageQueue
+    UpdateBuf  string
     LastActive time.Time
 }
 
 type ClientRegistry struct {
     mu      sync.RWMutex
-    clients map[string]*ClientSession
+    bots    map[string]*VirtualBot
 }
 ```
 
 #### 消息广播机制
 
-Connector 收到微信消息后，需要同时通知：
+Connector 收到微信消息后，同时通知：
 1. **MessagePipeline**（AI 处理模式）— 通过 `msgChan` channel
 2. **ClientRegistry**（纯代理模式）— 通过 `Broadcast()` 方法
 
 ```go
-// Connector 收到消息后的分发逻辑
+// bot/account.go - accountPollLoop
 func (c *Connector) accountPollLoop(ctx context.Context, creds *Credentials) {
     // ... 轮询逻辑 ...
     for _, raw := range resp.Msgs {
         msg := normalize(raw)
         msg.AccountID = creds.AccountID
 
-        // 1. 发送到 Pipeline（AI 处理模式）
+        // 1. 发送到 Pipeline（内置 AI 处理）
         select {
         case c.msgChan <- msg:
         default:
-            c.log.Warn("msg channel full")
+            c.log.Warn("msg channel full, dropping msg")
         }
 
-        // 2. 广播到所有外部客户端（纯代理模式）
-        c.clientRegistry.Broadcast(msg)
+        // 2. 广播到所有虚拟 Bot（代理模式）
+        if b := c.GetBroadcaster(); b != nil {
+            b.Broadcast(msg)
+        }
     }
 }
 ```
@@ -408,7 +422,7 @@ func (c *Connector) accountPollLoop(ctx context.Context, creds *Credentials) {
 微信消息 → Connector.PollLoop() → NormalizedMessage
     ├──→ msgChan → MessagePipeline → Adapter → 回复微信
     └──→ ClientRegistry.Broadcast()
-         → 每个 ClientSession.Queue.Enqueue()
+         → 每个 VirtualBot.Queue.Enqueue()
          → 外部服务 getupdates 从自己队列取消息
 ```
 
@@ -821,82 +835,54 @@ func (c *Connector) accountPollLoop(ctx context.Context, creds *Credentials) {
 - **WebSocket**：需要鉴权
 - **iLink API**：需要 bot_token 认证
 
-## 配置文件
+## 配置
 
-### config.yaml 完整示例
+### 环境变量配置（.env）
 
-```yaml
-log_level: "info"
+```bash
+# ── 数据库 ──
+CLAWBOT_DB_PATH=data/clawbot.db
 
-server:
-  host: "0.0.0.0"
-  port: 8080
+# ── 服务器 ──
+CLAWBOT_HOST=0.0.0.0
+CLAWBOT_PORT=8080
 
-clawbot:
-  base_url: "https://ilinkai.weixin.qq.com"
-  poll_timeout: 35
-  max_retry_login: 3
-  accounts:
-    - token: "${BOT1_TOKEN}"
-      user_id: "bot1"
-      account_id: "wx_bot1"
-      account_name: "Bot 1"
+# ── 认证 ──
+CLAWBOT_LOGIN_PASSWORD=1234
+# CLAWBOT_JWT_SECRET=your_jwt_secret_here
 
-api:
-  login_password: "${CLAWBOT_LOGIN_PASSWORD}"
-  allowed_origins:
-    - "*"
+# ── 微信 / iLink ──
+# WEIXIN_TOKEN=your_weixin_token_here
+# WEIXIN_ACCOUNT_ID=your_weixin_account_id_here
+# WEIXIN_BASE_URL=https://ilinkai.weixin.qq.com
+# WEIXIN_POLL_TIMEOUT=35
+# WEIXIN_BOT_TYPE=3
 
-backend:
-  default_backend: "openclaw"
-  providers:
-    - id: openclaw
-      name: "OpenClaw Agent"
-      type: openai_compatible
-      enabled: true
-      config:
-        api_key: "${OPENCAW_KEY}"
-        base_url: "http://localhost:18789/v1"
-        model: "openclaw/default"
-
-    - id: claude
-      name: "Claude 3.5 Sonnet"
-      type: openai_compatible
-      enabled: true
-      config:
-        api_key: "${ANTHROPIC_KEY}"
-        base_url: "https://api.anthropic.com/v1"
-        model: "claude-3-5-sonnet-latest"
-
-    - id: deepseek
-      name: "DeepSeek V3"
-      type: openai_compatible
-      enabled: true
-      config:
-        api_key: "${DEEPSEEK_KEY}"
-        base_url: "https://api.deepseek.com/v1"
-        model: "deepseek-chat"
-
-    - id: webhook_notify
-      name: "Webhook 通知"
-      type: webhook
-      enabled: true
-      config:
-        url: "https://example.com/webhook"
-        headers:
-          Authorization: "Bearer ${WEBHOOK_TOKEN}"
-
-    - id: echo
-      name: "Echo Debug"
-      type: echo
-      enabled: true
-      config: {}
-
-context:
-  max_history: 20
-  switch_strategy: keep
-  ttl: 3600
+# ── 日志 ──
+CLAWBOT_LOG_LEVEL=info
 ```
+
+### 数据库配置
+
+后端适配器、路由规则、微信账号等配置存储在 SQLite 数据库中，通过管理 API 或 Web UI 进行管理。
+
+**后端适配器类型**：
+
+| 类型 | 配置项 | 说明 |
+|------|--------|------|
+| `echo` | 无 | 调试回显 |
+| `openai_compatible` | `api_key`, `base_url`, `model` | OpenAI 兼容 API |
+| `ilink_proxy` | 无（自动生成） | 外部 iLink 服务 |
+
+**配置管理 API**：
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/v1/backends` | GET/POST | 后端适配器管理 |
+| `/api/v1/routes` | GET/POST/DELETE | 路由规则管理 |
+| `/api/v1/accounts` | GET | 微信账号列表 |
+| `/api/v1/config` | GET/PUT | 系统配置 |
+| `/api/v1/notify/tokens` | GET/POST/DELETE | 通知 Token 管理 |
 
 ## 技术栈
 
@@ -915,38 +901,53 @@ context:
 ```
 clawbot-gateway/
 ├── main.go                      # 入口
-├── config.yaml                  # 配置文件
+├── .env                         # 环境变量配置
 ├── DESIGN.md                    # 设计文档
 ├── Dockerfile                   # Docker 构建
 ├── go.mod / go.sum              # Go 依赖
 │
 ├── internal/
 │   ├── adapter/                 # 后端适配器
-│   │   ├── adapter.go           # BackendAdapter 接口
-│   │   ├── factory.go           # 适配器工厂 + Echo/OpenAI 实现
-│   │   └── webhook.go           # Webhook 适配器
+│   │   ├── adapter.go           # BackendAdapter + ConnectionAdapter 接口
+│   │   ├── factory.go           # 适配器工厂（支持两种适配器类型）
+│   │   └── ilink_proxy.go       # iLink 代理适配器（虚拟 Bot）
 │   │
 │   ├── api/                     # HTTP API 服务
 │   │   ├── server.go            # API 服务器 + 路由注册 + 中间件
 │   │   ├── pipeline.go          # 消息处理管道 + 命令处理器
 │   │   ├── jwt.go               # JWT 鉴权
-│   │   ├── push_handler.go      # 消息推送 API
-│   │   └── *_handler.go         # 其他 API handler
+│   │   ├── backend_handler.go   # 后端管理 API
+│   │   ├── route_handler.go     # 路由规则 API
+│   │   ├── wechat_handler.go    # 微信账号 API
+│   │   ├── settings_handler.go  # 配置管理 API
+│   │   ├── notify_handler.go    # 通知 Token API
+│   │   └── push_handler.go      # 消息推送 API
 │   │
 │   ├── bot/                     # iLink 协议客户端
-│   │   ├── client.go            # Connector 核心结构
+│   │   ├── client.go            # Connector 核心结构 + MessageBroadcaster 接口
 │   │   ├── message.go           # 消息模型 + 解析
 │   │   ├── send.go              # 消息发送
 │   │   ├── media.go             # 媒体文件上传
 │   │   ├── qrlogin.go           # 扫码登录
-│   │   └── account.go           # 多账号管理 + 轮询
+│   │   └── account.go           # 多账号管理 + 轮询 + 广播
 │   │
 │   ├── config/                  # 配置加载
-│   │   └── config.go            # YAML 解析 + 环境变量展开
+│   │   └── config.go            # 配置结构 + 环境变量加载
+│   │
+│   ├── database/                # 数据库层
+│   │   ├── db.go                # SQLite 数据库初始化
+│   │   ├── settings.go          # 配置存储
+│   │   ├── backends.go          # 后端存储
+│   │   ├── routes.go            # 路由规则存储
+│   │   ├── accounts.go          # 微信账号存储
+│   │   ├── virtual_bots.go      # 虚拟 Bot 存储
+│   │   └── notify.go            # 通知 Token 存储
 │   │
 │   ├── ilink/                   # iLink API 对外服务
-│   │   ├── server.go            # 路由注册
-│   │   └── handler.go           # 端点实现
+│   │   ├── server.go            # 路由注册 + 限流中间件
+│   │   ├── handler.go           # 端点实现（透明代理）
+│   │   ├── registry.go          # ClientRegistry + VirtualBot + MessageQueue
+│   │   └── ratelimit.go         # 速率限制器
 │   │
 │   ├── log/                     # 日志
 │   │   └── log.go               # slog 封装
@@ -962,22 +963,48 @@ clawbot-gateway/
 │   ├── session/                 # 会话管理
 │   │   └── context.go           # SessionContext + ContextManager
 │   │
-│   └── store/                   # 持久化存储
-│       ├── store.go             # Store（路由/API Token）
-│       └── accounts.go          # AccountStore（账号凭证）
+│   └── crypto/                  # 加密工具
+│       └── crypto.go            # Secret 生成
 │
 ├── web/                         # 前端
 │   ├── src/
 │   │   ├── pages/               # 页面组件
+│   │   │   ├── LoginPage.tsx
+│   │   │   ├── DashboardPage.tsx
+│   │   │   ├── ChannelsPage.tsx
+│   │   │   ├── ManagePage.tsx
+│   │   │   ├── SettingsPage.tsx
+│   │   │   └── NotificationPage.tsx
 │   │   ├── components/          # UI 组件
+│   │   │   ├── ui/              # 基础组件库
+│   │   │   │   ├── Button.tsx
+│   │   │   │   ├── Input.tsx
+│   │   │   │   ├── Select.tsx
+│   │   │   │   ├── Textarea.tsx
+│   │   │   │   ├── Tag.tsx
+│   │   │   │   ├── Modal.tsx
+│   │   │   │   ├── ConfirmDialog.tsx
+│   │   │   │   ├── EmptyState.tsx
+│   │   │   │   └── Skeleton.tsx
+│   │   │   ├── AppShell.tsx     # 侧边栏布局
+│   │   │   ├── LoginForm.tsx    # 登录表单
+│   │   │   ├── MetricCard.tsx   # 指标卡片
+│   │   │   ├── QrModal.tsx      # 扫码绑定模态框
+│   │   │   └── Toast.tsx        # 通知系统
 │   │   ├── stores/              # Zustand 状态管理
+│   │   │   ├── auth.ts          # 认证状态
+│   │   │   ├── accounts.ts      # 微信账号状态
+│   │   │   ├── backends.ts      # 后端服务状态
+│   │   │   ├── routes.ts        # 路由规则状态
+│   │   │   └── stats.ts         # 统计数据状态
 │   │   └── api/                 # API 客户端
-│   └── dist/                    # 构建产物
+│   │       └── client.ts        # HTTP 客户端
+│   └── app.css                  # 设计系统 + 样式
 │
 └── data/                        # 运行时数据
-    ├── clawbot.db              # SQLite 数据库
+    ├── clawbot.db               # SQLite 数据库
     ├── accounts/                # 账号凭证
-    └── syncbuf/                 # 同步缓冲区
+    └── queues/                  # 消息队列持久化
 ```
 
 ## 代码审查结果
@@ -986,37 +1013,45 @@ clawbot-gateway/
 
 对 `internal/adapter/`、`internal/ilink/`、`internal/bot/`、`internal/config/` 进行全面审查。
 
-### 发现的问题
+### 实现状态（2026-07-26 更新）
 
-#### P0 - 架构缺失
+#### 已完成的 P0 架构
 
-| # | 文件 | 问题 | 说明 |
-|---|------|------|------|
-| 1 | `adapter/adapter.go` | 缺少 `ConnectionAdapter` 接口 | 只有 `BackendAdapter`，没有连接适配器接口 |
-| 2 | `adapter/factory.go` | 只存储 `BackendAdapter` | `AdapterFactory` 不支持 `ConnectionAdapter` |
-| 3 | `adapter/` | 缺少 `ilink_proxy` 适配器 | 设计文档中提到但代码未实现 |
-| 4 | `ilink/server.go` | 缺少 `ClientRegistry` | 无法管理虚拟 Bot 和独立消息队列 |
-| 5 | `bot/client.go` | 缺少消息广播机制 | `accountPollLoop` 只发到 `msgChan`，不广播到虚拟 Bot |
+| 组件 | 状态 | 说明 |
+|------|------|------|
+| `ConnectionAdapter` 接口 | ✅ 已实现 | `adapter/adapter.go` |
+| `AdapterFactory` 支持 `ConnectionAdapter` | ✅ 已实现 | `adapter/factory.go` |
+| `ilink_proxy` 适配器 | ✅ 已实现 | `adapter/ilink_proxy.go` |
+| `ClientRegistry` 虚拟 Bot 管理 | ✅ 已实现 | `ilink/registry.go` |
+| `MessageQueue` 消息队列 | ✅ 已实现 | 支持持久化和重试 |
+| `MessageBroadcaster` 接口 | ✅ 已实现 | `bot/client.go` |
+| `accountPollLoop` 广播机制 | ✅ 已实现 | `bot/account.go` |
 
-#### P1 - 功能缺陷
+#### 当前存在的问题
 
-| # | 文件 | 问题 | 说明 |
-|---|------|------|------|
-| 6 | `ilink/handler.go:184` | `getupdates` 使用 GET 而非 POST | iLink 协议规定 `getupdates` 应为 POST |
-| 7 | `ilink/handler.go:191` | `handleGetUpdates` 从全局 channel 读取 | 多个外部服务会竞争消费同一条消息 |
-| 8 | `ilink/handler.go:116-121` | `handleSendMessage` 只支持文本 | 硬编码 `item.Type == 1`，不支持图片/文件/视频 |
-| 9 | `ilink/handler.go:129` | `handleSendMessage` 用 `ToUserID` 查找凭证 | 应该用 `FromUserID`（虚拟 Bot 的 account_id） |
-| 10 | `ilink/handler.go` | 缺少 `getconfig` 端点 | iLink 协议需要此端点获取 typing_ticket |
-| 11 | `ilink/handler.go:56` | `Message` 缺少 `Timestamp` 字段 | 外部服务需要消息时间戳 |
-
-#### P2 - 代码质量
+##### CRITICAL - 必须修复
 
 | # | 文件 | 问题 | 说明 |
 |---|------|------|------|
-| 12 | `bot/client.go:70` | `msgChan` 容量只有 100 | 高负载下会丢消息 |
-| 13 | `bot/client.go:17-34` | `Connector` 缺少 `clientRegistry` 字段 | 无法注入虚拟 Bot 管理 |
-| 14 | `config/config.go` | 不支持 `ilink_proxy` 类型 | `ProviderConfig` 无法区分连接适配器和后端适配器 |
-| 15 | `ilink/handler.go:284-290` | `handleGetQRCode` 返回空数据 | 应该调用真实 iLink API 获取二维码 |
+| 1 | `ilink/handler.go:64` | `forwardToILink()` 请求体为空 | `body []byte` 参数未附加到请求，所有代理请求体丢失 |
+| 2 | `ilink/handler.go` | `handleGetUpdates` 直接代理而非使用队列 | `ClientRegistry` 和 `MessageQueue` 未被任何 handler 使用 |
+| 3 | `ilink/handler.go` | 自引用 URL 循环 | 虚拟 Bot 的 `BaseURL` 是 `http://localhost:8080`，代理到自身会死循环 |
+
+##### MODERATE - 需要修复
+
+| # | 文件 | 问题 | 说明 |
+|---|------|------|------|
+| 4 | `ilink/server.go` | 缺少 QR 端点路由 | `GET /get_bot_qrcode` 和 `GET /get_qrcode_status` 未注册 |
+| 5 | `config/config.go` | 无 `ProviderConfig` 结构 | 后端配置从数据库加载，非 YAML |
+| 6 | `adapter/` | 缺少 `webhook` 适配器 | 设计文档提到但未实现 |
+
+##### MINOR - 可接受的偏差
+
+| # | 文件 | 说明 |
+|---|------|------|
+| 7 | `bot/client.go` | 使用 `broadcaster MessageBroadcaster` 接口而非直接引用 `*ilink.ClientRegistry`（架构更优，避免循环依赖） |
+| 8 | `ilink/registry.go` | 超出设计：支持消息持久化、重试、统计 |
+| 9 | `bot/client.go:69` | `msgChan` 容量仍为 100（设计文档 P2 问题 #12） |
 
 ### 重新设计
 

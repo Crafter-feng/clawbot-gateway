@@ -13,7 +13,7 @@ services:
       - CLAWBOT_HOST=0.0.0.0
       - CLAWBOT_PORT=8080
       - CLAWBOT_LOG_LEVEL=info
-      # - CLAWBOT_LOGIN_PASSWORD=your_password  # 登录密码
+      - CLAWBOT_LOGIN_PASSWORD=1234  # 登录密码
       # - CLAWBOT_JWT_SECRET=your_secret        # JWT 密钥
       # - WEIXIN_TOKEN=your_token               # 微信 Bot Token
       # - WEIXIN_ACCOUNT_ID=your_account_id     # 微信账号 ID

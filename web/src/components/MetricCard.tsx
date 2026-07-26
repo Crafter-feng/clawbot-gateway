@@ -1,22 +1,37 @@
+import type { ReactNode } from 'react'
+
 interface Props {
   label: string
   value: string | number
+  icon?: ReactNode
+  trend?: {
+    value: number
+    label?: string
+  }
 }
 
-export default function MetricCard({ label, value }: Props) {
+export default function MetricCard({ label, value, icon, trend }: Props) {
   return (
-    <div className="metric-card" style={{
-      background: 'var(--bg-card)',
-      border: '1px solid var(--border)',
-      borderRadius: 'var(--radius-lg)',
-      padding: '20px',
-    }}>
-      <div style={{ fontSize: '28px', fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1.2 }}>
-        {value}
-      </div>
-      <div style={{ marginTop: '6px', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: 500 }}>
-        {label}
-      </div>
+    <div className="metric-card">
+      {icon && (
+        <div className="metric-card-icon">
+          {icon}
+        </div>
+      )}
+      <div className="metric-card-value">{value}</div>
+      <div className="metric-card-label">{label}</div>
+      {trend && (
+        <div
+          className="text-xs font-medium"
+          style={{
+            marginTop: '4px',
+            color: trend.value >= 0 ? 'var(--success)' : 'var(--danger)',
+          }}
+        >
+          {trend.value >= 0 ? '↑' : '↓'} {Math.abs(trend.value)}
+          {trend.label && ` ${trend.label}`}
+        </div>
+      )}
     </div>
   )
 }

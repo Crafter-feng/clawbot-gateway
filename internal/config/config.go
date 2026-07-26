@@ -53,9 +53,9 @@ func LoadFromDB(db *database.DB) *Config {
 	cfg.Server.Port = intEnvOrDefault("CLAWBOT_PORT", db.GetSetting("server.port"), 8080)
 
 	// iLink 配置
-	cfg.ClawBot.BaseURL = envOrDefault("CLAWBOT_ILINK_BASE_URL", db.GetSetting("clawbot.base_url"))
-	cfg.ClawBot.PollTimeout = intEnvOrDefault("CLAWBOT_POLL_TIMEOUT", db.GetSetting("clawbot.poll_timeout"), 35)
-	cfg.ClawBot.BotType = intEnvOrDefault("CLAWBOT_BOT_TYPE", db.GetSetting("clawbot.bot_type"), 3)
+	cfg.ClawBot.BaseURL = envOrDefault("WEIXIN_BASE_URL", db.GetSetting("clawbot.base_url"))
+	cfg.ClawBot.PollTimeout = intEnvOrDefault("WEIXIN_POLL_TIMEOUT", db.GetSetting("clawbot.poll_timeout"), 35)
+	cfg.ClawBot.BotType = intEnvOrDefault("WEIXIN_BOT_TYPE", db.GetSetting("clawbot.bot_type"), 3)
 
 	// 密码：环境变量 > 数据库 > 自动生成
 	cfg.API.LoginPassword = envOrDefault("CLAWBOT_LOGIN_PASSWORD", "")

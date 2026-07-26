@@ -3,11 +3,19 @@ import { useAccountsStore } from '../stores/accounts'
 import { api } from '../api/client'
 import { useToast } from '../components/Toast'
 import QrModal from '../components/QrModal'
+import Button from '../components/ui/Button'
+import Tag from '../components/ui/Tag'
+import Textarea from '../components/ui/Textarea'
+import Select from '../components/ui/Select'
+import EmptyState from '../components/ui/EmptyState'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
+import { ListItemSkeleton } from '../components/ui/Skeleton'
 
 export default function ChannelsPage() {
   const accounts = useAccountsStore()
   const { toast } = useToast()
   const [qrVisible, setQrVisible] = useState(false)
+  const [disconnectTarget, setDisconnectTarget] = useState<string | null>(null)
 
   const [sendMode, setSendMode] = useState<'broadcast' | 'to-one'>('broadcast')
   const [toUser, setToUser] = useState('')
@@ -30,6 +38,8 @@ export default function ChannelsPage() {
       toast('账号已断开', 'success')
     } catch {
       toast('断开失败', 'error')
+    } finally {
+      setDisconnectTarget(null)
     }
   }
 
@@ -93,68 +103,66 @@ export default function ChannelsPage() {
           <h1>通道</h1>
           <p>微信账号与消息通道管理</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setQrVisible(true)}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Button onClick={() => setQrVisible(true)}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
           </svg>
           扫码绑定
-        </button>
+        </Button>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div className="dashboard-content">
         {/* 微信账号 */}
         <div className="card">
-          <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>
-            微信账号
+          <div className="card-header">
+            <h2 className="card-title">微信账号</h2>
           </div>
-          {accounts.items.length === 0 ? (
-            <div className="empty-state">
-              暂无已绑定的微信账号
+          {accounts.loading ? (
+            <div className="list-section">
+              <ListItemSkeleton />
+              <ListItemSkeleton />
             </div>
+          ) : accounts.items.length === 0 ? (
+            <EmptyState
+              icon={
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
+                </svg>
+              }
+              title="暂无绑定账号"
+              description="扫描二维码绑定微信账号"
+              action={
+                <Button onClick={() => setQrVisible(true)}>
+                  扫码绑定
+                </Button>
+              }
+            />
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div className="list-section">
               {accounts.items.map((a) => (
-                <div key={a.account_id} style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '14px 16px',
-                  background: 'var(--bg-primary)',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--border)',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{
-                      width: '36px',
-                      height: '36px',
-                      borderRadius: '50%',
-                      background: 'linear-gradient(135deg, #34d399, #22c55e)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '14px',
-                      color: 'white',
-                      fontWeight: 700,
-                    }}>
+                <div key={a.account_id} className="list-item">
+                  <div className="list-item-content">
+                    <div className="avatar avatar-green">
                       {a.user_id.charAt(0).toUpperCase()}
                     </div>
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: '14px' }}>{a.user_id}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    <div className="list-item-info">
+                      <div className="list-item-title">{a.user_id}</div>
+                      <div className="list-item-subtitle">
                         登录于 {new Date(a.login_at * 1000).toLocaleString('zh-CN')}
                       </div>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span className={`tag ${a.status === 'online' ? 'tag-success' : 'tag-danger'}`}>
+                  <div className="list-item-actions">
+                    <Tag variant={a.status === 'online' ? 'success' : 'danger'}>
                       {a.status === 'online' ? '在线' : '离线'}
-                    </span>
-                    <button
-                      className="btn btn-danger btn-sm"
-                      onClick={() => handleDisconnect(a.account_id)}
+                    </Tag>
+                    <Button
+                      variant="ghost-danger"
+                      size="sm"
+                      onClick={() => setDisconnectTarget(a.account_id)}
                     >
                       断开
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ))}
@@ -164,63 +172,50 @@ export default function ChannelsPage() {
 
         {/* 消息发送 */}
         <div className="card">
-          <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>
-            消息发送
+          <div className="card-header">
+            <h2 className="card-title">消息发送</h2>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-              <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>发送方式</label>
-              <select
-                className="select"
-                style={{ width: 'auto', minWidth: '140px' }}
+          <div className="channels-send-form">
+            <div className="form-grid" style={{ gridTemplateColumns: 'auto 1fr' }}>
+              <Select
                 value={sendMode}
                 onChange={(e) => setSendMode(e.target.value as typeof sendMode)}
+                label="发送方式"
               >
                 <option value="broadcast">广播 (全部账号)</option>
                 <option value="to-one">指定账号</option>
-              </select>
+              </Select>
               {sendMode === 'to-one' && (
-                <select
-                  className="select"
-                  style={{ width: 'auto', minWidth: '160px' }}
+                <Select
                   value={toUser}
                   onChange={(e) => setToUser(e.target.value)}
+                  label="接收方"
                 >
                   <option value="">选择账号</option>
                   {accounts.items.map((a) => (
                     <option key={a.account_id} value={a.user_id}>{a.user_id}</option>
                   ))}
-                </select>
+                </Select>
               )}
             </div>
 
-            <textarea
-              className="input"
+            <Textarea
               placeholder="输入消息内容..."
               value={content}
               onChange={(e) => setContent(e.target.value)}
               style={{ minHeight: '80px' }}
             />
 
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-              <button
-                className="btn btn-primary"
+            <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-start' }}>
+              <Button
                 onClick={handleSend}
-                disabled={sending || !content.trim() || (sendMode === 'to-one' && !toUser)}
+                loading={sending}
+                disabled={!content.trim() || (sendMode === 'to-one' && !toUser)}
               >
-                {sending ? <span className="spinner spinner-sm" /> : null}
-                {sending ? '发送中...' : '发送'}
-              </button>
+                发送
+              </Button>
               {sendResult && (
-                <div style={{
-                  padding: '8px 14px',
-                  borderRadius: 'var(--radius-md)',
-                  background: 'var(--bg-primary)',
-                  border: '1px solid var(--border)',
-                  fontSize: '13px',
-                  color: 'var(--text-secondary)',
-                  flex: 1,
-                }}>
+                <div className="code-block" style={{ flex: 1 }}>
                   {sendResult}
                 </div>
               )}
@@ -230,52 +225,45 @@ export default function ChannelsPage() {
 
         {/* 测试消息 */}
         <div className="card">
-          <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>
-            测试消息
+          <div className="card-header">
+            <h2 className="card-title">测试消息</h2>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-              <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>接收方</label>
-              <select
-                className="select"
-                style={{ width: 'auto', minWidth: '160px' }}
-                value={testToUser}
-                onChange={(e) => setTestToUser(e.target.value)}
-              >
-                <option value="">仅测试路由（不发送）</option>
-                {accounts.items.map((a) => (
-                  <option key={a.account_id} value={a.user_id}>{a.user_id}</option>
-                ))}
-              </select>
+          <div className="channels-send-form">
+            <Select
+              value={testToUser}
+              onChange={(e) => setTestToUser(e.target.value)}
+              label="接收方"
+              hint="留空则仅测试路由，不实际发送"
+            >
+              <option value="">仅测试路由（不发送）</option>
+              {accounts.items.map((a) => (
+                <option key={a.account_id} value={a.user_id}>{a.user_id}</option>
+              ))}
+            </Select>
+
+            <div className="input-group">
+              <label className="input-label" htmlFor="test-message">测试消息</label>
+              <input
+                id="test-message"
+                className="input"
+                placeholder="输入测试消息..."
+                value={testMsg}
+                onChange={(e) => setTestMsg(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleTest() }}
+              />
             </div>
-            <input
-              className="input"
-              placeholder="输入测试消息..."
-              value={testMsg}
-              onChange={(e) => setTestMsg(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleTest() }}
-            />
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-              <button
-                className="btn btn-secondary"
+
+            <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-start' }}>
+              <Button
+                variant="secondary"
                 onClick={handleTest}
-                disabled={testLoading || !testMsg.trim()}
+                loading={testLoading}
+                disabled={!testMsg.trim()}
               >
-                {testLoading ? <span className="spinner spinner-sm" /> : null}
-                {testLoading ? '发送中...' : '发送并等待回复'}
-              </button>
+                发送并等待回复
+              </Button>
               {testReply && (
-                <div style={{
-                  padding: '10px 14px',
-                  borderRadius: 'var(--radius-md)',
-                  background: 'var(--bg-primary)',
-                  border: '1px solid var(--border)',
-                  fontSize: '13px',
-                  color: 'var(--text-secondary)',
-                  flex: 1,
-                  lineHeight: 1.5,
-                  whiteSpace: 'pre-wrap',
-                }}>
+                <div className="code-block" style={{ flex: 1 }}>
                   {testReply}
                 </div>
               )}
@@ -285,6 +273,15 @@ export default function ChannelsPage() {
       </div>
 
       <QrModal visible={qrVisible} onClose={() => { setQrVisible(false); accounts.fetch() }} />
+
+      <ConfirmDialog
+        open={!!disconnectTarget}
+        onClose={() => setDisconnectTarget(null)}
+        onConfirm={() => disconnectTarget && handleDisconnect(disconnectTarget)}
+        title="断开账号"
+        description="确定要断开此微信账号吗？断开后将无法接收消息。"
+        confirmLabel="断开"
+      />
     </div>
   )
 }

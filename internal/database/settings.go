@@ -29,7 +29,7 @@ var envMapping = map[string]string{
 	"api.jwt_secret":     "CLAWBOT_JWT_SECRET",
 	"server.host":        "CLAWBOT_HOST",
 	"server.port":        "CLAWBOT_PORT",
-	"clawbot.base_url":   "CLAWBOT_ILINK_BASE_URL",
+	"clawbot.base_url":   "WEIXIN_BASE_URL",
 }
 
 // GetSetting 获取配置，优先环境变量

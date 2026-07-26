@@ -1,0 +1,42 @@
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/main.go:48 msg="database initialized" cmp=main path=data/clawbot.db
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/main.go:52 msg="config loaded" cmp=main
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/main.go:78 msg="router initialized" cmp=main
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/main.go:107 msg="adapter factory initialized" cmp=main backends=1 connections=0
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/main.go:112 msg="relay manager initialized" cmp=main
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/main.go:125 msg="ClawBot connector initialized" cmp=main
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/api/pipeline.go:55 msg="message pipeline started" cmp=main cmp=pipeline
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/ilink/server.go:63 msg="iLink API routes registered" cmp=ilink
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/main.go:177 msg="API server started" cmp=main addr=0.0.0.0:8080
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=POST path=/auth/login latency=232.542µs ip=::1
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=GET path=/manage latency=6.961625ms ip=::1
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=GET path=/assets/index-G1UBncY5.js latency=3.637208ms ip=::1
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=GET path=/assets/LoginPage-BAd5mOCf.js latency=289.166µs ip=::1
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=GET path=/web/favicon.svg latency=1.12625ms ip=::1
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=GET path=/sw.js latency=1.086417ms ip=::1
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=GET path=/workbox-9c191d2f.js latency=370.542µs ip=::1
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=GET path=/props latency=734.625µs ip=127.0.0.1
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=GET path=/models latency=867.833µs ip=127.0.0.1
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=GET path=/props latency=1.19025ms ip=127.0.0.1
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=GET path=/models latency=1.300583ms ip=127.0.0.1
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=GET path=/models latency=383.291µs ip=127.0.0.1
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=GET path=/props latency=253µs ip=127.0.0.1
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=GET path=/props latency=576.041µs ip=127.0.0.1
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=GET path=/models latency=637.958µs ip=127.0.0.1
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=GET path=/models latency=150.292µs ip=127.0.0.1
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=GET path=/props latency=82.708µs ip=127.0.0.1
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=GET path=/models latency=129.625µs ip=127.0.0.1
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=GET path=/props latency=61.458µs ip=127.0.0.1
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=GET path=/props latency=211.917µs ip=127.0.0.1
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=GET path=/models latency=274.709µs ip=127.0.0.1
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=GET path=/props latency=386.709µs ip=127.0.0.1
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=GET path=/models latency=424.834µs ip=127.0.0.1
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=GET path=/models latency=4.201209ms ip=127.0.0.1
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=GET path=/props latency=4.19775ms ip=127.0.0.1
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=GET path=/v1/models latency=2.96425ms ip=127.0.0.1
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=GET path=/v1/models latency=1.077083ms ip=127.0.0.1
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=GET path=/props latency=379.708µs ip=127.0.0.1
+level=INFO source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:147 msg="api request" cmp=main cmp=api status=200 method=GET path=/models latency=402.417µs ip=127.0.0.1
+level=WARN source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:145 msg="api request" cmp=main cmp=api status=401 method=GET path=/api/v1/auth/token latency=13.555625ms ip=::1
+level=WARN source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:145 msg="api request" cmp=main cmp=api status=401 method=GET path=/api/v1/auth/token latency=202.5µs ip=::1
+level=WARN source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:145 msg="api request" cmp=main cmp=api status=401 method=GET path=/api/v1/auth/token latency=2.696166ms ip=::1
+level=WARN source=/Users/unique/Downloads/clawbot-gateway/internal/log/log.go:145 msg="api request" cmp=main cmp=api status=401 method=GET path=/api/v1/auth/token latency=1.779333ms ip=::1

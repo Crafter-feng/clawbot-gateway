@@ -1,8 +1,14 @@
 import { useEffect, useState, useCallback } from 'react'
 import { api } from '../api/client'
 import { useToast } from '../components/Toast'
+import Button from '../components/ui/Button'
+import Input from '../components/ui/Input'
+import Select from '../components/ui/Select'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
+import EmptyState from '../components/ui/EmptyState'
+import { ListItemSkeleton } from '../components/ui/Skeleton'
 
-interface 通知Token {
+interface Token {
   id: string
   account_id: string
   name: string
@@ -19,7 +25,7 @@ interface Account {
 
 export default function NotificationPage() {
   const { toast } = useToast()
-  const [tokens, setTokens] = useState<通知Token[]>([])
+  const [tokens, setTokens] = useState<Token[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
@@ -28,6 +34,7 @@ export default function NotificationPage() {
   const [creating, setCreating] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [showToken, setShowToken] = useState<{ id: string; token: string } | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
   useEffect(() => {
     fetchData()
@@ -37,7 +44,7 @@ export default function NotificationPage() {
     setLoading(true)
     try {
       const [tokensRes, accountsRes] = await Promise.all([
-        api.get<{ tokens: 通知Token[] }>('/api/v1/notify/tokens'),
+        api.get<{ tokens: Token[] }>('/api/v1/notify/tokens'),
         api.get<{ accounts: Account[] }>('/api/v1/accounts'),
       ])
       setTokens(tokensRes.tokens || [])
@@ -71,13 +78,14 @@ export default function NotificationPage() {
   }, [newName, newAccountId, toast])
 
   const handleDelete = useCallback(async (id: string) => {
-    if (!confirm('确定删除此 Token？')) return
     try {
       await api.del(`/api/v1/notify/tokens/${id}`)
       toast('Token 已删除', 'success')
       fetchData()
     } catch {
       toast('删除失败', 'error')
+    } finally {
+      setDeleteTarget(null)
     }
   }, [toast])
 
@@ -99,50 +107,72 @@ export default function NotificationPage() {
 
   return (
     <div>
-      <div className="page-header">
-        <h1>通知</h1>
-        <p>配置 Token，供外部系统调用推送消息到微信</p>
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h1>通知</h1>
+          <p>配置 Token，供外部系统调用推送消息到微信</p>
+        </div>
+        <Button onClick={() => setShowCreate(true)}>
+          创建 Token
+        </Button>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-
+      <div className="dashboard-content">
         {/* Token 列表 */}
         <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <div style={{ fontSize: '15px', fontWeight: 600 }}>Token 列表</div>
-            <button className="btn btn-primary btn-sm" onClick={() => setShowCreate(true)}>
-              创建 Token
-            </button>
+          <div className="card-header">
+            <h2 className="card-title">Token 列表</h2>
           </div>
 
           {loading ? (
-            <div className="empty-state">加载中...</div>
+            <div className="list-section">
+              <ListItemSkeleton />
+              <ListItemSkeleton />
+            </div>
           ) : tokens.length === 0 ? (
-            <div className="empty-state">暂无 Token，点击"创建 Token"开始</div>
+            <EmptyState
+              icon={
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
+                </svg>
+              }
+              title="暂无 Token"
+              description="创建 Token 以允许外部系统发送消息"
+              action={
+                <Button onClick={() => setShowCreate(true)}>
+                  创建 Token
+                </Button>
+              }
+            />
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div className="list-section">
               {tokens.map((t) => (
-                <div key={t.id} style={{
-                  padding: '16px',
-                  background: 'var(--bg-primary)',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--border)',
-                }}>
+                <div key={t.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 'var(--space-3)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: '14px' }}>{t.name}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                    <div className="list-item-info">
+                      <div className="list-item-title">{t.name}</div>
+                      <div className="list-item-subtitle">
                         绑定: {getAccountName(t.account_id)}
                       </div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                      <div className="list-item-subtitle">
                         创建: {new Date(t.created_at).toLocaleString('zh-CN')}
                       </div>
                     </div>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button className="btn btn-secondary btn-sm" onClick={() => handleCopy(t.token, t.id)}>
+                    <div className="list-item-actions">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleCopy(t.token, t.id)}
+                      >
                         {copiedId === t.id ? '已复制' : '复制 Token'}
-                      </button>
-                      <button className="btn btn-danger btn-sm" onClick={() => handleDelete(t.id)}>删除</button>
+                      </Button>
+                      <Button
+                        variant="ghost-danger"
+                        size="sm"
+                        onClick={() => setDeleteTarget(t.id)}
+                      >
+                        删除
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -154,35 +184,36 @@ export default function NotificationPage() {
         {/* 创建 Token 表单 */}
         {showCreate && (
           <div className="card">
-            <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>创建 Token</div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>名称</label>
-                <input className="input" placeholder="例如：Hermes 通知" value={newName} onChange={(e) => setNewName(e.target.value)} />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>绑定账号</label>
-                <select className="select" value={newAccountId} onChange={(e) => setNewAccountId(e.target.value)}>
-                  <option value="">全部账号</option>
-                  {accounts.map((a) => (
-                    <option key={a.account_id} value={a.account_id}>
-                      {a.account_name || a.user_id} ({a.account_id})
-                    </option>
-                  ))}
-                </select>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                  选择要绑定的微信账号，留空则可发送到任意账号
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button className="btn btn-primary" onClick={handleCreate} disabled={creating || !newName.trim()}>
-                  {creating ? <span className="spinner spinner-sm" /> : null}
+            <div className="card-header">
+              <h2 className="card-title">创建 Token</h2>
+            </div>
+            <div className="manage-form">
+              <Input
+                label="名称"
+                placeholder="例如：Hermes 通知"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+              />
+              <Select
+                label="绑定账号"
+                value={newAccountId}
+                onChange={(e) => setNewAccountId(e.target.value)}
+                hint="选择要绑定的微信账号，留空则可发送到任意账号"
+              >
+                <option value="">全部账号</option>
+                {accounts.map((a) => (
+                  <option key={a.account_id} value={a.account_id}>
+                    {a.account_name || a.user_id} ({a.account_id})
+                  </option>
+                ))}
+              </Select>
+              <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                <Button onClick={handleCreate} loading={creating} disabled={!newName.trim()}>
                   创建
-                </button>
-                <button className="btn btn-secondary" onClick={() => setShowCreate(false)}>取消</button>
+                </Button>
+                <Button variant="ghost" onClick={() => setShowCreate(false)}>
+                  取消
+                </Button>
               </div>
             </div>
           </div>
@@ -191,60 +222,49 @@ export default function NotificationPage() {
         {/* 新创建的 Token 显示 */}
         {showToken && (
           <div className="card" style={{ border: '1px solid var(--accent)' }}>
-            <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px', color: 'var(--accent)' }}>
-              Token 创建成功
+            <div className="card-header">
+              <h2 className="card-title" style={{ color: 'var(--accent)' }}>Token 创建成功</h2>
             </div>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+            <p className="card-description">
               请复制并保存 Token，关闭后将无法再次查看
             </p>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
-              <code style={{
-                flex: 1,
-                padding: '12px',
-                background: 'var(--bg-secondary)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: '13px',
-                fontFamily: 'monospace',
-                wordBreak: 'break-all',
-              }}>
+            <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', marginTop: 'var(--space-4)' }}>
+              <code className="code-block" style={{ flex: 1 }}>
                 {showToken.token}
               </code>
-              <button className="btn btn-primary btn-sm" onClick={() => handleCopy(showToken.token, 'new')}>
+              <Button
+                size="sm"
+                onClick={() => handleCopy(showToken.token, 'new')}
+              >
                 {copiedId === 'new' ? '已复制' : '复制'}
-              </button>
+              </Button>
             </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button className="btn btn-secondary btn-sm" onClick={() => setShowToken(null)}>关闭</button>
-            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              style={{ marginTop: 'var(--space-3)' }}
+              onClick={() => setShowToken(null)}
+            >
+              关闭
+            </Button>
           </div>
         )}
 
         {/* 使用说明 */}
         <div className="card">
-          <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px' }}>使用说明</div>
-          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-            <p style={{ margin: '0 0 8px 0' }}>1. 创建 Token，选择要绑定的微信账号</p>
-            <p style={{ margin: '0 0 8px 0' }}>2. 复制 Token 并保存</p>
-            <p style={{ margin: '0 0 8px 0' }}>3. 外部系统使用 Token 调用 API 发送消息</p>
-            <p style={{ margin: 0 }}>4. Token 仅在创建时显示，请妥善保管</p>
+          <div className="card-header">
+            <h2 className="card-title">使用说明</h2>
+          </div>
+          <div className="notification-guide">
+            <p>1. 创建 Token，选择要绑定的微信账号</p>
+            <p>2. 复制 Token 并保存</p>
+            <p>3. 外部系统使用 Token 调用 API 发送消息</p>
+            <p>4. Token 仅在创建时显示，请妥善保管</p>
           </div>
 
-          <div style={{
-            marginTop: '16px',
-            padding: '12px',
-            background: 'var(--bg-primary)',
-            borderRadius: 'var(--radius-md)',
-            border: '1px solid var(--border)',
-          }}>
-            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>调用示例</div>
-            <pre style={{
-              fontSize: '11px',
-              fontFamily: 'monospace',
-              padding: '8px',
-              background: 'var(--bg-secondary)',
-              borderRadius: 'var(--radius-sm)',
-              overflow: 'auto',
-            }}>{`curl -X POST http://localhost:8080/api/v1/notify/send \\
+          <div className="manage-config-preview" style={{ marginTop: 'var(--space-4)' }}>
+            <div className="manage-config-title">调用示例</div>
+            <pre className="code-block">{`curl -X POST http://localhost:8080/api/v1/notify/send \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer <token>" \\
   -d '{
@@ -254,6 +274,15 @@ export default function NotificationPage() {
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && handleDelete(deleteTarget)}
+        title="删除 Token"
+        description="确定要删除此 Token 吗？删除后外部系统将无法使用此 Token 发送消息。"
+        confirmLabel="删除"
+      />
     </div>
   )
 }
