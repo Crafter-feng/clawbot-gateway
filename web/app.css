@@ -102,6 +102,7 @@
   --bg-primary: var(--n-50);
   --bg-secondary: #ffffff;
   --bg-card: #ffffff;
+  --bg-card-hover: var(--n-100);
   --bg-elevated: #ffffff;
   --text-primary: var(--n-900);
   --text-secondary: var(--n-500);
@@ -267,7 +268,7 @@ a {
 
 .btn-secondary:hover:not(:disabled) {
   background: var(--bg-card-hover);
-  border-color: var(--n-600);
+  border-color: var(--n-400);
 }
 
 .btn-danger {
