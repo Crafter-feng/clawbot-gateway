@@ -19,24 +19,27 @@ func (s *Server) handleProxy(c *gin.Context) {
 		return
 	}
 
+	// 更新最后活跃时间（用于判断连接状态）
+	s.registry.UpdateLastActive(accountID)
+
 	// 2. 获取虚拟 Bot 的配置
 	vbot := s.registry.Get(accountID)
 	if vbot == nil {
-		c.JSON(400, gin.H{"ret": -1, "errmsg": "bot not registered"})
+		c.JSON(500, gin.H{"ret": -1, "errmsg": "bot not found"})
 		return
 	}
 
 	// 3. 获取真实微信账号的凭证（用于转发到真实 iLink API）
 	realBotToken := s.bot.GetAccountTokenByVirtualID(accountID)
 	if realBotToken == "" {
-		c.JSON(500, gin.H{"ret": -1, "errmsg": "no real bot credentials found"})
+		c.JSON(500, gin.H{"ret": -1, "errmsg": "no real bot token"})
 		return
 	}
 
 	// 4. 读取原始请求体
 	body, err := io.ReadAll(io.LimitReader(c.Request.Body, 1<<20))
 	if err != nil {
-		c.JSON(500, gin.H{"ret": -1, "errmsg": "failed to read request body"})
+		c.JSON(500, gin.H{"ret": -1, "errmsg": "read body error"})
 		return
 	}
 
@@ -44,8 +47,7 @@ func (s *Server) handleProxy(c *gin.Context) {
 	endpoint := c.FullPath()
 	resp, err := s.forwardToILink(endpoint, body, vbot.BaseURL, realBotToken)
 	if err != nil {
-		s.log.Warn("proxy forward failed", "error", err)
-		c.JSON(502, gin.H{"ret": -1, "errmsg": err.Error()})
+		c.JSON(502, gin.H{"ret": -1, "errmsg": "forward error: " + err.Error()})
 		return
 	}
 	defer resp.Body.Close()

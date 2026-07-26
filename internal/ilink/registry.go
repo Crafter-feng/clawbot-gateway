@@ -37,7 +37,8 @@ func NewClientRegistry() *ClientRegistry {
 }
 
 // Register 注册虚拟 Bot
-func (r *ClientRegistry) Register(accountID, userID, baseURL string) *VirtualBot {
+// token 参数：如果非空则使用该 token（从数据库恢复），否则生成随机 token
+func (r *ClientRegistry) Register(accountID, userID, baseURL, token string) *VirtualBot {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -45,12 +46,14 @@ func (r *ClientRegistry) Register(accountID, userID, baseURL string) *VirtualBot
 		return existing
 	}
 
-	// 生成随机 token
-	tokenBytes := make([]byte, 32)
-	if _, err := rand.Read(tokenBytes); err != nil {
-		tokenBytes = []byte(accountID) // fallback: 使用 accountID 作为 token
+	// 使用已有的 token 或生成新的随机 token
+	if token == "" {
+		tokenBytes := make([]byte, 32)
+		if _, err := rand.Read(tokenBytes); err != nil {
+			tokenBytes = []byte(accountID) // fallback: 使用 accountID 作为 token
+		}
+		token = hex.EncodeToString(tokenBytes)
 	}
-	token := hex.EncodeToString(tokenBytes)
 
 	bot := &VirtualBot{
 		AccountID:  accountID,
@@ -117,12 +120,32 @@ func (r *ClientRegistry) UpdateLastActive(accountID string) {
 	}
 }
 
+// IsConnected 判断虚拟 Bot 是否在最近 timeout 时间内活跃过
+// 外部客户端通过长轮询 getupdates，如果在 timeout 内有请求则认为已连接
+func (r *ClientRegistry) IsConnected(accountID string, timeout time.Duration) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if bot, ok := r.bots[accountID]; ok {
+		return !bot.LastActive.IsZero() && time.Since(bot.LastActive) < timeout
+	}
+	return false
+}
+
 // GetStats 获取统计信息
 func (r *ClientRegistry) GetStats() map[string]interface{} {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
+	now := time.Now()
+	connected := 0
+	for _, bot := range r.bots {
+		if !bot.LastActive.IsZero() && now.Sub(bot.LastActive) < 2*time.Minute {
+			connected++
+		}
+	}
+
 	return map[string]interface{}{
 		"total_bots": len(r.bots),
+		"connected":  connected,
 	}
 }

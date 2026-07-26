@@ -99,14 +99,17 @@ func (s *APIServer) handleRegisterBackend(c *gin.Context) {
 		// 这样 sendmessage 等请求才能正确转发到腾讯服务器
 		baseURL := "https://ilinkai.weixin.qq.com"
 
+		// 先注册到 ClientRegistry（生成随机 token），再保存到数据库
+		// 这样重启后 token 保持不变
+		vbot := s.clientReg.Register(accountID, userID, baseURL, "")
 		vb := database.VirtualBot{
 			ID:        req.ID,
 			AccountID: accountID,
 			UserID:    userID,
 			BaseURL:   baseURL,
+			Token:     vbot.Token,
 		}
 		s.db.SaveVirtualBot(vb)
-		s.clientReg.Register(accountID, userID, baseURL)
 	}
 
 	s.reloadAdapters()
@@ -187,6 +190,13 @@ func (s *APIServer) handleTestBackend(c *gin.Context) {
 
 	healthy := adapterInstance.HealthCheck(c.Request.Context())
 	result := gin.H{"backend_id": id, "healthy": healthy}
+
+	// ilink_proxy 是连接适配器，不支持消息处理，只检查健康状态
+	if b.Type == "ilink_proxy" {
+		c.JSON(200, result)
+		return
+	}
+
 	if healthy {
 		resp, err := adapterInstance.Handle(c.Request.Context(), &adapter.ChatRequest{
 			Message: "ping",

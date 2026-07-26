@@ -75,7 +75,8 @@ func (db *DB) migrate() error {
 			id TEXT PRIMARY KEY,
 			account_id TEXT NOT NULL UNIQUE,
 			user_id TEXT NOT NULL,
-			base_url TEXT NOT NULL
+			base_url TEXT NOT NULL,
+			token TEXT NOT NULL DEFAULT ''
 		)`,
 		`CREATE TABLE IF NOT EXISTS user_sessions (
 			user_id TEXT PRIMARY KEY,
@@ -110,11 +111,15 @@ func (db *DB) migrate() error {
 			updated_at TEXT DEFAULT (datetime('now'))
 		)`,
 	}
-
 	for _, q := range queries {
 		if _, err := db.conn.Exec(q); err != nil {
 			return err
 		}
+	}
+
+	// 迁移：添加 token 列到 virtual_bots（兼容旧数据库）
+	if _, err := db.conn.Exec("ALTER TABLE virtual_bots ADD COLUMN token TEXT NOT NULL DEFAULT ''"); err != nil {
+		// 列已存在时忽略错误
 	}
 
 	return nil

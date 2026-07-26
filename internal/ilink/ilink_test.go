@@ -27,7 +27,7 @@ func TestNewClientRegistry(t *testing.T) {
 func TestClientRegistryRegister(t *testing.T) {
 	reg := NewClientRegistry()
 
-	vbot := reg.Register("gw_test", "gw_test@im.wechat", "https://ilinkai.weixin.qq.com")
+	vbot := reg.Register("gw_test", "gw_test@im.wechat", "https://ilinkai.weixin.qq.com", "")
 	if vbot == nil {
 		t.Fatal("Register returned nil")
 	}
@@ -44,7 +44,7 @@ func TestClientRegistryRegister(t *testing.T) {
 
 func TestClientRegistryGet(t *testing.T) {
 	reg := NewClientRegistry()
-	reg.Register("gw_test", "gw_test@im.wechat", "https://ilinkai.weixin.qq.com")
+	reg.Register("gw_test", "gw_test@im.wechat", "https://ilinkai.weixin.qq.com", "")
 
 	vbot := reg.Get("gw_test")
 	if vbot == nil {
@@ -63,7 +63,7 @@ func TestClientRegistryGet(t *testing.T) {
 
 func TestClientRegistryGetByToken(t *testing.T) {
 	reg := NewClientRegistry()
-	vbot := reg.Register("gw_test", "gw_test@im.wechat", "https://ilinkai.weixin.qq.com")
+	vbot := reg.Register("gw_test", "gw_test@im.wechat", "https://ilinkai.weixin.qq.com", "")
 
 	found := reg.GetByToken(vbot.Token)
 	if found == nil {
@@ -88,8 +88,8 @@ func TestClientRegistryList(t *testing.T) {
 		t.Errorf("List want 0, got %d", len(bots))
 	}
 
-	reg.Register("gw_a", "gw_a@im.wechat", "https://a.com")
-	reg.Register("gw_b", "gw_b@im.wechat", "https://b.com")
+	reg.Register("gw_a", "gw_a@im.wechat", "https://a.com", "")
+	reg.Register("gw_b", "gw_b@im.wechat", "https://b.com", "")
 
 	bots = reg.List()
 	if len(bots) != 2 {
@@ -103,7 +103,7 @@ func TestClientRegistryCount(t *testing.T) {
 		t.Errorf("Count want 0, got %d", reg.Count())
 	}
 
-	reg.Register("gw_a", "gw_a@im.wechat", "https://a.com")
+	reg.Register("gw_a", "gw_a@im.wechat", "https://a.com", "")
 	if reg.Count() != 1 {
 		t.Errorf("Count want 1, got %d", reg.Count())
 	}
@@ -111,7 +111,7 @@ func TestClientRegistryCount(t *testing.T) {
 
 func TestClientRegistryUnregister(t *testing.T) {
 	reg := NewClientRegistry()
-	reg.Register("gw_test", "gw_test@im.wechat", "https://ilinkai.weixin.qq.com")
+	reg.Register("gw_test", "gw_test@im.wechat", "https://ilinkai.weixin.qq.com", "")
 	if reg.Count() != 1 {
 		t.Fatalf("Count want 1, got %d", reg.Count())
 	}
@@ -127,7 +127,7 @@ func TestClientRegistryUnregister(t *testing.T) {
 
 func TestClientRegistryUpdateLastActive(t *testing.T) {
 	reg := NewClientRegistry()
-	vbot := reg.Register("gw_test", "gw_test@im.wechat", "https://ilinkai.weixin.qq.com")
+	vbot := reg.Register("gw_test", "gw_test@im.wechat", "https://ilinkai.weixin.qq.com", "")
 
 	original := vbot.LastActive
 	time.Sleep(time.Millisecond)
@@ -140,8 +140,8 @@ func TestClientRegistryUpdateLastActive(t *testing.T) {
 
 func TestClientRegistryGetStats(t *testing.T) {
 	reg := NewClientRegistry()
-	reg.Register("gw_a", "gw_a@im.wechat", "https://a.com")
-	reg.Register("gw_b", "gw_b@im.wechat", "https://b.com")
+	reg.Register("gw_a", "gw_a@im.wechat", "https://a.com", "")
+	reg.Register("gw_b", "gw_b@im.wechat", "https://b.com", "")
 
 	stats := reg.GetStats()
 	if stats == nil {
@@ -256,7 +256,7 @@ func TestConcurrentRegistryAccess(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			accountID := "gw_test_" + string(rune('a'+id))
-			reg.Register(accountID, accountID+"@im.wechat", "https://example.com")
+			reg.Register(accountID, accountID+"@im.wechat", "https://example.com", "")
 		}(i)
 	}
 	wg.Wait()

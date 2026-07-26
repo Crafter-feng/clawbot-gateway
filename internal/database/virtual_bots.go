@@ -5,10 +5,11 @@ type VirtualBot struct {
 	AccountID string `json:"account_id"`
 	UserID    string `json:"user_id"`
 	BaseURL   string `json:"base_url"`
+	Token     string `json:"token"`
 }
 
 func (db *DB) ListVirtualBots() ([]VirtualBot, error) {
-	rows, err := db.conn.Query("SELECT id, account_id, user_id, base_url FROM virtual_bots")
+	rows, err := db.conn.Query("SELECT id, account_id, user_id, base_url, token FROM virtual_bots")
 	if err != nil {
 		return nil, err
 	}
@@ -17,7 +18,7 @@ func (db *DB) ListVirtualBots() ([]VirtualBot, error) {
 	result := make([]VirtualBot, 0)
 	for rows.Next() {
 		var vb VirtualBot
-		if err := rows.Scan(&vb.ID, &vb.AccountID, &vb.UserID, &vb.BaseURL); err != nil {
+		if err := rows.Scan(&vb.ID, &vb.AccountID, &vb.UserID, &vb.BaseURL, &vb.Token); err != nil {
 			continue
 		}
 		result = append(result, vb)
@@ -27,8 +28,8 @@ func (db *DB) ListVirtualBots() ([]VirtualBot, error) {
 
 func (db *DB) GetVirtualBot(id string) (*VirtualBot, error) {
 	var vb VirtualBot
-	err := db.conn.QueryRow("SELECT id, account_id, user_id, base_url FROM virtual_bots WHERE id = ?", id).
-		Scan(&vb.ID, &vb.AccountID, &vb.UserID, &vb.BaseURL)
+	err := db.conn.QueryRow("SELECT id, account_id, user_id, base_url, token FROM virtual_bots WHERE id = ?", id).
+		Scan(&vb.ID, &vb.AccountID, &vb.UserID, &vb.BaseURL, &vb.Token)
 	if err != nil {
 		return nil, err
 	}
@@ -37,8 +38,8 @@ func (db *DB) GetVirtualBot(id string) (*VirtualBot, error) {
 
 func (db *DB) GetVirtualBotByAccountID(accountID string) (*VirtualBot, error) {
 	var vb VirtualBot
-	err := db.conn.QueryRow("SELECT id, account_id, user_id, base_url FROM virtual_bots WHERE account_id = ?", accountID).
-		Scan(&vb.ID, &vb.AccountID, &vb.UserID, &vb.BaseURL)
+	err := db.conn.QueryRow("SELECT id, account_id, user_id, base_url, token FROM virtual_bots WHERE account_id = ?", accountID).
+		Scan(&vb.ID, &vb.AccountID, &vb.UserID, &vb.BaseURL, &vb.Token)
 	if err != nil {
 		return nil, err
 	}
@@ -47,11 +48,12 @@ func (db *DB) GetVirtualBotByAccountID(accountID string) (*VirtualBot, error) {
 
 func (db *DB) SaveVirtualBot(vb VirtualBot) error {
 	_, err := db.conn.Exec(
-		"INSERT OR REPLACE INTO virtual_bots (id, account_id, user_id, base_url) VALUES (?, ?, ?, ?)",
-		vb.ID, vb.AccountID, vb.UserID, vb.BaseURL,
+		"INSERT OR REPLACE INTO virtual_bots (id, account_id, user_id, base_url, token) VALUES (?, ?, ?, ?, ?)",
+		vb.ID, vb.AccountID, vb.UserID, vb.BaseURL, vb.Token,
 	)
 	return err
 }
+
 
 func (db *DB) DeleteVirtualBot(id string) error {
 	_, err := db.conn.Exec("DELETE FROM virtual_bots WHERE id = ?", id)

@@ -129,9 +129,14 @@ func main() {
 	// 8. 初始化 ClientRegistry（虚拟 Bot 管理）
 	clientRegistry := ilink.NewClientRegistry()
 
-	// 8a. 注册虚拟 Bot
+	// 8a. 注册虚拟 Bot（使用数据库中的 token，确保重启后 token 不变）
 	for _, vb := range vbots {
-		clientRegistry.Register(vb.AccountID, vb.UserID, vb.BaseURL)
+		vbot := clientRegistry.Register(vb.AccountID, vb.UserID, vb.BaseURL, vb.Token)
+		// 如果 token 为空（旧数据库迁移），将新生成的 token 保存回数据库
+		if vb.Token == "" && vbot.Token != "" {
+			vb.Token = vbot.Token
+			db.SaveVirtualBot(vb)
+		}
 		log.Info("registered virtual bot", "id", vb.ID, "account_id", vb.AccountID)
 	}
 

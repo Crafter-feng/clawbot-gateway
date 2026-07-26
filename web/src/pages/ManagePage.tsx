@@ -1,3 +1,4 @@
+import { api } from '../api/client'
 import { useEffect, useState, useCallback } from 'react'
 import { useBackendsStore } from '../stores/backends'
 import { useRoutesStore, type RouteRule } from '../stores/routes'
@@ -49,6 +50,9 @@ export default function ManagePage() {
 
   /* Info modal */
   const [infoModal, setInfoModal] = useState<{ open: boolean; backend: { id: string; name: string; type: string; healthy: boolean } | null }>({ open: false, backend: null })
+  const [connectionToken, setConnectionToken] = useState<string>('')
+  const [connectionConnected, setConnectionConnected] = useState(false)
+  const [connectionLastActive, setConnectionLastActive] = useState('')
   const [testResult, setTestResult] = useState<{ loading: boolean; result?: { healthy: boolean; reply?: string; error?: string } }>({ loading: false })
 
   /* Delete confirm */
@@ -146,9 +150,23 @@ export default function ManagePage() {
     }
   }, [editModal, editName, editType, editApiKey, editBaseUrl, editModel, backends, toast])
 
-  const handleOpenInfo = useCallback((b: { id: string; name: string; type: string; healthy: boolean }) => {
+  const handleOpenInfo = useCallback(async (b: { id: string; name: string; type: string; healthy: boolean }) => {
     setInfoModal({ open: true, backend: b })
     setTestResult({ loading: false })
+    setConnectionToken('')
+    setConnectionConnected(false)
+    setConnectionLastActive('')
+    // 如果是 ilink_proxy 类型，从 connections API 获取真实 token 和连接状态
+    if (b.type === 'ilink_proxy') {
+      try {
+        const res = await api.get<{ token: string; connected: boolean; last_active: string }>(`/api/v1/connections/${b.id}`)
+        if (res.token) setConnectionToken(res.token)
+        setConnectionConnected(res.connected)
+        if (res.last_active) setConnectionLastActive(res.last_active)
+      } catch {
+        // 获取失败时使用默认值
+      }
+    }
   }, [])
 
   const handleTestBackend = useCallback(async (id: string) => {
@@ -242,7 +260,7 @@ export default function ManagePage() {
                 <pre className="code-block">{`# ${bName || '后端名称'} 配置
 # 外部服务需要配置以下环境变量
 
-WEIXIN_BASE_URL=http://localhost:8080
+WEIXIN_BASE_URL=${window.location.origin}
 WEIXIN_TOKEN=gw_${bId || '<id>'}
 WEIXIN_ACCOUNT_ID=gw_${bId || '<id>'}`}</pre>
               </div>
@@ -405,29 +423,33 @@ WEIXIN_ACCOUNT_ID=gw_${bId || '<id>'}`}</pre>
               <span className="text-muted">名称</span>
               <span>{infoModal.backend.name}</span>
             </div>
-            <div className="manage-info-row">
-              <span className="text-muted">类型</span>
-              <span>{infoModal.backend.type}</span>
-            </div>
-            <div className="manage-info-row">
-              <span className="text-muted">状态</span>
-              <Tag variant={infoModal.backend.healthy ? 'success' : 'danger'}>
-                {infoModal.backend.healthy ? '健康' : '异常'}
-              </Tag>
-            </div>
-
             {infoModal.backend.type === 'ilink_proxy' && (
               <>
+                <div className="manage-info-row">
+                  <span className="text-muted">客户端连接</span>
+                  <Tag variant={connectionConnected ? 'success' : 'warning'}>
+                    {connectionConnected ? '已连接' : '未连接'}
+                  </Tag>
+                </div>
+                {connectionLastActive && (
+                  <div className="manage-info-row">
+                    <span className="text-muted">最后活跃</span>
+                    <span className="font-mono" style={{ fontSize: 'var(--font-size-sm)' }}>
+                      {new Date(connectionLastActive).toLocaleString('zh-CN')}
+                    </span>
+                  </div>
+                )}
                 <div className="divider" />
                 <div className="input-label">连接配置</div>
-                <pre className="code-block">{`WEIXIN_BASE_URL=http://localhost:8080
-WEIXIN_TOKEN=gw_${infoModal.backend.id}
+                <pre className="code-block">{`WEIXIN_BASE_URL=${window.location.origin}
+WEIXIN_TOKEN=${connectionToken || 'gw_' + infoModal.backend.id}
 WEIXIN_ACCOUNT_ID=gw_${infoModal.backend.id}`}</pre>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    const config = `WEIXIN_BASE_URL=http://localhost:8080\nWEIXIN_TOKEN=gw_${infoModal.backend!.id}\nWEIXIN_ACCOUNT_ID=gw_${infoModal.backend!.id}`
+                    const baseUrl = window.location.origin
+                    const config = `WEIXIN_BASE_URL=${baseUrl}\nWEIXIN_TOKEN=${connectionToken || 'gw_' + infoModal.backend!.id}\nWEIXIN_ACCOUNT_ID=gw_${infoModal.backend!.id}`
                     navigator.clipboard.writeText(config)
                     toast('配置已复制', 'success')
                   }}

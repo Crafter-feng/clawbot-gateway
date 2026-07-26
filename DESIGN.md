@@ -187,9 +187,48 @@ HermesClaw 通过 iLink 协议连接到 Gateway 的 iLink 服务端
 
 **注意**：只有 `ilink_proxy` 会创建虚拟 Bot，用于外部 iLink 服务接入。
 
+### 适配器注册表机制
+
+适配器采用 **自注册（Self-Registration）模式**，新增适配器类型无需修改任何核心代码。
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    adapter 包启动时                         │
+│                                                             │
+│  echo.go  init() → RegisterAdapter("echo", creator)        │
+  openai.go init() → RegisterAdapter("openai_compatible",…)  │
+  ilink_proxy.go init() → RegisterAdapter("ilink_proxy",…)   │
+│                        ↓                                     │
+│  ┌─────────────────────────────────────────┐                │
+│  │  registry = map[string]AdapterCreator   │                │
+│  │    "echo"           → EchoCreator       │                │
+│  │    "openai_compatible" → OAICreator     │                │
+│  │    "ilink_proxy"    → ProxyCreator      │                │
+│  └─────────────────────────────────────────┘                │
+│                        ↓                                     │
+│  CreateAdapterFromDB(b) → registry[b.Type].creator(b)      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**新增适配器只需 3 步**：
+
+1. 创建新文件（如 `anthropic.go`）
+2. 实现 `BackendAdapter` 接口
+3. 添加 `init()` 函数注册：
+
+```go
+func init() {
+    RegisterAdapter("anthropic", func(b database.Backend) BackendAdapter {
+        apiKey := GetJSONString(b.Config, "api_key")
+        return NewAnthropicAdapter(b.ID, b.Name, apiKey)
+    })
+}
+```
+
+**零改** `factory.go`、`registry.go`、`types.go` 或任何现有文件。
+
 ### Webhook 通知模块
 
-Webhook 是一个**独立的单向通道模块**，允许外部系统向用户连接的机器人发送消息。
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -1429,10 +1468,13 @@ clawbot-gateway/
 ├── go.mod / go.sum              # Go 依赖
 │
 ├── internal/
-│   ├── adapter/                 # 后端适配器
-│   │   ├── adapter.go           # BackendAdapter + ConnectionAdapter 接口
-│   │   ├── factory.go           # 适配器工厂（支持两种适配器类型）
-│   │   └── ilink_proxy.go       # iLink 代理适配器（虚拟 Bot）
+│   ├── adapter/                 # 后端适配器（注册表模式，支持自注册扩展）
+│   │   ├── types.go            # 接口定义 + 数据类型（ChatRequest/ChatResponse/ConnectionInfo）
+│   │   ├── registry.go         # 适配器注册表（RegisterAdapter/CreateAdapter 自注册机制）
+│   │   ├── factory.go          # AdapterFactory 实例管理（注册中心）
+│   │   ├── echo.go             # Echo 调试适配器 + init() 自注册
+│   │   ├── openai.go           # OpenAI 兼容适配器 + init() 自注册
+│   │   └── ilink_proxy.go      # iLink 代理适配器（虚拟 Bot）+ init() 自注册
 │   │
 │   ├── api/                     # HTTP API 服务
 │   │   ├── server.go            # API 服务器 + 路由注册 + 中间件
@@ -1477,9 +1519,8 @@ clawbot-gateway/
 │   │   ├── relay.go             # 文件转发接口
 │   │   ├── forwarder.go         # LocalRelay
 │   │   └── obsidian.go          # ObsidianRelay
-│   │
 │   ├── route/                   # 路由引擎
-│   │   └── route.go             # Router + 关键词规则
+│   │   └── router.go            # Router + 关键词规则（route.go 已迁移）
 │   │
 │   ├── session/                 # 会话管理
 │   │   └── context.go           # SessionContext + ContextManager
@@ -1700,14 +1741,12 @@ func (c *Connector) GetAccountTokenByVirtualID(virtualAccountID string) string {
 | 透明代理 handler | ✅ 完成 | `internal/ilink/handler.go` |
 | 虚拟 Bot token 验证 | ✅ 完成 | `internal/ilink/server.go` |
 | 真实 bot_token 获取 | ✅ 完成 | `internal/bot/client.go` |
-| `ClientRegistry` 虚拟 Bot 管理 | ✅ 完成 | `internal/ilink/registry.go` |
-| `VirtualBot` 连接配置 | ✅ 完成 | `internal/ilink/registry.go` |
-| **适配器层** | | |
-| `ConnectionAdapter` 接口 | ✅ 完成 | `internal/adapter/adapter.go` |
+| `ConnectionAdapter` 接口 | ✅ 完成 | `internal/adapter/types.go` |
 | `ilink_proxy` 连接适配器 | ✅ 完成 | `internal/adapter/ilink_proxy.go` |
-| `openai_compatible` 后端适配器 | ✅ 完成 | `internal/adapter/factory.go` |
-| `echo` 后端适配器 | ✅ 完成 | `internal/adapter/factory.go` |
+| `openai_compatible` 后端适配器 | ✅ 完成 | `internal/adapter/openai.go` |
+| `echo` 后端适配器 | ✅ 完成 | `internal/adapter/echo.go` |
 | `AdapterFactory` 两种适配器 | ✅ 完成 | `internal/adapter/factory.go` |
+| `Registry` 自注册机制 | ✅ 完成 | `internal/adapter/registry.go`（新增适配器零改核心代码） |
 | **Webhook 通知模块** | | |
 | Token 管理 | ✅ 完成 | `internal/api/notify_handler.go` |
 | 消息发送端点 | ✅ 完成 | `/api/v1/notify/send` |

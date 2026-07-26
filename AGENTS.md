@@ -45,6 +45,19 @@
 
 **只有 `ilink_proxy` 会创建虚拟 Bot**。
 
+### 5.1 适配器注册表（扩展规则）
+
+适配器采用**自注册模式**，新增适配器类型时：
+
+1. 在 `internal/adapter/` 下创建新文件（如 `anthropic.go`）
+2. 实现 `BackendAdapter` 或 `ConnectionAdapter` 接口
+3. 在 `init()` 中调用 `RegisterAdapter("type", creator)`
+
+**禁止**：
+- 修改 `factory.go` 或 `registry.go` 来添加新适配器
+- 在 `types.go` 中添加具体适配器实现
+- 在 `CreateAdapterFromDB` 中添加 switch case
+
 ## 配置规则
 
 ### 6. 配置管理方式

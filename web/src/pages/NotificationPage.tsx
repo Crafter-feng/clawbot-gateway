@@ -270,7 +270,7 @@ export default function NotificationPage() {
 
           <div className="manage-config-preview" style={{ marginTop: 'var(--space-4)' }}>
             <div className="manage-config-title">调用示例</div>
-            <pre className="code-block">{`curl -X POST http://localhost:8080/api/v1/notify/send \\
+            <pre className="code-block">{`curl -X POST ${window.location.origin}/api/v1/notify/send \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer <token>" \\
   -d '{
