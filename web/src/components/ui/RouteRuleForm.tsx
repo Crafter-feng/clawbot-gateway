@@ -34,6 +34,8 @@ export default function RouteRuleForm({ rule, onClose, onSave }: RouteRuleFormPr
 
   const handleTest = async () => {
     if (!testMessage.trim()) return
+    // TODO: 使用当前登录用户 ID 而非硬编码的 'test_user'
+    // 当前认证系统不提供用户 ID，后续可从 JWT 或 user store 获取
     const result = await testMatch(testMessage, 'test_user')
     setTestResult(result)
   }

@@ -420,12 +420,12 @@ curl -X POST http://localhost:8080/api/v1/notify/send \
              ┌──────────▼──────────┐
              │    微信用户          │
              └─────────────────────┘
-             │                    │                    │
-             ▼                    ▼                    ▼
-    ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-    │ Adapter         │  │ VirtualBot.Queue│  │ Obsidian/Local  │
-    │ (OpenAI/Webhook)│  │ (每 Bot 独立)   │  │ (文件保存)      │
-    └────────┬────────┘  └────────┬────────┘  └─────────────────┘
+             │                    │
+             ▼                    ▼
+    ┌─────────────────┐  ┌─────────────────┐
+    │ AI 后端处理      │  │ iLink 透传       │
+    │ (Pipeline→Adapter)│ │ (透明代理→腾讯)  │
+    └────────┬────────┘  └────────┬────────┘
              │                    │
              ▼                    ▼
     ┌─────────────────┐  ┌─────────────────┐
@@ -1449,7 +1449,7 @@ clawbot-gateway/
 │   │   └── user_handler.go      # 用户管理 API
 │   │
 │   ├── bot/                     # iLink 协议客户端
-│   │   ├── client.go            # Connector 核心结构 + MessageBroadcaster 接口
+│   │   ├── client.go            # Connector 核心结构 + 消息广播接口
 │   │   ├── message.go           # 消息模型 + 解析
 │   │   ├── send.go              # 消息发送
 │   │   ├── registry.go          # ClientRegistry + VirtualBot
@@ -1465,8 +1465,7 @@ clawbot-gateway/
 │   │
 │   ├── ilink/                   # iLink API 对外服务
 │   │   ├── server.go            # 路由注册 + 限流中间件
-│   │   ├── handler.go           # 端点实现（透明代理）
-│   │   ├── registry.go          # ClientRegistry + VirtualBot + MessageQueue
+│   │   ├── registry.go          # ClientRegistry + VirtualBot 管理
 │   │   └── ratelimit.go         # 速率限制器
 │   │
 │   ├── log/                     # 日志
@@ -1474,9 +1473,8 @@ clawbot-gateway/
 │   │
 │   ├── notify/                  # Webhook 通知模块
 │   │   └── handler.go           # 通知处理
-│   │
 │   ├── relay/                   # 文件中转
-│   │   ├── relay.go             # RelayManager + FileRelay 接口
+│   │   ├── relay.go             # 文件转发接口
 │   │   ├── forwarder.go         # LocalRelay
 │   │   └── obsidian.go          # ObsidianRelay
 │   │
@@ -1529,7 +1527,6 @@ clawbot-gateway/
 | `ClientRegistry` 虚拟 Bot 管理 | ✅ 已实现 | `ilink/registry.go` |
 | `VirtualBot` 透明代理 | ✅ 已实现 | 直接转发到真实 iLink API |
 | `accountPollLoop` 消息轮询 | ✅ 已实现 | `bot/account.go` |
-
 ### 实现状态（2026-07-26 更新）
 #### 当前存在的问题
 
@@ -1538,36 +1535,18 @@ clawbot-gateway/
 | 1 | `ilink/handler.go` | `forwardToILink()` 请求体为空 | 已修复 |
 | 2 | `ilink/handler.go` | `handleGetUpdates` 直接代理而非使用队列 | 已修复 - 透明代理模式，无需队列 |
 | 3 | `ilink/handler.go` | 自引用 URL 循环 | 虚拟 Bot 的 `BaseURL` 配置错误可能导致循环 |
+
+#### 遗留设计参考
+
+| 组件 | 状态 | 说明 |
+|------|------|------|
 | `ClientRegistry` 虚拟 Bot 管理 | ✅ 已实现 | `ilink/registry.go` |
-| `MessageQueue` 消息队列 | ✅ 已实现 | 支持持久化和重试 |
-| `MessageBroadcaster` 接口 | ✅ 已实现 | `bot/client.go` |
-| `accountPollLoop` 广播机制 | ✅ 已实现 | `bot/account.go` |
-
-#### 当前存在的问题
-
-##### CRITICAL - 必须修复
-
-| # | 文件 | 问题 | 说明 |
-|---|------|------|------|
-| 1 | `ilink/handler.go:64` | `forwardToILink()` 请求体为空 | `body []byte` 参数未附加到请求，所有代理请求体丢失 |
-| 2 | `ilink/handler.go` | `handleGetUpdates` 直接代理而非使用队列 | `ClientRegistry` 和 `MessageQueue` 未被任何 handler 使用 |
-| 3 | `ilink/handler.go` | 自引用 URL 循环 | 虚拟 Bot 的 `BaseURL` 是 `http://localhost:8080`，代理到自身会死循环 |
-
-##### MODERATE - 需要修复
-
-| # | 文件 | 问题 | 说明 |
-|---|------|------|------|
-| 4 | `config/config.go` | 无 `ProviderConfig` 结构 | 后端配置从数据库加载，非 YAML |
+| `VirtualBot` 透明代理 | ✅ 已实现 | 直接转发到真实 iLink API |
+| `accountPollLoop` 消息轮询 | ✅ 已实现 | `bot/account.go` |
+| `MessageQueue` 消息队列 | 🚫 已废弃 | 透明代理模式不再需要 |
+| `MessageBroadcaster` 接口 | 🚫 已废弃 | 保留接口但未被调用，等待后续清理 |
 
 **注意**：虚拟 Bot 不需要 QR 扫码登录，因此 `/get_bot_qrcode` 和 `/get_qrcode_status` 端点不在服务端提供。
-
-##### MINOR - 可接受的偏差
-
-| # | 文件 | 说明 |
-|---|------|------|
-| 7 | `bot/client.go` | 使用 `broadcaster MessageBroadcaster` 接口而非直接引用 `*ilink.ClientRegistry`（架构更优，避免循环依赖） |
-| 8 | `ilink/registry.go` | 超出设计：支持消息持久化、重试、统计 |
-| 9 | `bot/client.go:69` | `msgChan` 容量仍为 100（设计文档 P2 问题 #12） |
 
 ### 当前实现（已完成）
 
