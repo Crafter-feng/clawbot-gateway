@@ -34,7 +34,7 @@
   --info: #3b82f6;
   --info-dim: rgba(59, 130, 246, 0.12);
 
-  /* Semantic aliases */
+/* Semantic aliases — dark theme (default) */
   --bg-primary: var(--n-900);
   --bg-secondary: var(--n-850);
   --bg-card: var(--n-800);
@@ -45,6 +45,7 @@
   --text-muted: var(--n-500);
   --border: var(--n-700);
   --border-light: var(--n-800);
+}
 
   /* Typography */
   --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', 'Noto Sans SC', sans-serif;
@@ -94,8 +95,32 @@
   /* Layout */
   --sidebar-width: 240px;
   --header-height: 56px;
-}
 
+
+/* --- Light Theme --- */
+[data-theme="light"] {
+  --bg-primary: var(--n-50);
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-hover: var(--n-50);
+  --bg-elevated: #ffffff;
+  --text-primary: var(--n-900);
+  --text-secondary: var(--n-500);
+  --text-muted: var(--n-400);
+  --border: var(--n-200);
+  --border-light: var(--n-100);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.1);
+
+  --accent-dim: rgba(99, 102, 241, 0.08);
+  --accent-glow: rgba(99, 102, 241, 0.04);
+  --success-dim: rgba(34, 197, 94, 0.08);
+  --danger-dim: rgba(239, 68, 68, 0.08);
+  --warning-dim: rgba(245, 158, 11, 0.08);
+  --info-dim: rgba(59, 130, 246, 0.08);
+}
 /* --- Reset & Base --- */
 *, *::before, *::after {
   margin: 0;
