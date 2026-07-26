@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef, useCallback } from 'react'
+import { type ReactNode, useEffect, useRef } from 'react'
 
 interface ModalProps {
   open: boolean
@@ -12,35 +12,37 @@ interface ModalProps {
 export default function Modal({ open, onClose, title, children, footer, maxWidth = '480px' }: ModalProps) {
   const cardRef = useRef<HTMLDivElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
 
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      onClose()
-      return
-    }
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onCloseRef.current()
+        return
+      }
 
-    if (e.key === 'Tab' && cardRef.current) {
-      const focusableElements = cardRef.current.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      )
-      const firstElement = focusableElements[0]
-      const lastElement = focusableElements[focusableElements.length - 1]
+      if (e.key === 'Tab' && cardRef.current) {
+        const focusableElements = cardRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        )
+        const firstElement = focusableElements[0]
+        const lastElement = focusableElements[focusableElements.length - 1]
 
-      if (e.shiftKey) {
-        if (document.activeElement === firstElement) {
-          lastElement?.focus()
-          e.preventDefault()
-        }
-      } else {
-        if (document.activeElement === lastElement) {
-          firstElement?.focus()
-          e.preventDefault()
+        if (e.shiftKey) {
+          if (document.activeElement === firstElement) {
+            lastElement?.focus()
+            e.preventDefault()
+          }
+        } else {
+          if (document.activeElement === lastElement) {
+            firstElement?.focus()
+            e.preventDefault()
+          }
         }
       }
     }
-  }, [onClose])
 
-  useEffect(() => {
     if (open) {
       previousFocusRef.current = document.activeElement as HTMLElement
       document.body.style.overflow = 'hidden'
@@ -56,7 +58,7 @@ export default function Modal({ open, onClose, title, children, footer, maxWidth
       document.removeEventListener('keydown', handleKeyDown)
       previousFocusRef.current?.focus()
     }
-  }, [open, handleKeyDown])
+  }, [open])
 
   if (!open) return null
 
