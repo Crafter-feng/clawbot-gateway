@@ -81,7 +81,7 @@ func TestSessionContextIsExpired(t *testing.T) {
 }
 
 func TestContextManagerGetContext(t *testing.T) {
-	cm := NewContextManager(20, "keep", 1*time.Hour)
+	cm := NewContextManager(20, 1*time.Hour)
 
 	// Get new context
 	ctx := cm.GetContext("user1", "backend1")
@@ -106,7 +106,7 @@ func TestContextManagerGetContext(t *testing.T) {
 }
 
 func TestContextManagerSessionCount(t *testing.T) {
-	cm := NewContextManager(20, "keep", 1*time.Hour)
+	cm := NewContextManager(20, 1*time.Hour)
 
 	cm.GetContext("user1", "backend1")
 	cm.GetContext("user2", "backend1")
@@ -118,7 +118,7 @@ func TestContextManagerSessionCount(t *testing.T) {
 }
 
 func TestContextManagerClearContext(t *testing.T) {
-	cm := NewContextManager(20, "keep", 1*time.Hour)
+	cm := NewContextManager(20, 1*time.Hour)
 
 	cm.GetContext("user1", "backend1")
 	cm.ClearContext("user1", "backend1")
@@ -131,7 +131,7 @@ func TestContextManagerClearContext(t *testing.T) {
 }
 
 func TestContextManagerCleanupExpired(t *testing.T) {
-	cm := NewContextManager(20, "keep", 1*time.Second) // 1 second TTL
+	cm := NewContextManager(20, 1*time.Second) // 1 second TTL
 
 	cm.GetContext("user1", "backend1")
 

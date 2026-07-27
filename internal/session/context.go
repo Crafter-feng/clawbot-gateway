@@ -67,19 +67,17 @@ func (s *SessionContext) IsExpired(ttl time.Duration) bool {
 // ── Context Manager ──
 
 type ContextManager struct {
-	mu             sync.RWMutex
-	sessions       map[string]*SessionContext
-	maxHistory     int
-	switchStrategy string // "keep", "clear", "isolated"
-	ttl            time.Duration
+	mu         sync.RWMutex
+	sessions   map[string]*SessionContext
+	maxHistory int
+	ttl        time.Duration
 }
 
-func NewContextManager(maxHistory int, switchStrategy string, ttl time.Duration) *ContextManager {
+func NewContextManager(maxHistory int, ttl time.Duration) *ContextManager {
 	return &ContextManager{
-		sessions:       make(map[string]*SessionContext),
-		maxHistory:     maxHistory,
-		switchStrategy: switchStrategy,
-		ttl:            ttl,
+		sessions:   make(map[string]*SessionContext),
+		maxHistory: maxHistory,
+		ttl:        ttl,
 	}
 }
 
@@ -101,22 +99,6 @@ func (cm *ContextManager) GetContext(userID string, backendID string) *SessionCo
 	s.BackendID = backendID
 	cm.sessions[key] = s
 	return s
-}
-
-func (cm *ContextManager) SwitchBackend(userID, oldBackend, newBackend string) {
-	switch cm.switchStrategy {
-	case "clear":
-		key := cm.buildKey(userID, oldBackend)
-		cm.mu.Lock()
-		if s, ok := cm.sessions[key]; ok {
-			s.Clear()
-		}
-		cm.mu.Unlock()
-	case "isolated":
-		// 每个后端独立上下文，无需操作
-	default: // "keep"
-		// 保留上下文
-	}
 }
 
 func (cm *ContextManager) ClearContext(userID string, backendID string) {

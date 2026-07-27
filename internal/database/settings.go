@@ -15,7 +15,6 @@ var defaults = map[string]string{
 	"api.jwt_expiry_hours":  "24",
 	"api.allowed_origins":   "*",
 	"context.max_history":   "20",
-	"context.switch_strategy": "keep",
 	"context.ttl":           "3600",
 	"route.default_backend": "echo",
 	"notify.url":           "",

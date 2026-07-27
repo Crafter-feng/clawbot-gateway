@@ -102,6 +102,7 @@ func (s *APIServer) Start(addr string) error {
 	auth := api.Group("/auth")
 	auth.GET("/token", s.handleGetAPIToken)
 	auth.POST("/token", s.handleRegenAPIToken)
+	auth.PUT("/password", s.handleChangePassword)
 
 	// 配置管理
 	cfg := api.Group("/config")

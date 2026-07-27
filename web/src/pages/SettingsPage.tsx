@@ -20,6 +20,12 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const backends = useBackendsStore()
 
+  /* Password change */
+  const [pwdOld, setPwdOld] = useState('')
+  const [pwdNew, setPwdNew] = useState('')
+  const [pwdConfirm, setPwdConfirm] = useState('')
+  const [pwdLoading, setPwdLoading] = useState(false)
+
   useEffect(() => {
     fetchSettings()
     backends.fetch()
@@ -28,8 +34,8 @@ export default function SettingsPage() {
   const fetchSettings = async () => {
     setLoading(true)
     try {
-      const data = await api.get<{ settings: Settings }>('/api/v1/config')
-      setSettings(data.settings || {})
+      const res = await api.get<{ settings: Settings }>('/api/v1/config')
+      setSettings(res.settings || {})
     } catch {
       toast('加载配置失败', 'error')
     } finally {
@@ -41,9 +47,9 @@ export default function SettingsPage() {
     setSaving(true)
     try {
       await api.put('/api/v1/config', settings)
-      toast('配置保存成功', 'success')
+      toast('设置已保存', 'success')
     } catch {
-      toast('保存配置失败', 'error')
+      toast('保存失败', 'error')
     } finally {
       setSaving(false)
     }
@@ -52,6 +58,25 @@ export default function SettingsPage() {
   const updateSetting = (key: string, value: string) => {
     setSettings(prev => ({ ...prev, [key]: value }))
   }
+
+  const handleChangePassword = useCallback(async () => {
+    if (!pwdOld) { toast('请输入旧密码', 'error'); return }
+    if (!pwdNew) { toast('请输入新密码', 'error'); return }
+    if (pwdNew !== pwdConfirm) { toast('两次输入的新密码不一致', 'error'); return }
+    if (pwdNew.length < 6) { toast('新密码至少 6 位', 'error'); return }
+    setPwdLoading(true)
+    try {
+      await api.put('/api/v1/auth/password', { old_password: pwdOld, new_password: pwdNew })
+      toast('密码修改成功', 'success')
+      setPwdOld('')
+      setPwdNew('')
+      setPwdConfirm('')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '修改密码失败', 'error')
+    } finally {
+      setPwdLoading(false)
+    }
+  }, [pwdOld, pwdNew, pwdConfirm, toast])
 
   if (loading) {
     return (
@@ -119,21 +144,45 @@ export default function SettingsPage() {
               value={settings['context.max_history'] || '20'}
               onChange={(e) => updateSetting('context.max_history', e.target.value)}
             />
-            <Select
-              label="切换策略"
-              value={settings['context.switch_strategy'] || 'keep'}
-              onChange={(e) => updateSetting('context.switch_strategy', e.target.value)}
-            >
-              <option value="keep">保留</option>
-              <option value="clear">清空</option>
-              <option value="isolated">独立</option>
-            </Select>
             <Input
               label="会话超时（秒）"
               type="number"
               value={settings['context.ttl'] || '3600'}
               onChange={(e) => updateSetting('context.ttl', e.target.value)}
             />
+          </div>
+        </div>
+
+        {/* 密码设置 */}
+        <div className="card">
+          <div className="card-header">
+            <h2 className="card-title">密码设置</h2>
+          </div>
+          <div className="form-grid form-grid-2">
+            <Input
+              label="旧密码"
+              type="password"
+              value={pwdOld}
+              onChange={(e) => setPwdOld(e.target.value)}
+            />
+            <div />
+            <Input
+              label="新密码"
+              type="password"
+              value={pwdNew}
+              onChange={(e) => setPwdNew(e.target.value)}
+            />
+            <Input
+              label="确认新密码"
+              type="password"
+              value={pwdConfirm}
+              onChange={(e) => setPwdConfirm(e.target.value)}
+            />
+          </div>
+          <div style={{ marginTop: 'var(--space-3)' }}>
+            <Button onClick={handleChangePassword} loading={pwdLoading} variant="secondary">
+              修改密码
+            </Button>
           </div>
         </div>
 

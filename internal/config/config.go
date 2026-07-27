@@ -39,9 +39,8 @@ type APIConfig struct {
 }
 
 type ContextConfig struct {
-	MaxHistory     int
-	SwitchStrategy string
-	TTL            int
+	MaxHistory int
+	TTL        int
 }
 
 // LoadFromDB 从数据库加载配置，环境变量始终优先
@@ -81,7 +80,6 @@ func LoadFromDB(db *database.DB) *Config {
 
 	// 上下文配置
 	cfg.Context.MaxHistory = intEnvOrDefault("CLAWBOT_MAX_HISTORY", db.GetSetting("context.max_history"), 20)
-	cfg.Context.SwitchStrategy = envOrDefault("CLAWBOT_SWITCH_STRATEGY", db.GetSetting("context.switch_strategy"))
 	cfg.Context.TTL = intEnvOrDefault("CLAWBOT_CONTEXT_TTL", db.GetSetting("context.ttl"), 3600)
 
 	// 日志

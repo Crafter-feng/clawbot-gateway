@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -32,11 +34,31 @@ func main() {
 	log.SetDefault(log.New(logLevel))
 	log := log.Default().WithComponent("main")
 
-	// 1. 初始化数据库
+	// 数据库路径
 	dbPath := os.Getenv("CLAWBOT_DB_PATH")
 	if dbPath == "" {
 		dbPath = "data/clawbot.db"
 	}
+
+	// ── CLI 子命令 ──
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "reset-password":
+			cmdResetPassword(dbPath)
+			return
+		case "help", "--help", "-h":
+			printUsage()
+			return
+		default:
+			if os.Args[1][0] != '-' {
+				fmt.Fprintf(os.Stderr, "未知命令: %s\n\n", os.Args[1])
+				printUsage()
+				os.Exit(1)
+			}
+		}
+	}
+
+	// 1. 初始化数据库
 	db, err := database.New(dbPath)
 	if err != nil {
 		log.Error("failed to init database", "error", err)
@@ -115,7 +137,7 @@ func main() {
 
 	// 5. 初始化上下文管理器
 	ttl := time.Duration(cfg.Context.TTL) * time.Second
-	cm := session.NewContextManager(cfg.Context.MaxHistory, cfg.Context.SwitchStrategy, ttl)
+	cm := session.NewContextManager(cfg.Context.MaxHistory, ttl)
 
 	// 7. 初始化 ClawBot 连接器
 	conn := bot.NewConnector(bot.ConnectorConfig{
@@ -170,10 +192,9 @@ func main() {
 	pipeline.SetLogger(log)
 	pipeline.Start(pipelineCtx)
 
-	// 11. 启动 API 服务器
+	addr := net.JoinHostPort(cfg.Server.Host, strconv.Itoa(cfg.Server.Port))
 	apiServer := api.NewAPIServer(cfg, db, r, af, cm, conn, clientRegistry)
 	apiServer.SetLogger(log)
-	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 	if err := apiServer.Start(addr); err != nil {
 		log.Error("failed to start API server", "error", err)
 		os.Exit(1)
@@ -196,6 +217,49 @@ func main() {
 		conn.RemoveAccount(a.Credentials.AccountID)
 	}
 	log.Info("stopped")
+}
+
+func printUsage() {
+	fmt.Println(`ClawBot Gateway - 微信 iLink 消息网关
+
+用法:
+  clawbot-gateway                  启动 HTTP 服务
+  clawbot-gateway <命令> [参数]     执行管理命令
+
+命令:
+  reset-password [密码]   重置登录密码（不指定则生成随机密码）
+  help, -h, --help       显示此帮助信息
+
+环境变量:
+  CLAWBOT_DB_PATH        数据库路径（默认: data/clawbot.db）
+  CLAWBOT_LOG_LEVEL      日志级别
+  CLAWBOT_HOST           监听地址
+  CLAWBOT_PORT           监听端口`)
+}
+
+func cmdResetPassword(dbPath string) {
+	db, err := database.New(dbPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "打开数据库失败: %v\n", err)
+		os.Exit(1)
+	}
+	defer db.Close()
+
+	var newPassword string
+	if len(os.Args) > 2 {
+		newPassword = os.Args[2]
+	} else {
+		newPassword = "admin_" + config.GenerateSecret()
+	}
+
+	if err := db.SetSetting("api.login_password", newPassword); err != nil {
+		fmt.Fprintf(os.Stderr, "设置密码失败: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("密码已重置成功\n")
+	fmt.Printf("新密码: %s\n", newPassword)
+	fmt.Printf("\n请使用此密码登录 Web 管理界面\n")
 }
 
 func createAdapterFromDB(b database.Backend) adapter.BackendAdapter {

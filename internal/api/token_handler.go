@@ -101,3 +101,36 @@ func (s *APIServer) handleLogin(c *gin.Context) {
 
 	c.JSON(200, gin.H{"token": token})
 }
+
+func (s *APIServer) handleChangePassword(c *gin.Context) {
+	var req struct {
+		OldPassword string `json:"old_password"`
+		NewPassword string `json:"new_password"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": "invalid request"})
+		return
+	}
+
+	if req.NewPassword == "" {
+		c.JSON(400, gin.H{"error": "new password is required"})
+		return
+	}
+
+	// 验证旧密码
+	if subtle.ConstantTimeCompare([]byte(req.OldPassword), []byte(s.config.API.LoginPassword)) != 1 {
+		c.JSON(403, gin.H{"error": "old password is incorrect"})
+		return
+	}
+
+	// 更新数据库
+	if err := s.db.SetSetting("api.login_password", req.NewPassword); err != nil {
+		c.JSON(500, gin.H{"error": "internal server error"})
+		return
+	}
+
+	// 更新内存中的配置
+	s.config.API.LoginPassword = req.NewPassword
+
+	c.JSON(200, gin.H{"success": true})
+}
