@@ -56,19 +56,25 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   checkAuth() {
     const t = localStorage.getItem(STORAGE_KEY)
     if (t) {
+      // 非 JWT 格式（token 不是三段式），视为过期并清除
+      const parts = t.split('.')
+      if (parts.length !== 3) {
+        localStorage.removeItem(STORAGE_KEY)
+        set({ authenticated: false, apiToken: '' })
+        return
+      }
       // 检查 JWT 是否过期（简单解析 exp 字段）
       try {
-        const parts = t.split('.')
-        if (parts.length === 3) {
-          const payload = JSON.parse(atob(parts[1]))
-          if (payload.exp && payload.exp * 1000 < Date.now()) {
-            // JWT 已过期
-            get().logout()
-            return
-          }
+        const payload = JSON.parse(atob(parts[1]))
+        if (payload.exp && payload.exp * 1000 < Date.now()) {
+          // JWT 已过期
+          get().logout()
+          return
         }
       } catch {
-        // 非 JWT 格式（旧 token），视为有效
+        // JWT 解析失败，视为过期
+        get().logout()
+        return
       }
       // JWT 有效，设置认证状态
       api.setToken(t)
@@ -92,9 +98,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ apiTokenLoading: true })
     try {
       const res = await api.post<{ token: string }>('/api/v1/auth/token')
-      set({ apiToken: res.token, apiTokenLoading: false })
+      set({ apiToken: res.token, apiTokenLoading: false, error: null })
     } catch (e) {
-      set({ apiTokenLoading: false })
+      set({ apiTokenLoading: false, error: e instanceof Error ? e.message : 'regenerate failed' })
       throw e
     }
   },

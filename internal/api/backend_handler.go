@@ -10,6 +10,11 @@ import (
 	"clawbot-gateway/internal/database"
 )
 
+// sensitiveBackendKeys 敏感后端配置字段（通过 API 返回时脱敏）
+var sensitiveBackendKeys = map[string]bool{
+	"api_key": true,
+}
+
 func (s *APIServer) handleListBackends(c *gin.Context) {
 	backends, err := s.db.ListBackends()
 	if err != nil {
@@ -92,7 +97,7 @@ func (s *APIServer) handleRegisterBackend(c *gin.Context) {
 	}
 
 	// ilink_proxy 类型还需要创建虚拟 Bot
-	if req.Type == "ilink_proxy" {
+	if adapter.IsConnectionAdapter(req.Type) {
 		accountID := "gw_" + req.ID
 		userID := accountID + "@im.wechat"
 		// 虚拟 Bot 的 BaseURL 应指向真实 iLink API，而非 Gateway 自身
@@ -192,7 +197,7 @@ func (s *APIServer) handleTestBackend(c *gin.Context) {
 	result := gin.H{"backend_id": id, "healthy": healthy}
 
 	// ilink_proxy 是连接适配器，不支持消息处理，只检查健康状态
-	if b.Type == "ilink_proxy" {
+	if adapter.IsConnectionAdapter(b.Type) {
 		c.JSON(200, result)
 		return
 	}
@@ -232,9 +237,13 @@ func (s *APIServer) reloadAdapters() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.adapters = adapter.NewAdapterFactory()
+	// 重置已有工厂（保持指针不变，避免 Pipeline 引用失效）
+	s.adapters.Reset()
 
-	backends, _ := s.db.ListBackends()
+	backends, err := s.db.ListBackends()
+	if err != nil {
+		s.log.Warn("reloadAdapters: failed to list backends", "error", err)
+	}
 	for _, b := range backends {
 		if !b.Enabled {
 			continue
@@ -245,7 +254,10 @@ func (s *APIServer) reloadAdapters() {
 		}
 	}
 
-	vbots, _ := s.db.ListVirtualBots()
+	vbots, err := s.db.ListVirtualBots()
+	if err != nil {
+		s.log.Warn("reloadAdapters: failed to list virtual bots", "error", err)
+	}
 	for _, vb := range vbots {
 		s.adapters.RegisterConnection(adapter.NewILinkProxyAdapter(vb.ID, vb.ID, vb.AccountID, vb.UserID, vb.BaseURL))
 	}
@@ -257,8 +269,12 @@ func sanitizeBackendConfig(config string) string {
 	if err := json.Unmarshal([]byte(config), &m); err != nil {
 		return config
 	}
-	// 移除敏感字段
-	delete(m, "api_key")
+	// 移除所有敏感字段
+	for k := range m {
+		if sensitiveBackendKeys[k] {
+			delete(m, k)
+		}
+	}
 	sanitized, _ := json.Marshal(m)
 	return string(sanitized)
 }

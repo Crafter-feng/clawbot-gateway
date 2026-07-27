@@ -32,7 +32,13 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
   },
 
   async disconnect(id: string) {
-    await api.del(`/api/v1/accounts/${id}`)
-    await get().fetch()
+    try {
+      await api.del(`/api/v1/accounts/${id}`)
+      await get().fetch()
+      set({ error: null })
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : 'operation failed' })
+      throw e
+    }
   },
 }))

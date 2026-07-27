@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useAuthStore } from '../stores/auth'
 import { useToast } from './Toast'
+import Button from './ui/Button'
+import Input from './ui/Input'
 
 export default function LoginForm() {
   const [password, setPassword] = useState('')
@@ -21,7 +23,7 @@ export default function LoginForm() {
       <div className="login-card">
         <div className="login-header">
           <div className="login-logo">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 2L2 7l10 5 10-5-10-5z" />
               <path d="M2 17l10 5 10-5" />
               <path d="M2 12l10 5 10-5" />
@@ -32,21 +34,16 @@ export default function LoginForm() {
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">
-          <div className="input-group">
-            <label className="input-label" htmlFor="login-password">
-              管理密码
-            </label>
-            <input
-              id="login-password"
-              className="input"
-              type="password"
-              placeholder="请输入密码"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoFocus
-              autoComplete="current-password"
-            />
-          </div>
+          <Input
+            id="login-password"
+            label="管理密码"
+            type="password"
+            placeholder="请输入密码"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoFocus
+            autoComplete="current-password"
+          />
 
           {loginError && (
             <div className="login-error" role="alert">
@@ -54,20 +51,15 @@ export default function LoginForm() {
             </div>
           )}
 
-          <button
+          <Button
             type="submit"
-            className="btn btn-primary btn-lg login-submit"
-            disabled={loginLoading || !password.trim()}
+            size="lg"
+            className="login-submit"
+            loading={loginLoading}
+            disabled={!password.trim()}
           >
-            {loginLoading ? (
-              <>
-                <span className="spinner spinner-sm spinner-white" />
-                验证中...
-              </>
-            ) : (
-              '登录管理面板'
-            )}
-          </button>
+            {loginLoading ? '验证中...' : '登录管理面板'}
+          </Button>
         </form>
       </div>
     </div>

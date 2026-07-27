@@ -52,9 +52,9 @@ func New(level string) *Logger {
 		Level:     lvl,
 		AddSource: true,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			// Remove default "time" attribute; we use a custom format.
+			// Format time as ISO8601 with milliseconds
 			if a.Key == slog.TimeKey {
-				return slog.Attr{}
+				return slog.Attr{Key: a.Key, Value: slog.StringValue(a.Value.Time().Format("2006-01-02T15:04:05.000Z07:00"))}
 			}
 			return a
 		},
@@ -82,7 +82,7 @@ func NewWriter(w io.Writer, level string) *Logger {
 		AddSource: true,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 			if a.Key == slog.TimeKey {
-				return slog.Attr{}
+				return slog.Attr{Key: a.Key, Value: slog.StringValue(a.Value.Time().Format("2006-01-02T15:04:05.000Z07:00"))}
 			}
 			return a
 		},
@@ -132,7 +132,15 @@ func GinMiddleware(log *Logger) gin.HandlerFunc {
 			slog.String("ip", c.ClientIP()),
 		}
 		if query != "" {
-			attrs = append(attrs, slog.String("query", query))
+			// Mask sensitive params in query string
+			safeQuery := c.Request.URL.Query()
+			sensitiveParams := []string{"token", "password", "secret", "key"}
+			for _, p := range sensitiveParams {
+				if safeQuery.Has(p) {
+					safeQuery.Set(p, "***")
+				}
+			}
+			attrs = append(attrs, slog.String("query", safeQuery.Encode()))
 		}
 		if len(c.Errors) > 0 {
 			attrs = append(attrs, slog.String("gin_errors", c.Errors.String()))

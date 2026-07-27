@@ -2,8 +2,11 @@ package database
 
 import (
 	"database/sql"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -25,6 +28,10 @@ func New(dbPath string) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	conn.SetMaxOpenConns(1)
+	conn.SetMaxIdleConns(1)
+	conn.SetConnMaxLifetime(time.Hour)
 
 	db := &DB{
 		conn:     conn,
@@ -119,7 +126,9 @@ func (db *DB) migrate() error {
 
 	// 迁移：添加 token 列到 virtual_bots（兼容旧数据库）
 	if _, err := db.conn.Exec("ALTER TABLE virtual_bots ADD COLUMN token TEXT NOT NULL DEFAULT ''"); err != nil {
-		// 列已存在时忽略错误
+		if !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("migrate virtual_bots: %w", err)
+		}
 	}
 
 	return nil

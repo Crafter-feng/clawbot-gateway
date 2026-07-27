@@ -22,7 +22,6 @@ type OpenAICompatibleAdapter struct {
 	apiKey  string
 	baseURL string
 	model   string
-	client  *http.Client
 }
 
 func NewOpenAICompatibleAdapter(id, name, apiKey, baseURL, model string) *OpenAICompatibleAdapter {
@@ -36,7 +35,6 @@ func NewOpenAICompatibleAdapter(id, name, apiKey, baseURL, model string) *OpenAI
 		apiKey:  apiKey,
 		baseURL: baseURL,
 		model:   model,
-		client:  &http.Client{Timeout: 60 * time.Second},
 	}
 }
 
@@ -45,17 +43,34 @@ func (o *OpenAICompatibleAdapter) Name() string { return o.name }
 func (o *OpenAICompatibleAdapter) Type() string { return "openai_compatible" }
 
 func (o *OpenAICompatibleAdapter) HealthCheck(ctx context.Context) bool {
-	req, err := http.NewRequestWithContext(ctx, "GET", o.baseURL+"/models", nil)
+	healthCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(healthCtx, "GET", o.baseURL+"/models", nil)
 	if err != nil {
 		return false
 	}
 	req.Header.Set("Authorization", "Bearer "+o.apiKey)
-	resp, err := o.client.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return false
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body) // drain body
 	return resp.StatusCode == 200
+}
+
+func sanitizeErrorBody(body string) string {
+	if len(body) > 200 {
+		body = body[:200] + "..."
+	}
+	// Remove non-printable characters that could break message format
+	body = strings.Map(func(r rune) rune {
+		if r >= 32 && r <= 126 {
+			return r
+		}
+		return -1
+	}, body)
+	return body
 }
 
 func (o *OpenAICompatibleAdapter) Handle(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
@@ -70,22 +85,42 @@ func (o *OpenAICompatibleAdapter) Handle(ctx context.Context, req *ChatRequest) 
 	if err != nil {
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", o.baseURL+"/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+o.apiKey)
 
-	resp, err := o.client.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("api call: %w", err)
+	const maxRetries = 2
+	var resp *http.Response
+	var httpErr error
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt) * time.Second)
+		}
+
+		httpReq, err := http.NewRequestWithContext(ctx, "POST", o.baseURL+"/chat/completions", bytes.NewReader(body))
+		if err != nil {
+			return nil, fmt.Errorf("create request: %w", err)
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+		httpReq.Header.Set("Authorization", "Bearer "+o.apiKey)
+
+		resp, httpErr = http.DefaultClient.Do(httpReq)
+		if httpErr != nil {
+			return nil, fmt.Errorf("api call: %w", httpErr)
+		}
+
+		if resp.StatusCode == 429 || resp.StatusCode >= 500 {
+			if attempt < maxRetries {
+				resp.Body.Close()
+				continue
+			}
+		}
+		break
 	}
 	defer resp.Body.Close()
 
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("api error %d: %s", resp.StatusCode, string(respBody))
+		bodyStr := sanitizeErrorBody(string(respBody))
+		return nil, fmt.Errorf("api error %d: %s", resp.StatusCode, bodyStr)
 	}
 
 	var result struct {
@@ -129,8 +164,9 @@ func (o *OpenAICompatibleAdapter) HandleStream(ctx context.Context, req *ChatReq
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+o.apiKey)
+	httpReq.Header.Set("Accept", "text/event-stream")
 
-	resp, err := o.client.Do(httpReq)
+	resp, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
 		return fmt.Errorf("stream api call: %w", err)
 	}
@@ -138,10 +174,18 @@ func (o *OpenAICompatibleAdapter) HandleStream(ctx context.Context, req *ChatReq
 
 	if resp.StatusCode != 200 {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-		return fmt.Errorf("stream api error %d: %s", resp.StatusCode, string(respBody))
+		bodyStr := sanitizeErrorBody(string(respBody))
+		return fmt.Errorf("stream api error %d: %s", resp.StatusCode, bodyStr)
+	}
+
+	contentType := resp.Header.Get("Content-Type")
+	if !strings.Contains(contentType, "text/event-stream") {
+		resp.Body.Close()
+		return fmt.Errorf("unexpected content type: %s", contentType)
 	}
 
 	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024) // 4MB max line
 	for scanner.Scan() {
 		line := scanner.Text()
 		if !strings.HasPrefix(line, "data: ") {

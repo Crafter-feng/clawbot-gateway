@@ -1,6 +1,7 @@
 package route
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"sync"
@@ -74,7 +75,20 @@ func (r *Router) GetDefaultBackend() string {
 }
 
 // SetUserBackend 设置用户会话级覆写
-func (r *Router) SetUserBackend(userID, backendID string) {
+// validBackends 是可用的后端 ID 列表，用于校验；传 nil 跳过校验
+func (r *Router) SetUserBackend(userID, backendID string, validBackends []string) error {
+	if backendID != "" && validBackends != nil {
+		found := false
+		for _, vb := range validBackends {
+			if vb == backendID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("backend %s not found", backendID)
+		}
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if backendID == "" {
@@ -82,6 +96,7 @@ func (r *Router) SetUserBackend(userID, backendID string) {
 	} else {
 		r.userBackends[userID] = backendID
 	}
+	return nil
 }
 
 // GetUserBackend 获取用户会话级覆写
@@ -158,16 +173,21 @@ func (r *Router) RemoveRule(id int) {
 }
 
 // UpdateRule 更新路由规则
-func (r *Router) UpdateRule(rule RouteRule) {
+func (r *Router) UpdateRule(rule RouteRule) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// 移除旧规则
+	// 查找并替换规则
+	found := false
 	for i, existing := range r.rules {
 		if existing.ID == rule.ID {
-			r.rules = append(r.rules[:i], r.rules[i+1:]...)
+			r.rules[i] = rule
+			found = true
 			break
 		}
+	}
+	if !found {
+		return fmt.Errorf("route rule %d not found", rule.ID)
 	}
 
 	// 预编译正则表达式
@@ -181,9 +201,8 @@ func (r *Router) UpdateRule(rule RouteRule) {
 		}
 	}
 
-	// 添加新规则并排序
-	r.rules = append(r.rules, rule)
 	r.sortRules()
+	return nil
 }
 
 // GetRules 获取所有路由规则

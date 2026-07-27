@@ -119,7 +119,7 @@ func (s *APIServer) handleChangePassword(c *gin.Context) {
 
 	// 验证旧密码
 	if subtle.ConstantTimeCompare([]byte(req.OldPassword), []byte(s.config.API.LoginPassword)) != 1 {
-		c.JSON(403, gin.H{"error": "old password is incorrect"})
+		c.JSON(401, gin.H{"error": "old password is incorrect"})
 		return
 	}
 

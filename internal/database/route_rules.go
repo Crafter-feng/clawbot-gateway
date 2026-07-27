@@ -111,6 +111,9 @@ func (db *DB) ListRouteRules() ([]RouteRule, error) {
 
 		rules = append(rules, rule)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
 	return rules, nil
 }

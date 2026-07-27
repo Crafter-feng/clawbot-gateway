@@ -34,7 +34,7 @@ func TestRouterUserOverride(t *testing.T) {
 	assertBackend(t, decision, "openclaw")
 
 	// 设置覆写
-	r.SetUserBackend("user1", "claude")
+	r.SetUserBackend("user1", "claude", nil)
 	decision = r.Route("hello", "user1", "", "", "")
 	assertBackend(t, decision, "claude")
 
@@ -47,7 +47,7 @@ func TestRouterUserOverride(t *testing.T) {
 func TestRouterClearUserBackend(t *testing.T) {
 	r := NewRouter()
 	r.SetDefaultBackend("openclaw")
-	r.SetUserBackend("user1", "claude")
+	r.SetUserBackend("user1", "claude", nil)
 
 	decision := r.Route("hello", "user1", "", "", "")
 	assertBackend(t, decision, "claude")

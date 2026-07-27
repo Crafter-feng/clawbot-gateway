@@ -32,6 +32,9 @@ func (db *DB) ListBackends() ([]Backend, error) {
 		b.Enabled = enabled == 1
 		result = append(result, b)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 

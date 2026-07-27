@@ -2,6 +2,7 @@ package ilink
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"sync"
 	"time"
@@ -43,14 +44,16 @@ func (r *ClientRegistry) Register(accountID, userID, baseURL, token string) *Vir
 	defer r.mu.Unlock()
 
 	if existing, ok := r.bots[accountID]; ok {
+		existing.LastActive = time.Now()
 		return existing
 	}
 
-	// 使用已有的 token 或生成新的随机 token
+	// 生成新的随机 token
 	if token == "" {
 		tokenBytes := make([]byte, 32)
 		if _, err := rand.Read(tokenBytes); err != nil {
-			tokenBytes = []byte(accountID) // fallback: 使用 accountID 作为 token
+			// 熵源不可用是严重错误，panic 而非静默降级
+			panic("ilink: failed to generate random token: " + err.Error())
 		}
 		token = hex.EncodeToString(tokenBytes)
 	}
@@ -74,11 +77,16 @@ func (r *ClientRegistry) Unregister(accountID string) {
 	delete(r.bots, accountID)
 }
 
-// Get 获取虚拟 Bot
+// Get 获取虚拟 Bot（返回快照，避免外部无锁访问）
 func (r *ClientRegistry) Get(accountID string) *VirtualBot {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.bots[accountID]
+	b, ok := r.bots[accountID]
+	if !ok {
+		return nil
+	}
+	copy := *b
+	return &copy
 }
 
 // GetByToken 通过 token 查找虚拟 Bot
@@ -86,7 +94,7 @@ func (r *ClientRegistry) GetByToken(token string) *VirtualBot {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for _, bot := range r.bots {
-		if bot.Token == token {
+		if subtle.ConstantTimeCompare([]byte(bot.Token), []byte(token)) == 1 {
 			return bot
 		}
 	}

@@ -3,7 +3,8 @@ package notify
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -14,16 +15,48 @@ import (
 
 // Handler 通知处理器
 type Handler struct {
-	db       *database.DB
-	sendFunc func(ctx context.Context, toUser, content, accountID string) error
+	db          *database.DB
+	sendFunc    func(ctx context.Context, toUser, content, accountID string) error
+	log         *slog.Logger
+	publicURL   string
+	rateLimitMu sync.Mutex
+	rateCounts  map[string]int
+	rateReset   map[string]time.Time
 }
 
 // NewHandler 创建通知处理器
 func NewHandler(db *database.DB, sendFunc func(ctx context.Context, toUser, content, accountID string) error) *Handler {
 	return &Handler{
-		db:       db,
-		sendFunc: sendFunc,
+		db:         db,
+		sendFunc:   sendFunc,
+		log:        slog.Default(),
+		publicURL:  "",
+		rateCounts: make(map[string]int),
+		rateReset:  make(map[string]time.Time),
 	}
+}
+
+// SetLogger 设置日志记录器
+func (h *Handler) SetLogger(log *slog.Logger) {
+	h.log = log
+}
+
+// SetPublicURL 设置外部可访问的 URL
+func (h *Handler) SetPublicURL(url string) {
+	h.publicURL = url
+}
+
+func (h *Handler) checkRateLimit(token string) bool {
+	h.rateLimitMu.Lock()
+	defer h.rateLimitMu.Unlock()
+	now := time.Now()
+	resetAt, ok := h.rateReset[token]
+	if !ok || now.After(resetAt) {
+		h.rateCounts[token] = 0
+		h.rateReset[token] = now.Add(time.Second)
+	}
+	h.rateCounts[token]++
+	return h.rateCounts[token] <= 5
 }
 
 // HandleSend 发送消息
@@ -36,9 +69,29 @@ func (h *Handler) HandleSend(c *gin.Context) {
 	}
 	tokenStr := auth[7:]
 
-	// 查找 Token
-	notifyToken, err := h.db.GetNotifyToken(tokenStr)
-	if err != nil || notifyToken == nil || !notifyToken.Enabled {
+	// 限流检查
+	if !h.checkRateLimit(tokenStr) {
+		h.log.Warn("rate limit exceeded", "component", "notify")
+		c.JSON(429, gin.H{"error": "too many requests"})
+		return
+	}
+
+	// 查找 Token（constant-time 比较）
+	tokens, err := h.db.ListNotifyTokens()
+	if err != nil {
+		h.log.Error("list notify tokens", "error", err)
+		c.JSON(500, gin.H{"error": "internal server error"})
+		return
+	}
+	var notifyToken *database.NotifyToken
+	for _, t := range tokens {
+		tt := t
+		if crypto.SecureEqual(tt.Token, tokenStr) {
+			notifyToken = &tt
+			break
+		}
+	}
+	if notifyToken == nil || !notifyToken.Enabled {
 		c.JSON(401, gin.H{"error": "invalid or disabled token"})
 		return
 	}
@@ -59,7 +112,7 @@ func (h *Handler) HandleSend(c *gin.Context) {
 	}
 
 	if err := h.sendFunc(c.Request.Context(), req.ToUser, req.Content, notifyToken.AccountID); err != nil {
-		log.Printf("ERROR: failed to send notify message: %v", err)
+		h.log.Error("failed to send notify message", "error", err)
 		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
@@ -70,7 +123,7 @@ func (h *Handler) HandleSend(c *gin.Context) {
 func (h *Handler) HandleListTokens(c *gin.Context) {
 	tokens, err := h.db.ListNotifyTokens()
 	if err != nil {
-		log.Printf("ERROR: failed to list notify tokens: %v", err)
+		h.log.Error("failed to list notify tokens", "error", err)
 		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
@@ -93,8 +146,13 @@ func (h *Handler) HandleCreateToken(c *gin.Context) {
 		return
 	}
 
-	id := "nt_" + time.Now().Format("20060102150405") + "_" + crypto.GenerateSecret(6)
-	token := crypto.GenerateSecret(32)
+	id := "nt_" + time.Now().Format("20060102150405") + "_" + crypto.MustGenerateSecret(6)
+	token, err := crypto.GenerateSecret(32)
+	if err != nil {
+		h.log.Error("failed to generate token secret", "error", err)
+		c.JSON(500, gin.H{"error": "internal server error"})
+		return
+	}
 
 	t := database.NotifyToken{
 		ID:        id,
@@ -106,15 +164,19 @@ func (h *Handler) HandleCreateToken(c *gin.Context) {
 	}
 
 	if err := h.db.CreateNotifyToken(t); err != nil {
-		log.Printf("ERROR: failed to create notify token: %v", err)
+		h.log.Error("failed to create notify token", "error", err)
 		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
 
+	baseURL := h.publicURL
+	if baseURL == "" {
+		baseURL = fmt.Sprintf("https://%s", c.Request.Host)
+	}
 	c.JSON(200, gin.H{
 		"id":    id,
 		"token": token,
-		"url":   fmt.Sprintf("%s/api/v1/notify/send", c.Request.Host),
+		"url":   fmt.Sprintf("%s/api/v1/notify/send", baseURL),
 	})
 }
 
@@ -122,7 +184,7 @@ func (h *Handler) HandleCreateToken(c *gin.Context) {
 func (h *Handler) HandleDeleteToken(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.db.DeleteNotifyToken(id); err != nil {
-		log.Printf("ERROR: failed to delete notify token %s: %v", id, err)
+		h.log.Error("failed to delete notify token", "id", id, "error", err)
 		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}

@@ -20,12 +20,6 @@ export default function App() {
     return () => api.setOnUnauthorized(null)
   }, [logout, navigate])
 
-  useEffect(() => {
-    if (!authenticated) {
-      navigate('/login', { replace: true })
-    }
-  }, [authenticated, navigate])
-
   if (!authenticated) return null
 
   return (

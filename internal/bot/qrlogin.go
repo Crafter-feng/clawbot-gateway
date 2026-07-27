@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -124,7 +125,6 @@ func (qm *QRCodeManager) CreateScan(ctx context.Context, qrcode string) error {
 			state.UpdatedAt = time.Now()
 			if creds != nil {
 				state.Creds = creds
-				qm.connector.token = creds.Token
 			}
 			if redirectHost != "" {
 				state.RedirectHost = redirectHost
@@ -136,7 +136,12 @@ func (qm *QRCodeManager) CreateScan(ctx context.Context, qrcode string) error {
 				return
 			case "scaned_but_redirect":
 				if redirectHost != "" {
-					currentBaseURL = fmt.Sprintf("https://%s", redirectHost)
+					// 仅允许 iLink 已知合法域名
+					if strings.HasSuffix(redirectHost, ".weixin.qq.com") {
+						currentBaseURL = fmt.Sprintf("https://%s", redirectHost)
+					} else {
+						qm.log().Warn("blocked redirect to non-weixin host", "host", redirectHost)
+					}
 				}
 				time.Sleep(1 * time.Second)
 			case "expired":

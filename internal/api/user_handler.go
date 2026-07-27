@@ -43,7 +43,9 @@ func (s *APIServer) handleSwitchUserBackend(c *gin.Context) {
 		RouteMode: "single",
 	}
 	s.db.SaveUserSession(session)
-	s.router.SetUserBackend(userID, req.BackendID)
+	if err := s.router.SetUserBackend(userID, req.BackendID, s.adapters.ListIDs()); err != nil {
+		s.log.Warn("switch user backend failed", "user", userID, "backend", req.BackendID, "error", err)
+	}
 
 	c.JSON(200, gin.H{"success": true})
 }

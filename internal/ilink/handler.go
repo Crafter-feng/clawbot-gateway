@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -18,7 +17,7 @@ func (s *Server) handleProxy(c *gin.Context) {
 	// 1. 验证虚拟 Bot token
 	accountID := s.validateToken(c)
 	if accountID == "" {
-		c.JSON(401, gin.H{"ret": -1, "errmsg": "unauthorized"})
+		c.JSON(401, gin.H{"error": "unauthorized"})
 		return
 	}
 
@@ -28,21 +27,21 @@ func (s *Server) handleProxy(c *gin.Context) {
 	// 2. 获取虚拟 Bot 的配置
 	vbot := s.registry.Get(accountID)
 	if vbot == nil {
-		c.JSON(500, gin.H{"ret": -1, "errmsg": "bot not found"})
+		c.JSON(500, gin.H{"error": "bot not found"})
 		return
 	}
 
 	// 3. 获取真实微信账号的凭证（用于转发到真实 iLink API）
 	realBotToken := s.bot.GetAccountTokenByVirtualID(accountID)
 	if realBotToken == "" {
-		c.JSON(500, gin.H{"ret": -1, "errmsg": "no real bot token"})
+		c.JSON(500, gin.H{"error": "no real bot token"})
 		return
 	}
 
 	// 4. 读取原始请求体
 	body, err := io.ReadAll(io.LimitReader(c.Request.Body, 1<<20))
 	if err != nil {
-		c.JSON(500, gin.H{"ret": -1, "errmsg": "read body error"})
+		c.JSON(500, gin.H{"error": "read body error"})
 		return
 	}
 
@@ -50,7 +49,8 @@ func (s *Server) handleProxy(c *gin.Context) {
 	endpoint := c.FullPath()
 	resp, err := s.forwardToILink(endpoint, body, vbot.BaseURL, realBotToken)
 	if err != nil {
-		c.JSON(502, gin.H{"ret": -1, "errmsg": "forward error: " + err.Error()})
+		s.log.Error("forward error", "error", err, "endpoint", endpoint, "account_id", accountID)
+		c.JSON(502, gin.H{"error": "forward error"})
 		return
 	}
 	defer resp.Body.Close()
@@ -79,9 +79,8 @@ func (s *Server) forwardToILink(endpoint string, body []byte, baseURL string, bo
 	req.Header.Set("iLink-App-Id", "bot")
 	req.Header.Set("iLink-App-ClientVersion", "131584")
 
-	// 发送请求
-	client := &http.Client{Timeout: 60 * time.Second}
-	return client.Do(req)
+	// 使用 Server 的共享 HTTP 客户端
+	return s.httpClient.Do(req)
 }
 
 // handleGetUpdates 透明代理 - 长轮询
@@ -90,7 +89,7 @@ func (s *Server) handleGetUpdates(c *gin.Context) {
 	// 先验证 token
 	accountID := s.validateToken(c)
 	if accountID == "" {
-		c.JSON(401, gin.H{"ret": -1, "errmsg": "unauthorized"})
+		c.JSON(401, gin.H{"error": "unauthorized"})
 		return
 	}
 	s.registry.UpdateLastActive(accountID)
@@ -98,21 +97,21 @@ func (s *Server) handleGetUpdates(c *gin.Context) {
 	// 获取虚拟 Bot 配置
 	vbot := s.registry.Get(accountID)
 	if vbot == nil {
-		c.JSON(500, gin.H{"ret": -1, "errmsg": "bot not found"})
+		c.JSON(500, gin.H{"error": "bot not found"})
 		return
 	}
 
 	// 获取真实 bot token
 	realBotToken := s.bot.GetAccountTokenByVirtualID(accountID)
 	if realBotToken == "" {
-		c.JSON(500, gin.H{"ret": -1, "errmsg": "no real bot token"})
+		c.JSON(500, gin.H{"error": "no real bot token"})
 		return
 	}
 
 	// 读取请求体
 	body, err := io.ReadAll(io.LimitReader(c.Request.Body, 1<<20))
 	if err != nil {
-		c.JSON(500, gin.H{"ret": -1, "errmsg": "read body error"})
+		c.JSON(500, gin.H{"error": "read body error"})
 		return
 	}
 
@@ -120,7 +119,8 @@ func (s *Server) handleGetUpdates(c *gin.Context) {
 	endpoint := c.FullPath()
 	resp, err := s.forwardToILink(endpoint, body, vbot.BaseURL, realBotToken)
 	if err != nil {
-		c.JSON(502, gin.H{"ret": -1, "errmsg": "forward error: " + err.Error()})
+		s.log.Error("forward error", "error", err, "endpoint", endpoint, "account_id", accountID)
+		c.JSON(502, gin.H{"error": "forward error"})
 		return
 	}
 	defer resp.Body.Close()

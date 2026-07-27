@@ -4,6 +4,7 @@ import { api } from '../api/client'
 import { useToast } from '../components/Toast'
 import QrModal from '../components/QrModal'
 import Button from '../components/ui/Button'
+import Input from '../components/ui/Input'
 import Tag from '../components/ui/Tag'
 import Textarea from '../components/ui/Textarea'
 import Select from '../components/ui/Select'
@@ -241,17 +242,14 @@ export default function ChannelsPage() {
               ))}
             </Select>
 
-            <div className="input-group">
-              <label className="input-label" htmlFor="test-message">测试消息</label>
-              <input
-                id="test-message"
-                className="input"
-                placeholder="输入测试消息..."
-                value={testMsg}
-                onChange={(e) => setTestMsg(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleTest() }}
-              />
-            </div>
+            <Input
+              id="test-message"
+              label="测试消息"
+              placeholder="输入测试消息..."
+              value={testMsg}
+              onChange={(e) => setTestMsg(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleTest() }}
+            />
 
             <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-start' }}>
               <Button

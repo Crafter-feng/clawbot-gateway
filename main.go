@@ -72,8 +72,8 @@ func main() {
 	log.Info("config loaded")
 
 	// 打印登录密码（仅首次生成时）
-	if os.Getenv("CLAWBOT_LOGIN_PASSWORD") == "" {
-		log.Info("login password (auto-generated)", "password", cfg.API.LoginPassword)
+	if os.Getenv("CLAWBOT_LOGIN_PASSWORD") == "" && cfg.API.LoginPassword != "" {
+		fmt.Fprintf(os.Stderr, "\n⚠  Generated login password: %s (change it immediately via Settings page)\n\n", cfg.API.LoginPassword)
 	}
 
 	// 3. 初始化路由引擎
@@ -82,7 +82,9 @@ func main() {
 
 	// 3a. 从数据库加载路由规则
 	routeRules, err := db.ListRouteRules()
-	if err == nil {
+	if err != nil {
+		log.Warn("failed to load route rules, continuing with empty", "error", err)
+	} else {
 		for _, rule := range routeRules {
 			r.AddRule(route.RouteRule{
 				ID:         rule.ID,
@@ -98,9 +100,11 @@ func main() {
 
 	// 3b. 恢复用户后端设置
 	sessions, err := db.GetAllUserSessions()
-	if err == nil {
+	if err != nil {
+		log.Warn("failed to load user sessions", "error", err)
+	} else {
 		for _, s := range sessions {
-			r.SetUserBackend(s.UserID, s.BackendID)
+			r.SetUserBackend(s.UserID, s.BackendID, nil)
 			r.SetUserRouteMode(s.UserID, s.RouteMode)
 		}
 	}
@@ -111,7 +115,9 @@ func main() {
 
 	// 4a. 从数据库加载后端
 	backends, err := db.ListBackends()
-	if err == nil {
+	if err != nil {
+		log.Warn("failed to load backends, continuing with empty", "error", err)
+	} else {
 		for _, b := range backends {
 			if !b.Enabled {
 				continue
@@ -125,7 +131,9 @@ func main() {
 
 	// 4b. 加载 ilink_proxy 连接适配器
 	vbots, err := db.ListVirtualBots()
-	if err == nil {
+	if err != nil {
+		log.Warn("failed to load virtual bots", "error", err)
+	} else {
 		for _, vb := range vbots {
 			af.RegisterConnection(adapter.NewILinkProxyAdapter(vb.ID, vb.ID, vb.AccountID, vb.UserID, vb.BaseURL))
 		}
@@ -169,7 +177,9 @@ func main() {
 
 	// 9. 从数据库恢复微信账号
 	accounts, err := db.ListAccounts()
-	if err == nil {
+	if err != nil {
+		log.Warn("failed to load accounts", "error", err)
+	} else {
 		for _, acct := range accounts {
 			creds := &bot.Credentials{
 				Token:     acct.Token,
@@ -207,10 +217,25 @@ func main() {
 	<-quit
 
 	log.Info("shutting down")
+
+	// 先通知 Pipeline 停止接收新消息，然后等待 in-flight 消息处理完成
 	pipelineCancel()
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		pipeline.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		log.Info("pipeline drained")
+	case <-shutdownCtx.Done():
+		log.Warn("pipeline drain timeout, continuing shutdown")
+	}
+
 	apiServer.Shutdown(shutdownCtx)
 
 	for _, a := range conn.GetAccounts() {
@@ -260,14 +285,6 @@ func cmdResetPassword(dbPath string) {
 	fmt.Printf("密码已重置成功\n")
 	fmt.Printf("新密码: %s\n", newPassword)
 	fmt.Printf("\n请使用此密码登录 Web 管理界面\n")
-}
-
-func createAdapterFromDB(b database.Backend) adapter.BackendAdapter {
-	return adapter.CreateAdapterFromDB(b)
-}
-
-func getJSONString(jsonStr, key string) string {
-	return adapter.GetJSONString(jsonStr, key)
 }
 
 // convertGroups 将数据库的路由组转换为路由引擎格式

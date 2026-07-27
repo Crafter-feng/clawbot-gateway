@@ -1,39 +1,34 @@
-FROM golang:1.22-alpine AS builder
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /build/web
+COPY web/package.json web/pnpm-lock.yaml* ./
+RUN corepack enable && pnpm install --frozen-lockfile
+COPY web/ .
+RUN npm run build
+
+FROM golang:1.22-alpine AS backend-builder
 
 WORKDIR /build
-
-# 依赖缓存
 COPY go.mod go.sum ./
 RUN go mod download
-
-# 构建
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o /clawbot-gateway .
 
-# ── 运行镜像 ──
-FROM alpine:3.19
+FROM scratch
 
-RUN apk add --no-cache tzdata ca-certificates
-RUN cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
-    echo "Asia/Shanghai" > /etc/timezone
+COPY --from=backend-builder /etc/ssl/cert.pem /etc/ssl/cert.pem
+COPY --from=backend-builder /usr/share/zoneinfo/Asia/Shanghai /usr/share/zoneinfo/Asia/Shanghai
+
+COPY --from=backend-builder /clawbot-gateway /app/clawbot-gateway
+COPY --from=frontend-builder /build/web/dist/ /app/web/dist/
 
 WORKDIR /app
-
-COPY --from=builder /clawbot-gateway .
-COPY web/ web/
-
-# 数据目录
 VOLUME ["/app/data"]
-
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-USER appuser
-
 EXPOSE 8080
 
-# 环境变量（可通过 docker-compose 或 -e 传入）
 ENV CLAWBOT_DB_PATH=data/clawbot.db
 ENV CLAWBOT_HOST=0.0.0.0
 ENV CLAWBOT_PORT=8080
 ENV CLAWBOT_LOG_LEVEL=info
 
-CMD ["./clawbot-gateway"]
+CMD ["/app/clawbot-gateway"]

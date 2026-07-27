@@ -23,6 +23,9 @@ func (db *DB) ListVirtualBots() ([]VirtualBot, error) {
 		}
 		result = append(result, vb)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
@@ -93,6 +96,9 @@ func (db *DB) GetAllUserSessions() ([]UserSession, error) {
 			continue
 		}
 		result = append(result, s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return result, nil
 }

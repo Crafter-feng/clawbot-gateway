@@ -111,9 +111,14 @@ func (cm *ContextManager) ClearContext(userID string, backendID string) {
 func (cm *ContextManager) ClearAllUserContext(userID string) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
+	prefix := userID + ":"
 	for k := range cm.sessions {
-		if strings.HasPrefix(k, userID+":") {
-			delete(cm.sessions, k)
+		// 精确匹配 userID，防止误删 user10:/user100: 等前缀冲突
+		if strings.HasPrefix(k, prefix) {
+			parts := strings.SplitN(k, ":", 2)
+			if len(parts) == 2 && parts[0] == userID {
+				delete(cm.sessions, k)
+			}
 		}
 	}
 }

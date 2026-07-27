@@ -3,13 +3,14 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 
 	"clawbot-gateway/internal/crypto"
 	"clawbot-gateway/internal/database"
 )
 
 func GenerateSecret() string {
-	return crypto.GenerateSecret(32)
+	return crypto.MustGenerateSecret(32)
 }
 
 type Config struct {
@@ -62,7 +63,12 @@ func LoadFromDB(db *database.DB) *Config {
 		cfg.API.LoginPassword = db.GetSetting("api.login_password")
 	}
 	if cfg.API.LoginPassword == "" {
-		cfg.API.LoginPassword = "admin_" + crypto.GenerateSecret(6)
+		secret, err := crypto.GenerateSecret(6)
+		if err != nil {
+			cfg.API.LoginPassword = "admin_" + crypto.MustGenerateSecret(6)
+		} else {
+			cfg.API.LoginPassword = "admin_" + secret
+		}
 		db.SetSetting("api.login_password", cfg.API.LoginPassword)
 	}
 
@@ -76,7 +82,16 @@ func LoadFromDB(db *database.DB) *Config {
 		db.SetSetting("api.jwt_secret", cfg.API.JWTSecret)
 	}
 	cfg.API.JWTExpiryHours = intEnvOrDefault("CLAWBOT_JWT_EXPIRY_HOURS", db.GetSetting("api.jwt_expiry_hours"), 24)
-	cfg.API.AllowedOrigins = []string{envOrDefault("CLAWBOT_ALLOWED_ORIGINS", db.GetSetting("api.allowed_origins"))}
+	originStr := envOrDefault("CLAWBOT_ALLOWED_ORIGINS", db.GetSetting("api.allowed_origins"))
+	if originStr == "" || originStr == "*" {
+		cfg.API.AllowedOrigins = []string{"*"}
+	} else {
+		parts := strings.Split(originStr, ",")
+		cfg.API.AllowedOrigins = make([]string, len(parts))
+		for i, o := range parts {
+			cfg.API.AllowedOrigins[i] = strings.TrimSpace(o)
+		}
+	}
 
 	// 上下文配置
 	cfg.Context.MaxHistory = intEnvOrDefault("CLAWBOT_MAX_HISTORY", db.GetSetting("context.max_history"), 20)

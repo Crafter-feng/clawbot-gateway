@@ -24,6 +24,9 @@ func (db *DB) ListAccounts() ([]Account, error) {
 		}
 		result = append(result, a)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 

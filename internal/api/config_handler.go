@@ -1,6 +1,8 @@
 package api
 
 import (
+	"strings"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -14,9 +16,12 @@ var sensitiveKeys = map[string]bool{
 func (s *APIServer) handleGetAllConfig(c *gin.Context) {
 	settings := s.db.GetAllSettings()
 
-	// 过滤敏感配置
+	// 过滤敏感配置和内部键
 	filtered := make(map[string]string)
 	for k, v := range settings {
+		if strings.HasPrefix(k, "syncbuf:") {
+			continue
+		}
 		if sensitiveKeys[k] {
 			// 敏感配置只返回是否已设置，不返回实际值
 			if v != "" {

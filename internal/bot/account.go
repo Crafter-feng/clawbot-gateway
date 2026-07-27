@@ -119,7 +119,12 @@ func (c *Connector) accountPollLoop(ctx context.Context, creds *Credentials) {
 				delay = backoffDelay
 				consecutiveFailures = 0
 			}
-			time.Sleep(delay)
+			select {
+			case <-ctx.Done():
+				c.saveSyncBuf(creds.AccountID, buf)
+				return
+			case <-time.After(delay):
+			}
 			continue
 		}
 
@@ -135,7 +140,12 @@ func (c *Connector) accountPollLoop(ctx context.Context, creds *Credentials) {
 				c.log.Error("session expired for account, pausing 10min", "account_id", creds.AccountID)
 			}
 			c.saveSyncBuf(creds.AccountID, buf)
-			time.Sleep(sessionExpiryPause)
+			select {
+			case <-ctx.Done():
+				c.saveSyncBuf(creds.AccountID, buf)
+				return
+			case <-time.After(sessionExpiryPause):
+			}
 			consecutiveFailures = 0
 			continue
 		}
@@ -146,7 +156,12 @@ func (c *Connector) accountPollLoop(ctx context.Context, creds *Credentials) {
 				delay = backoffDelay
 				consecutiveFailures = 0
 			}
-			time.Sleep(delay)
+			select {
+			case <-ctx.Done():
+				c.saveSyncBuf(creds.AccountID, buf)
+				return
+			case <-time.After(delay):
+			}
 			continue
 		}
 

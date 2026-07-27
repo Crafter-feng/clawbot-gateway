@@ -374,7 +374,7 @@ func TestUserOverride(t *testing.T) {
 	})
 
 	// 设置用户覆写
-	r.SetUserBackend("user1", "claude")
+	r.SetUserBackend("user1", "claude", nil)
 
 	// 用户覆写优先级最高
 	decision := r.Route("今天天气怎么样", "user1", "", "", "")

@@ -4,7 +4,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gin-gonic/gin"
 )
 
 // ── 速率限制器 ──
@@ -116,28 +115,4 @@ func (rl *RateLimiter) cleanupBuckets() {
 // MaxRequestBodySize 最大请求体大小（1MB）
 const MaxRequestBodySize = 1 * 1024 * 1024
 
-// ── 中间件 ──
 
-// RateLimitMiddleware 速率限制中间件
-func (s *Server) RateLimitMiddleware() func(*gin.Context) {
-	limiter := NewRateLimiter(10, 20) // 每秒 10 个请求，突发 20 个
-
-	return func(c *gin.Context) {
-		// 使用 IP + account_id 作为 key
-		key := c.ClientIP()
-		if accountID := s.validateToken(c); accountID != "" {
-			key = accountID
-		}
-
-		if !limiter.Allow(key) {
-			c.JSON(429, gin.H{
-				"ret":    -1,
-				"errmsg": "rate limit exceeded",
-			})
-			c.Abort()
-			return
-		}
-
-		c.Next()
-	}
-}

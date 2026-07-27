@@ -172,7 +172,10 @@ type RawMessageItem struct {
 type RawMessageItem_Item struct {
 	Type      int                    `json:"type"`
 	TextItem  *RawMessageItem_TextItem `json:"text_item,omitempty"`
+	ImageItem *RawMessageItem_TextItem `json:"image_item,omitempty"`
 	VoiceItem *RawMessageItem_TextItem `json:"voice_item,omitempty"`
+	FileItem  *RawMessageItem_TextItem `json:"file_item,omitempty"`
+	VideoItem *RawMessageItem_TextItem `json:"video_item,omitempty"`
 	RefMsg    *RawMessageItem_RefMsg   `json:"ref_msg,omitempty"`
 }
 
@@ -211,8 +214,17 @@ func convertItems(rawItems []RawMessageItem_Item) []MessageItem {
 		if raw.TextItem != nil {
 			item.TextItem = &TextItem{Text: raw.TextItem.Text}
 		}
+		if raw.ImageItem != nil {
+			item.ImageItem = &ImageItem{URL: raw.ImageItem.Text}
+		}
 		if raw.VoiceItem != nil {
 			item.VoiceItem = &VoiceItem{Text: raw.VoiceItem.Text}
+		}
+		if raw.FileItem != nil {
+			item.FileItem = &FileItem{FileName: raw.FileItem.Text}
+		}
+		if raw.VideoItem != nil {
+			item.VideoItem = &VideoItem{VideoSize: 0}
 		}
 		if raw.RefMsg != nil {
 			ref := &RefMessage{Title: raw.RefMsg.Title}
@@ -261,6 +273,20 @@ func ExtractText(items []RawMessageItem_Item) string {
 	for _, item := range items {
 		if item.Type == 3 && item.VoiceItem != nil && item.VoiceItem.Text != "" {
 			return item.VoiceItem.Text
+		}
+	}
+	// 回退：对于图片/文件/视频等非文本消息，返回占位描述
+	for _, item := range items {
+		switch item.Type {
+		case 2: // image
+			return "[图片]"
+		case 4: // file
+			if item.FileItem != nil && item.FileItem.Text != "" {
+				return "[文件: " + item.FileItem.Text + "]"
+			}
+			return "[文件]"
+		case 5: // video
+			return "[视频]"
 		}
 	}
 	return ""

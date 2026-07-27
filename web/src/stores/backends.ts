@@ -57,23 +57,46 @@ export const useBackendsStore = create<BackendsState>((set, get) => ({
   },
 
   async register(data: BackendForm) {
-    await api.post('/api/v1/backends', data)
-    await get().fetch()
+    try {
+      await api.post('/api/v1/backends', data)
+      await get().fetch()
+      set({ error: null })
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : 'operation failed' })
+      throw e
+    }
   },
 
   async update(id: string, data: Partial<BackendForm>) {
-    await api.put(`/api/v1/backends/${id}`, data)
-    await get().fetch()
+    try {
+      await api.put(`/api/v1/backends/${id}`, data)
+      await get().fetch()
+      set({ error: null })
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : 'operation failed' })
+      throw e
+    }
   },
 
   async remove(id: string) {
-    await api.del(`/api/v1/backends/${id}`)
-    await get().fetch()
+    try {
+      await api.del(`/api/v1/backends/${id}`)
+      await get().fetch()
+      set({ error: null })
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : 'operation failed' })
+      throw e
+    }
   },
 
   async setDefault(backendId: string) {
-    await api.put('/api/v1/backends/default', { backend_id: backendId })
-    set({ defaultBackend: backendId })
+    try {
+      await api.put('/api/v1/backends/default', { backend_id: backendId })
+      set({ defaultBackend: backendId, error: null })
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : 'operation failed' })
+      throw e
+    }
   },
 
   async test(id: string) {

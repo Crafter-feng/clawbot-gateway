@@ -153,6 +153,15 @@ func (s *APIServer) Start(addr string) error {
 	msg := api.Group("/message")
 	msg.POST("/send", s.handlePushSend)
 
+	// 用户管理
+	users := api.Group("/users")
+	users.GET("", s.handleListUsers)
+	users.GET("/:id/context", s.handleGetUserContext)
+	users.PUT("/:id/backend", s.handleSwitchUserBackend)
+	users.DELETE("/:id/context", s.handleClearUserContext)
+	users.GET("/:id/routemode", s.handleGetUserRouteMode)
+	users.PUT("/:id/routemode", s.handleSetUserRouteMode)
+
 	// 统计
 	api.GET("/stats", s.handleStats)
 

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -26,6 +27,7 @@ type MessagePipeline struct {
 
 	msgCount int64
 	msgMu    sync.Mutex
+	wg       sync.WaitGroup
 	log      *log.Logger
 }
 
@@ -53,8 +55,23 @@ func NewMessagePipeline(
 // Start 启动消息处理循环
 func (p *MessagePipeline) Start(ctx context.Context) {
 	p.log.Info("message pipeline started")
-	go p.processLoop(ctx)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				p.log.Error("processLoop panic", "panic", r, "stack", string(debug.Stack()))
+				// 自动恢复：重新启动处理循环
+				time.Sleep(time.Second)
+				go p.processLoop(ctx)
+			}
+		}()
+		p.processLoop(ctx)
+	}()
 	go p.cleanupLoop(ctx)
+}
+
+// Wait 等待所有 in-flight 消息处理完成，用于优雅关闭
+func (p *MessagePipeline) Wait() {
+	p.wg.Wait()
 }
 
 func (p *MessagePipeline) processLoop(ctx context.Context) {
@@ -79,6 +96,9 @@ func (p *MessagePipeline) processLoop(ctx context.Context) {
 }
 
 func (p *MessagePipeline) processMessage(ctx context.Context, msg bot.NormalizedMessage, seq int64) {
+	p.wg.Add(1)
+	defer p.wg.Done()
+
 	if !p.connector.IsRunning() {
 		p.log.Warn("connector not running, skipping message", "seq", seq)
 		return
@@ -217,7 +237,7 @@ func (p *MessagePipeline) forwardToBackend(ctx context.Context, msg bot.Normaliz
 
 	// ilink_proxy 是连接适配器，消息已通过透传到达外部客户端
 	// 不需要调用 Handle()，也不需要回复，外部客户端会自行处理
-	if bak.Type() == "ilink_proxy" {
+	if adapter.IsConnectionAdapter(bak.Type()) {
 		p.log.Info("forwarded to ilink_proxy backend", "seq", seq, "backend", backendID)
 		return
 	}
@@ -441,7 +461,9 @@ func (cp *CommandProcessor) Execute(cmd *CommandMatch, msg bot.NormalizedMessage
 			}
 			return fmt.Sprintf("❌ 后端 [%s] 不存在\n可用后端：%s", backendID, strings.Join(names, ", "))
 		}
-		cp.router.SetUserBackend(msg.FromUser, backendID)
+		if err := cp.router.SetUserBackend(msg.FromUser, backendID, cp.adapters.ListIDs()); err != nil {
+			return fmt.Sprintf("❌ 切换失败: %s", err.Error())
+		}
 		return fmt.Sprintf("✅ 已切换至 [%s]，后续消息将使用此后端", bak.Name())
 
 	case "list_backends":

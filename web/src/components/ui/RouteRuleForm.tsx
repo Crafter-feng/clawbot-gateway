@@ -23,6 +23,7 @@ export default function RouteRuleForm({ rule, onClose, onSave }: RouteRuleFormPr
   const [groups, setGroups] = useState<RouteRuleGroup[]>(rule?.groups || [])
   const [groupLogic, setGroupLogic] = useState<'and' | 'or'>(rule?.group_logic || 'and')
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   // 测试匹配
   const [testMessage, setTestMessage] = useState('')
@@ -116,6 +117,8 @@ export default function RouteRuleForm({ rule, onClose, onSave }: RouteRuleFormPr
     if (!name.trim() || !backendId || filteredGroups.length === 0) return
 
     try {
+      setSaving(true)
+      setSaveError(null)
       const ruleData = {
         name: name.trim(),
         backend_id: backendId,
@@ -134,9 +137,8 @@ export default function RouteRuleForm({ rule, onClose, onSave }: RouteRuleFormPr
       onSave()
     } catch (e) {
       const msg = e instanceof Error ? e.message : '保存失败'
-      // 错误处理 - 使用 toast 或 setError
       console.error('保存路由规则失败:', msg)
-      alert('保存失败: ' + msg)
+      setSaveError(msg)
     } finally {
       setSaving(false)
     }
@@ -344,6 +346,17 @@ export default function RouteRuleForm({ rule, onClose, onSave }: RouteRuleFormPr
       )}
 
       {/* 操作按钮 */}
+      {saveError && (
+        <div role="alert" style={{
+          padding: 'var(--space-3)',
+          borderRadius: 'var(--radius-md)',
+          background: 'var(--danger-dim)',
+          fontSize: 'var(--text-sm)',
+          color: 'var(--danger)',
+        }}>
+          保存失败: {saveError}
+        </div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
         <Button variant="ghost" onClick={onClose}>
           取消

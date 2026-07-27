@@ -6,36 +6,28 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"clawbot-gateway/internal/log"
 )
 
-// MessageBroadcaster 消息广播接口（避免循环依赖）
-type MessageBroadcaster interface {
-	Broadcast(msg NormalizedMessage)
-}
-
 // ── ClawBot Connector ──
 
 type Connector struct {
 	mu            sync.RWMutex
-	credentials   *Credentials
-	token         string
 	baseURL       string
 	pollTimeout   int
 	updateBuf     string
-	cancel        context.CancelFunc
 	msgChan       chan NormalizedMessage
 	client        *http.Client
 	accounts      []*AccountInfo
 	accountMu     sync.RWMutex
 	qrManager     *QRCodeManager
 	botType       int
-	contextTokens map[string]string       // accountID:userID → context_token
-	broadcaster   MessageBroadcaster      // 消息广播器（用于虚拟 Bot 代理模式）
-	syncBufStore  SyncBufStore            // 轮询游标存储
+	contextTokens map[string]string  // accountID:userID → context_token
+	syncBufStore  SyncBufStore       // 轮询游标存储
 	log           *log.Logger
 }
 
@@ -49,7 +41,6 @@ type AccountInfo struct {
 type ConnectorConfig struct {
 	BaseURL     string
 	PollTimeout int
-	Token       string         // 可选：启动时自动注册的 iLink token
 	BotType     int            // iLink bot_type 参数（默认 3）
 	Log         *log.Logger    // 日志记录器，nil 时使用默认
 }
@@ -66,7 +57,7 @@ func NewConnector(cfg ConnectorConfig) *Connector {
 		baseURL:     cfg.BaseURL,
 		pollTimeout: cfg.PollTimeout,
 		botType:     cfg.BotType,
-		msgChan:     make(chan NormalizedMessage, 100),
+		msgChan:     make(chan NormalizedMessage, 1000),
 		client: &http.Client{
 			Timeout: time.Duration(cfg.PollTimeout+10) * time.Second,
 		},
@@ -92,38 +83,38 @@ func (c *Connector) IsRunning() bool {
 	return len(c.accounts) > 0
 }
 
+// GetCredentials 返回第一个可用账号的凭证
 func (c *Connector) GetCredentials() *Credentials {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.credentials
-}
-
-// ── 消息广播 ──
-
-// SetBroadcaster 设置消息广播器（用于虚拟 Bot 代理模式）
-func (c *Connector) SetBroadcaster(b MessageBroadcaster) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.broadcaster = b
-}
-
-// GetBroadcaster 获取消息广播器
-func (c *Connector) GetBroadcaster() MessageBroadcaster {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.broadcaster
+	c.accountMu.RLock()
+	defer c.accountMu.RUnlock()
+	if len(c.accounts) > 0 && c.accounts[0].Credentials != nil {
+		return c.accounts[0].Credentials
+	}
+	return nil
 }
 
 // GetAccountTokenByVirtualID 根据虚拟 Bot ID 获取真实账号的 token
-// 虚拟 Bot 的 accountID 格式为 "gw_xxx"
-// 注意：当前实现返回第一个可用的真实账号 token
-// 未来需要根据虚拟 Bot 的 accountID 建立多账号映射关系
 func (c *Connector) GetAccountTokenByVirtualID(virtualAccountID string) string {
 	c.accountMu.RLock()
 	defer c.accountMu.RUnlock()
 
-	// 目前简单返回第一个可用账号的 token
-	// 后续可以实现更复杂的映射逻辑
+	// 去掉 "gw_" 前缀后匹配真实 accountID（格式约定）
+	// 例如：虚拟 Bot ID 为 "gw_user1_device1"，映射到真实账号 "user1"
+	realID := virtualAccountID
+	if len(virtualAccountID) > 3 && virtualAccountID[:3] == "gw_" {
+		parts := strings.SplitN(virtualAccountID, "_", 3)
+		if len(parts) >= 2 {
+			realID = parts[1]
+		}
+	}
+	for _, a := range c.accounts {
+		if a.Credentials != nil && a.Credentials.Token != "" {
+			if a.Credentials.AccountID == realID || a.Credentials.UserID == realID {
+				return a.Credentials.Token
+			}
+		}
+	}
+	// Fallback: 返回第一个可用账号
 	for _, a := range c.accounts {
 		if a.Credentials != nil && a.Credentials.Token != "" {
 			return a.Credentials.Token

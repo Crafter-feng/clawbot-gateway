@@ -1,6 +1,7 @@
 import { useRoutesStore, type RouteRule, type RouteRuleGroup, type RouteCondition } from '../../stores/routes'
 import Button from './Button'
 import Tag from './Tag'
+import EmptyState from './EmptyState'
 
 interface RouteRuleListProps {
   onEdit: (rule: RouteRule) => void
@@ -44,10 +45,10 @@ export default function RouteRuleList({ onEdit, onDelete }: RouteRuleListProps) 
 
   if (items.length === 0) {
     return (
-      <div className="empty-state">
-        <div className="empty-state-title">暂无路由规则</div>
-        <div className="empty-state-description">添加路由规则以自动分发消息</div>
-      </div>
+      <EmptyState
+        title="暂无路由规则"
+        description="添加路由规则以自动分发消息"
+      />
     )
   }
 

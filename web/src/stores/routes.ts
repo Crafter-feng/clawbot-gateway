@@ -65,7 +65,7 @@ interface RoutesState {
   remove(id: number): Promise<void>
   toggleEnabled(id: number): Promise<void>
   reorder(ids: number[]): Promise<void>
-  testMatch(message: string, userId: string): Promise<{ matched: boolean; backend_id: string; matched_by: string; rule_id: number }>
+  testMatch(message: string, fromUser?: string, msgType?: string): Promise<{ matched: boolean; backend_id: string; matched_by: string; rule_id: number }>
 }
 
 export const useRoutesStore = create<RoutesState>((set, get) => ({
@@ -85,36 +85,65 @@ export const useRoutesStore = create<RoutesState>((set, get) => ({
   },
 
   async add(rule) {
-    await api.post('/api/v1/routes', rule)
-    await get().fetch()
+    try {
+      await api.post('/api/v1/routes', rule)
+      await get().fetch()
+      set({ error: null })
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : 'operation failed' })
+      throw e
+    }
   },
 
   async update(id, rule) {
-    await api.put(`/api/v1/routes/${id}`, rule)
-    await get().fetch()
+    try {
+      await api.put(`/api/v1/routes/${id}`, rule)
+      await get().fetch()
+      set({ error: null })
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : 'operation failed' })
+      throw e
+    }
   },
 
   async remove(id) {
-    await api.del(`/api/v1/routes/${id}`)
-    await get().fetch()
+    try {
+      await api.del(`/api/v1/routes/${id}`)
+      await get().fetch()
+      set({ error: null })
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : 'operation failed' })
+      throw e
+    }
   },
 
   async toggleEnabled(id) {
-    await api.put(`/api/v1/routes/${id}/toggle`)
-    await get().fetch()
+    try {
+      await api.put(`/api/v1/routes/${id}/toggle`)
+      await get().fetch()
+      set({ error: null })
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : 'operation failed' })
+      throw e
+    }
   },
 
   async reorder(ids) {
-    await api.put('/api/v1/routes/reorder', { ids })
-    await get().fetch()
+    try {
+      await api.put('/api/v1/routes/reorder', { ids })
+      await get().fetch()
+      set({ error: null })
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : 'operation failed' })
+      throw e
+    }
   },
 
-  async testMatch(message, userId) {
+  async testMatch(message, fromUser, msgType) {
     return await api.post<{ matched: boolean; backend_id: string; matched_by: string; rule_id: number }>('/api/v1/routes/test', {
       message,
-      user_id: userId,
-      from_user: userId,
-      msg_type: 'text',
+      from_user: fromUser || 'test_user',
+      msg_type: msgType || 'text',
     })
   },
 }))

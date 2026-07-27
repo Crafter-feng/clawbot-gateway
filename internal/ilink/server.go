@@ -2,6 +2,7 @@ package ilink
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -12,10 +13,11 @@ import (
 // Server iLink API 服务器
 // 透明代理模式：转发外部服务的请求到真实 iLink API
 type Server struct {
-	bot      *bot.Connector
-	registry *ClientRegistry
-	limiter  *RateLimiter
-	log      *log.Logger
+	bot        *bot.Connector
+	registry   *ClientRegistry
+	limiter    *RateLimiter
+	log        *log.Logger
+	httpClient *http.Client
 }
 
 // NewServer 创建 iLink API 服务器
@@ -25,12 +27,25 @@ func NewServer(bot *bot.Connector, registry *ClientRegistry) *Server {
 		registry: registry,
 		limiter:  NewRateLimiter(10, 20), // 每秒 10 个请求，突发 20 个
 		log:      log.Default().WithComponent("ilink"),
+		httpClient: &http.Client{
+			Timeout: 60 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        20,
+				IdleConnTimeout:     90 * time.Second,
+				DisableCompression:  false,
+			},
+		},
 	}
 }
 
 // GetRegistry 获取客户端注册表
 func (s *Server) GetRegistry() *ClientRegistry {
 	return s.registry
+}
+
+// Stop 停止 iLink 服务器，释放资源
+func (s *Server) Stop() {
+	s.limiter.Stop()
 }
 
 // validateToken 验证虚拟 Bot token
@@ -72,10 +87,7 @@ func (s *Server) rateLimitMiddleware() gin.HandlerFunc {
 		}
 
 		if !s.limiter.Allow(key) {
-			c.JSON(429, gin.H{
-				"ret":    -1,
-				"errmsg": "rate limit exceeded",
-			})
+			c.JSON(429, gin.H{"error": "rate limit exceeded"})
 			c.Abort()
 			return
 		}

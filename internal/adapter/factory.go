@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"fmt"
 	"sync"
 
 	"clawbot-gateway/internal/database"
@@ -41,6 +42,16 @@ func (f *AdapterFactory) Remove(id string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	delete(f.adapters, id)
+}
+
+func (f *AdapterFactory) ListIDs() []string {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	ids := make([]string, 0, len(f.adapters))
+	for id := range f.adapters {
+		ids = append(ids, id)
+	}
+	return ids
 }
 
 func (f *AdapterFactory) List() []BackendAdapter {
@@ -101,4 +112,28 @@ func (f *AdapterFactory) ListConnections() []ConnectionAdapter {
 // CreateAdapterFromDB 从数据库后端记录创建适配器实例（委托给注册表）
 func CreateAdapterFromDB(b database.Backend) BackendAdapter {
 	return CreateAdapter(b)
+}
+
+func IsConnectionAdapter(adapterType string) bool {
+	return adapterType == "ilink_proxy"
+}
+
+func (f *AdapterFactory) Reset() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.adapters = make(map[string]BackendAdapter)
+	f.conns = make(map[string]ConnectionAdapter)
+}
+
+func (f *AdapterFactory) RegisterFromDB(b database.Backend) error {
+	adapt := CreateAdapterFromDB(b)
+	if adapt == nil {
+		return fmt.Errorf("cannot create adapter for backend %s", b.ID)
+	}
+	f.Register(adapt)
+	if IsConnectionAdapter(adapt.Type()) {
+		connAdapter := NewILinkProxyAdapter(b.ID, b.Name, "gw_"+b.ID, "gw_"+b.ID+"@im.wechat", "https://ilinkai.weixin.qq.com")
+		f.RegisterConnection(connAdapter)
+	}
+	return nil
 }

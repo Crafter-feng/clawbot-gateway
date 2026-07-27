@@ -26,6 +26,9 @@ func (db *DB) ListNotifyTokens() ([]NotifyToken, error) {
 		t.Enabled = enabled == 1
 		result = append(result, t)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 

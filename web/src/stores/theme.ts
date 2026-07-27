@@ -7,7 +7,6 @@ const STORAGE_KEY = 'clawbot_theme'
 function getInitialTheme(): Theme {
   const stored = localStorage.getItem(STORAGE_KEY)
   if (stored === 'light' || stored === 'dark') return stored
-  // 跟随系统偏好
   if (window.matchMedia?.('(prefers-color-scheme: light)').matches) return 'light'
   return 'dark'
 }
@@ -23,22 +22,23 @@ interface ThemeState {
   setTheme(theme: Theme): void
 }
 
-export const useThemeStore = create<ThemeState>((set, get) => {
+export const useThemeStore = create<ThemeState>((set, get) => ({
+  theme: 'dark',
+
+  toggle() {
+    const next = get().theme === 'dark' ? 'light' : 'dark'
+    applyTheme(next)
+    set({ theme: next })
+  },
+
+  setTheme(theme: Theme) {
+    applyTheme(theme)
+    set({ theme })
+  },
+}))
+
+export function initTheme(): void {
   const initial = getInitialTheme()
   applyTheme(initial)
-
-  return {
-    theme: initial,
-
-    toggle() {
-      const next = get().theme === 'dark' ? 'light' : 'dark'
-      applyTheme(next)
-      set({ theme: next })
-    },
-
-    setTheme(theme: Theme) {
-      applyTheme(theme)
-      set({ theme })
-    },
-  }
-})
+  useThemeStore.setState({ theme: initial })
+}

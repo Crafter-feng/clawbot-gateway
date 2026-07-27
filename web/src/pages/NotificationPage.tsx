@@ -93,7 +93,18 @@ export default function NotificationPage() {
 
   const handleCopy = useCallback(async (text: string, id: string) => {
     try {
-      await navigator.clipboard.writeText(text)
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(text)
+      } else {
+        const textarea = document.createElement('textarea')
+        textarea.value = text
+        textarea.style.position = 'fixed'
+        textarea.style.opacity = '0'
+        document.body.appendChild(textarea)
+        textarea.select()
+        document.execCommand('copy')
+        document.body.removeChild(textarea)
+      }
       setCopiedId(id)
       clearTimeout(copyTimerRef.current)
       copyTimerRef.current = setTimeout(() => setCopiedId(null), 2000)

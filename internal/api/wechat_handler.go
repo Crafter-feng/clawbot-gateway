@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"time"
 
@@ -33,7 +32,8 @@ func (s *APIServer) handleGetQRCode(c *gin.Context) {
 	// 调用真实 iLink API 获取二维码
 	qrData, err := s.connector.GetQRCode(c.Request.Context())
 	if err != nil {
-		c.JSON(500, gin.H{"error": fmt.Sprintf("获取二维码失败: %v", err)})
+		s.log.Error("get QR code failed", "error", err)
+		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
 
@@ -42,7 +42,8 @@ func (s *APIServer) handleGetQRCode(c *gin.Context) {
 	scanCtx, scanCancel := context.WithCancel(context.Background())
 	if err := qrManager.CreateScan(scanCtx, qrData.QRCode); err != nil {
 		scanCancel()
-		c.JSON(500, gin.H{"error": fmt.Sprintf("创建扫描会话失败: %v", err)})
+		s.log.Error("create scan session failed", "error", err)
+		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
 	// 不 defer scanCancel()——轮询 goroutine 在 CreateScan 内创建自己的派生 context 并管理生命周期
