@@ -67,6 +67,24 @@ go run main.go
 # 浏览器访问 http://localhost:8080
 ```
 
+## CLI 命令
+
+Gateway 支持运维子命令，直接操作数据库，不启动 HTTP 服务：
+
+```bash
+# 重置登录密码（生成随机密码）
+./clawbot-gateway reset-password
+
+# 重置为指定密码
+./clawbot-gateway reset-password myNewPass
+
+# Docker 环境
+docker exec clawbot-gateway ./clawbot-gateway reset-password
+
+# 查看帮助
+./clawbot-gateway help
+```
+
 ## 配置管理
 
 ### 启动配置（.env）
@@ -93,8 +111,7 @@ CLAWBOT_LOG_LEVEL=info
 - 路由规则配置
 - 系统设置（JWT 有效期、会话策略等）
 - 通知 Token 配置
-
-## 命令系统
+- **登录密码修改**（设置页 → 密码设置）
 
 | 命令 | 行为 |
 |------|------|
@@ -135,32 +152,33 @@ POST /ilink/bot/sendmessage     发送消息（透明代理）
 POST /ilink/bot/sendtyping      输入状态（透明代理）
 POST /ilink/bot/getconfig       获取配置（透明代理）
 POST /ilink/bot/getuploadurl    获取上传 URL（透明代理）
-```
-
-### Webhook API
-```
-POST /api/v1/notify/send        发送通知消息
-```
-
 ### 管理 API（需鉴权）
 ```
-GET    /api/v1/backends         列出后端
-POST   /api/v1/backends         注册后端
-PUT    /api/v1/backends/:id     更新后端
-DELETE /api/v1/backends/:id     删除后端
+GET    /api/v1/backends             列出后端
+POST   /api/v1/backends             注册后端
+PUT    /api/v1/backends/:id         更新后端
+DELETE /api/v1/backends/:id         删除后端
 
-GET    /api/v1/routes           列出路由规则
-POST   /api/v1/routes           添加路由规则
-DELETE /api/v1/routes/:id       删除路由规则
+GET    /api/v1/routes               列出路由规则
+POST   /api/v1/routes               添加路由规则
+DELETE /api/v1/routes/:id           删除路由规则
 
-GET    /api/v1/accounts         列出微信账号
+GET    /api/v1/accounts             列出微信账号
 
-GET    /api/v1/config           获取系统配置
-PUT    /api/v1/config           更新系统配置
+GET    /api/v1/config               获取系统配置
+PUT    /api/v1/config               更新系统配置
 
-GET    /api/v1/notify/tokens    列出通知 Token
-POST   /api/v1/notify/tokens    创建通知 Token
-DELETE /api/v1/notify/tokens/:id 删除通知 Token
+GET    /api/v1/connections          列出连接适配器（含虚拟 Bot token 和连接状态）
+GET    /api/v1/connections/:id      获取连接详情
+GET    /api/v1/connections/stats    连接统计
+
+PUT    /api/v1/auth/password        修改登录密码（需旧密码验证）
+GET    /api/v1/auth/token           获取 API Token
+POST   /api/v1/auth/token           重新生成 API Token
+
+GET    /api/v1/notify/tokens        列出通知 Token
+POST   /api/v1/notify/tokens        创建通知 Token
+DELETE /api/v1/notify/tokens/:id    删除通知 Token
 ```
 
 ## 技术栈
