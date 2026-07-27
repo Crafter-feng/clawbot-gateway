@@ -28,9 +28,9 @@
 - 只有主客户端（真实微信账号）需要 QR 扫码登录
 - iLink 服务端不提供 `/get_bot_qrcode` 和 `/get_qrcode_status` 端点
 
-### 4. Webhook 是独立模块
+### 4. 通知是独立模块
 
-- Webhook 是独立的单向通道模块，不是适配器
+- 通知是独立的单向通道模块，不是适配器
 - 用途：允许外部系统向微信用户发送消息
 - 不参与消息代理，不影响虚拟 Bot 机制
 - 端点：`/api/v1/notify/send`
@@ -132,7 +132,7 @@ internal/database → (无外部依赖)
 | Web UI 登录 | JWT Token |
 | 管理 API | JWT Token |
 | iLink 服务端 | Bearer Token（虚拟 Bot） |
-| Webhook | Bearer Token（通知 Token） |
+| 通知通道 | Bearer Token（通知 Token） |
 
 ### 13. Token 管理
 

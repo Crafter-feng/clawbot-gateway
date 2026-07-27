@@ -12,13 +12,13 @@ import (
 	"clawbot-gateway/internal/database"
 )
 
-// Handler Webhook 处理器
+// Handler 通知处理器
 type Handler struct {
 	db       *database.DB
 	sendFunc func(ctx context.Context, toUser, content, accountID string) error
 }
 
-// NewHandler 创建 Webhook 处理器
+// NewHandler 创建通知处理器
 func NewHandler(db *database.DB, sendFunc func(ctx context.Context, toUser, content, accountID string) error) *Handler {
 	return &Handler{
 		db:       db,
@@ -93,7 +93,7 @@ func (h *Handler) HandleCreateToken(c *gin.Context) {
 		return
 	}
 
-	id := "wh_" + time.Now().Format("20060102150405") + "_" + crypto.GenerateSecret(6)
+	id := "nt_" + time.Now().Format("20060102150405") + "_" + crypto.GenerateSecret(6)
 	token := crypto.GenerateSecret(32)
 
 	t := database.NotifyToken{

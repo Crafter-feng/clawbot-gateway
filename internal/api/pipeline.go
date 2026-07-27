@@ -94,28 +94,40 @@ func (p *MessagePipeline) processMessage(ctx context.Context, msg bot.Normalized
 	if cmd := p.commandProc.Parse(content); cmd != nil {
 		p.log.Info("command matched", "seq", seq, "action", cmd.Action, "args", cmd.Args)
 
-		// 一次性转发命令：/<backend_id>
+		// 一次性转发命令：/<backend_id> 或 /help <backend_id>
 		if cmd.Action == "forward_to" {
 			backendID := cmd.Args[0]
-			p.log.Info("forwarding to backend", "seq", seq, "backend", backendID)
-			p.forwardToBackend(ctx, msg, content, backendID, seq)
-			return
-		}
+			forwardContent := content
+			parts := strings.Fields(forwardContent)
 
-		reply := p.commandProc.Execute(cmd, msg)
-		if reply != "" {
-			creds := p.connector.GetAccountCredentials(msg.AccountID)
-			if creds != nil {
-				contextToken := p.connector.GetContextToken(msg.AccountID, msg.FromUser)
-				p.log.Info("sending command reply", "seq", seq, "to", msg.FromUser, "reply_len", len(reply))
-				if err := p.connector.SendTextWithCreds(ctx, creds, msg.FromUser, reply, contextToken); err != nil {
-					p.log.Warn("command reply send error", "seq", seq, "error", err)
+			if strings.HasPrefix(forwardContent, "/help ") {
+				// /help hermes → 转发 /help 到后端
+				// /help hermes xxx → 转发 /help xxx 到后端
+				if len(parts) > 2 {
+					forwardContent = "/help " + strings.Join(parts[2:], " ")
+				} else {
+					forwardContent = "/help"
 				}
 			} else {
-				p.log.Warn("no credentials for command reply", "seq", seq, "account_id", msg.AccountID)
+				// /hermes → 显示后端状态
+				// /hermes xxx → 转发 xxx 到后端
+				if len(parts) > 1 {
+					forwardContent = strings.Join(parts[1:], " ")
+				} else {
+					// 无参数时显示后端状态
+					reply := p.commandProc.ShowBackendStatus(backendID)
+					creds := p.connector.GetAccountCredentials(msg.AccountID)
+					if creds != nil {
+						contextToken := p.connector.GetContextToken(msg.AccountID, msg.FromUser)
+						_ = p.connector.SendTextWithCreds(context.WithoutCancel(ctx), creds, msg.FromUser, reply, contextToken)
+					}
+					return
+				}
 			}
-		} else {
-			p.log.Warn("command returned empty reply", "seq", seq, "action", cmd.Action)
+
+			p.log.Info("forwarding to backend", "seq", seq, "backend", backendID, "content", forwardContent)
+			p.forwardToBackend(ctx, msg, forwardContent, backendID, seq)
+			return
 		}
 		return
 	}
@@ -203,6 +215,13 @@ func (p *MessagePipeline) forwardToBackend(ctx context.Context, msg bot.Normaliz
 		return
 	}
 
+	// ilink_proxy 是连接适配器，消息已通过透传到达外部客户端
+	// 不需要调用 Handle()，也不需要回复，外部客户端会自行处理
+	if bak.Type() == "ilink_proxy" {
+		p.log.Info("forwarded to ilink_proxy backend", "seq", seq, "backend", backendID)
+		return
+	}
+
 	// 处理消息
 	ctxSession := p.ctxManager.GetContext(msg.FromUser, backendID)
 	backendCtx, cancel := context.WithTimeout(ctx, 120*time.Second)
@@ -224,21 +243,22 @@ func (p *MessagePipeline) forwardToBackend(ctx context.Context, msg bot.Normaliz
 		}
 		return
 	}
-
-	ctxSession.AddTurn(content, resp.Text)
+	// 添加回复前缀标识
+	replyText := fmt.Sprintf("[%s] %s", backendID, resp.Text)
+	ctxSession.AddTurn(content, replyText)
 
 	// 发送回复
 	creds := p.connector.GetAccountCredentials(msg.AccountID)
 	if creds != nil {
 		contextToken := p.connector.GetContextToken(msg.AccountID, msg.FromUser)
-		if err := p.connector.SendTextWithCreds(ctx, creds, msg.FromUser, resp.Text, contextToken); err != nil {
+		if err := p.connector.SendTextWithCreds(ctx, creds, msg.FromUser, replyText, contextToken); err != nil {
 			p.log.Warn("send reply error", "seq", seq, "error", err)
 		}
 	} else {
 		p.log.Warn("no credentials for reply", "seq", seq, "account_id", msg.AccountID)
 	}
 
-	p.log.Info("message processed", "seq", seq, "backend", backendID, "reply_chars", len(resp.Text))
+	p.log.Info("message processed", "seq", seq, "backend", backendID, "reply_chars", len(replyText))
 }
 
 func (p *MessagePipeline) typingKeepalive(ctx context.Context, accountID, userID string, done chan struct{}) {
@@ -378,6 +398,17 @@ func (cp *CommandProcessor) Parse(text string) *CommandMatch {
 		return &CommandMatch{Action: "show_help"}
 	}
 
+	// /help <backend_id> — 转发到指定后端（等同于 /<backend_id>）
+	if match := matchPrefix(text, "/help "); match != "" {
+		parts := strings.Fields(match)
+		if len(parts) > 0 {
+			backendID := parts[0]
+			if _, ok := cp.adapters.Get(backendID); ok {
+				return &CommandMatch{Action: "forward_to", Args: []string{backendID}}
+			}
+		}
+	}
+
 	// 动态生成一次性转发命令：/<backend_id>
 	// 根据配置的 providers 自动生成，如 /hermes、/openclaw
 	if strings.HasPrefix(text, "/") && text != "/use" {
@@ -391,7 +422,6 @@ func (cp *CommandProcessor) Parse(text string) *CommandMatch {
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -402,7 +432,8 @@ func (cp *CommandProcessor) Execute(cmd *CommandMatch, msg bot.NormalizedMessage
 			return "❌ 请指定后端 ID，例如: /use openclaw\n输入 /backends 查看可用后端"
 		}
 		backendID := cmd.Args[0]
-		if _, ok := cp.adapters.Get(backendID); !ok {
+		bak, ok := cp.adapters.Get(backendID)
+		if !ok {
 			available := cp.adapters.List()
 			names := make([]string, 0)
 			for _, b := range available {
@@ -411,8 +442,7 @@ func (cp *CommandProcessor) Execute(cmd *CommandMatch, msg bot.NormalizedMessage
 			return fmt.Sprintf("❌ 后端 [%s] 不存在\n可用后端：%s", backendID, strings.Join(names, ", "))
 		}
 		cp.router.SetUserBackend(msg.FromUser, backendID)
-		adapter, _ := cp.adapters.Get(backendID)
-		return fmt.Sprintf("✅ 已切换至 [%s]，后续消息将使用此后端", adapter.Name())
+		return fmt.Sprintf("✅ 已切换至 [%s]，后续消息将使用此后端", bak.Name())
 
 	case "list_backends":
 		backends := cp.adapters.List()
@@ -472,6 +502,24 @@ func (cp *CommandProcessor) Execute(cmd *CommandMatch, msg bot.NormalizedMessage
 	default:
 		return "❓ 未知命令，输入 /help 查看帮助"
 	}
+}
+
+// ShowBackendStatus 返回指定后端的状态信息
+func (cp *CommandProcessor) ShowBackendStatus(backendID string) string {
+	bak, ok := cp.adapters.Get(backendID)
+	if !ok {
+		return fmt.Sprintf("❌ 后端 [%s] 不存在", backendID)
+	}
+	status := "🟢 健康"
+	if !bak.HealthCheck(context.Background()) {
+		status = "🔴 异常"
+	}
+	return fmt.Sprintf(
+		"📊 **%s**\n\n"+
+			"🆔 ID：%s\n"+
+			"🔗 类型：%s\n"+
+			"🟢 状态：%s",
+		bak.Name(), backendID, bak.Type(), status)
 }
 
 func matchPrefix(text string, prefixes ...string) string {

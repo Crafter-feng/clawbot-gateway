@@ -189,7 +189,7 @@ type RawMessageItem_RefMsg struct {
 
 // normalize 将原始 iLink 消息转换为标准化格式
 func normalize(raw RawMessageItem) NormalizedMessage {
-	content := extractText(raw.ItemList)
+	content := ExtractText(raw.ItemList)
 	items := convertItems(raw.ItemList)
 	return NormalizedMessage{
 		MsgID:        raw.MsgID.String(),
@@ -229,8 +229,8 @@ func convertItems(rawItems []RawMessageItem_Item) []MessageItem {
 	return items
 }
 
-// extractText 从 item_list 提取文本内容（与 Python _extract_text 逻辑对齐）
-func extractText(items []RawMessageItem_Item) string {
+// ExtractText 从 item_list 提取文本内容（与 Python _extract_text 逻辑对齐）
+func ExtractText(items []RawMessageItem_Item) string {
 	// 优先提取文本类型 (type=1)
 	for _, item := range items {
 		if item.Type == 1 && item.TextItem != nil {
@@ -239,7 +239,7 @@ func extractText(items []RawMessageItem_Item) string {
 			if item.RefMsg != nil {
 				refText := ""
 				if item.RefMsg.MessageItem != nil {
-					refText = extractText([]RawMessageItem_Item{*item.RefMsg.MessageItem})
+					refText = ExtractText([]RawMessageItem_Item{*item.RefMsg.MessageItem})
 				}
 				title := item.RefMsg.Title
 				if title != "" || refText != "" {

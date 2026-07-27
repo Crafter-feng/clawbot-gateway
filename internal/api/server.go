@@ -87,7 +87,7 @@ func (s *APIServer) Start(addr string) error {
 	ilinkServer := ilink.NewServer(s.connector, s.clientReg)
 	ilinkServer.RegisterRoutes(rest)
 
-	// Webhook API
+	// 通知 API
 	notifyHandler := notify.NewHandler(s.db, s.sendNotifyMessage)
 	notifyHandler.RegisterRoutes(rest)
 
@@ -354,7 +354,7 @@ func (s *APIServer) handleStats(c *gin.Context) {
 	})
 }
 
-// sendNotifyMessage 发送 Webhook 消息
+// sendNotifyMessage 发送通知消息
 func (s *APIServer) sendNotifyMessage(ctx context.Context, toUser, content, accountID string) error {
 	accounts, err := s.db.ListAccounts()
 	if err != nil || len(accounts) == 0 {

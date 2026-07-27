@@ -2,12 +2,15 @@ package ilink
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"clawbot-gateway/internal/bot"
 )
 
 // handleProxy 透明代理 - 直接转发到真实 iLink API
@@ -82,8 +85,71 @@ func (s *Server) forwardToILink(endpoint string, body []byte, baseURL string, bo
 }
 
 // handleGetUpdates 透明代理 - 长轮询
+// 过滤掉 Gateway 内部命令（以 / 开头的消息），避免转发到外部客户端
 func (s *Server) handleGetUpdates(c *gin.Context) {
-	s.handleProxy(c)
+	// 先验证 token
+	accountID := s.validateToken(c)
+	if accountID == "" {
+		c.JSON(401, gin.H{"ret": -1, "errmsg": "unauthorized"})
+		return
+	}
+	s.registry.UpdateLastActive(accountID)
+
+	// 获取虚拟 Bot 配置
+	vbot := s.registry.Get(accountID)
+	if vbot == nil {
+		c.JSON(500, gin.H{"ret": -1, "errmsg": "bot not found"})
+		return
+	}
+
+	// 获取真实 bot token
+	realBotToken := s.bot.GetAccountTokenByVirtualID(accountID)
+	if realBotToken == "" {
+		c.JSON(500, gin.H{"ret": -1, "errmsg": "no real bot token"})
+		return
+	}
+
+	// 读取请求体
+	body, err := io.ReadAll(io.LimitReader(c.Request.Body, 1<<20))
+	if err != nil {
+		c.JSON(500, gin.H{"ret": -1, "errmsg": "read body error"})
+		return
+	}
+
+	// 转发到真实 iLink API
+	endpoint := c.FullPath()
+	resp, err := s.forwardToILink(endpoint, body, vbot.BaseURL, realBotToken)
+	if err != nil {
+		c.JSON(502, gin.H{"ret": -1, "errmsg": "forward error: " + err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+
+	// 过滤 Gateway 内部命令：以 / 开头的消息
+	var result struct {
+		Ret           int              `json:"ret"`
+		Errmsg        string           `json:"errmsg,omitempty"`
+		Msgs          []bot.RawMessageItem `json:"msgs"`
+		GetUpdatesBuf string           `json:"get_updates_buf"`
+	}
+	if err := json.Unmarshal(respBody, &result); err == nil && len(result.Msgs) > 0 {
+		filtered := make([]bot.RawMessageItem, 0, len(result.Msgs))
+		for _, msg := range result.Msgs {
+			text := bot.ExtractText(msg.ItemList)
+			if strings.HasPrefix(text, "/") {
+				continue
+			}
+			filtered = append(filtered, msg)
+		}
+		result.Msgs = filtered
+		if newBody, err := json.Marshal(result); err == nil {
+			respBody = newBody
+		}
+	}
+
+	c.Data(resp.StatusCode, "application/json", respBody)
 }
 
 // handleSendMessage 透明代理 - 发送消息

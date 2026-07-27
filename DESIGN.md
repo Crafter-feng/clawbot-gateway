@@ -227,7 +227,7 @@ func init() {
 
 **零改** `factory.go`、`registry.go`、`types.go` 或任何现有文件。
 
-### Webhook 通知模块
+### 通知模块
 
 
 ```
@@ -236,10 +236,10 @@ func init() {
 │                    (企业微信、Slack、CI/CD 等)                        │
 └─────────────────────────────────────────────────────────────────────┘
                               │
-                              │ Webhook POST 请求
+                              │ 通知 POST 请求
                               ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                     Gateway Webhook 端点                             │
+│                     Gateway 通知端点                                │
 │                  /api/v1/notify/send                                │
 └─────────────────────────────────────────────────────────────────────┘
                               │
@@ -257,7 +257,7 @@ func init() {
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-**Webhook 用途**：
+**通知用途**：
 - 允许外部系统（企业微信、Slack、CI/CD 等）向微信用户发送消息
 - 单向通道：外部系统 → Gateway → 微信用户
 - 通过 Token 认证，确保安全性
@@ -265,7 +265,7 @@ func init() {
 
 **配置示例**：
 ```bash
-# 外部系统调用 Webhook 发送消息
+# 外部系统调用通知端点发送消息
 curl -X POST http://localhost:8080/api/v1/notify/send \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <token>" \
@@ -376,7 +376,7 @@ curl -X POST http://localhost:8080/api/v1/notify/send \
 │  │    Echo               调试回显                                 │  │
 │  └──────────────────────────────────────────────────────────────┘  │
 │                                                                      │
-│  ┌─── Webhook 通知模块（独立）──────────────────────────────────┐  │
+│  ┌─── Notify 通知模块（独立）───────────────────────────────────┐  │
 │  │  允许外部系统向微信用户发送消息                                │  │
 │  │  用途：企业微信、Slack、CI/CD 等外部系统推送通知               │  │
 │  │  端点：/api/v1/notify/send                                   │  │
@@ -442,7 +442,7 @@ curl -X POST http://localhost:8080/api/v1/notify/send \
              ▼                    ▼
     ┌─────────────────┐  ┌─────────────────┐
     │ Adapter         │  │  腾讯 iLink API  │
-    │ (OpenAI/Webhook)│  │  (直接转发)      │
+    │ (OpenAI/Notify) │  │  (直接转发)      │
     └────────┬────────┘  └────────┬────────┘
              │                    │
              └──────────┬─────────┘
@@ -601,7 +601,7 @@ curl -X POST http://localhost:8080/api/v1/notify/send \
    微信消息 → Gateway → Pipeline → 路由 → Claude API → 回复微信
 ```
 
-### Webhook 通知配置流程
+### 通知配置流程
 
 ```
 1. 用户在通知页面创建 Token
@@ -615,7 +615,7 @@ curl -X POST http://localhost:8080/api/v1/notify/send \
 2. 复制 Token 到外部系统
    TOKEN=gw_xxxxx
 
-3. 外部系统调用 Webhook 发送消息
+3. 外部系统调用通知端点发送消息
    ┌─────────────────────────────────────┐
    │  外部系统                            │
    │  POST /api/v1/notify/send           │
@@ -1513,7 +1513,7 @@ clawbot-gateway/
 │   ├── log/                     # 日志
 │   │   └── log.go               # slog 封装
 │   │
-│   ├── notify/                  # Webhook 通知模块
+│   ├── notify/                  # 通知模块
 │   │   └── handler.go           # 通知处理
 │   ├── relay/                   # 文件中转
 │   │   ├── relay.go             # 文件转发接口
@@ -1747,7 +1747,7 @@ func (c *Connector) GetAccountTokenByVirtualID(virtualAccountID string) string {
 | `echo` 后端适配器 | ✅ 完成 | `internal/adapter/echo.go` |
 | `AdapterFactory` 两种适配器 | ✅ 完成 | `internal/adapter/factory.go` |
 | `Registry` 自注册机制 | ✅ 完成 | `internal/adapter/registry.go`（新增适配器零改核心代码） |
-| **Webhook 通知模块** | | |
+| **通知模块** | | |
 | Token 管理 | ✅ 完成 | `internal/api/notify_handler.go` |
 | 消息发送端点 | ✅ 完成 | `/api/v1/notify/send` |
 | **前端** | | |
