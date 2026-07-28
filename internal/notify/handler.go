@@ -16,7 +16,7 @@ import (
 // Handler 通知处理器
 type Handler struct {
 	db          *database.DB
-	sendFunc    func(ctx context.Context, toUser, content, accountID string) error
+	sendFunc    func(ctx context.Context, toUser, content string) error
 	log         *slog.Logger
 	publicURL   string
 	rateLimitMu sync.Mutex
@@ -25,7 +25,7 @@ type Handler struct {
 }
 
 // NewHandler 创建通知处理器
-func NewHandler(db *database.DB, sendFunc func(ctx context.Context, toUser, content, accountID string) error) *Handler {
+func NewHandler(db *database.DB, sendFunc func(ctx context.Context, toUser, content string) error) *Handler {
 	return &Handler{
 		db:         db,
 		sendFunc:   sendFunc,
@@ -98,7 +98,6 @@ func (h *Handler) HandleSend(c *gin.Context) {
 
 	// 解析请求
 	var req struct {
-		ToUser  string `json:"to_user"`
 		Content string `json:"content"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -106,12 +105,16 @@ func (h *Handler) HandleSend(c *gin.Context) {
 		return
 	}
 
-	if req.ToUser == "" || req.Content == "" {
-		c.JSON(400, gin.H{"error": "to_user and content are required"})
+	if req.Content == "" {
+		c.JSON(400, gin.H{"error": "content is required"})
 		return
 	}
 
-	if err := h.sendFunc(c.Request.Context(), req.ToUser, req.Content, notifyToken.AccountID); err != nil {
+	if notifyToken.ToUser == "" {
+		c.JSON(400, gin.H{"error": "token has no binding target"})
+		return
+	}
+	if err := h.sendFunc(c.Request.Context(), notifyToken.ToUser, req.Content); err != nil {
 		h.log.Error("failed to send notify message", "error", err)
 		c.JSON(500, gin.H{"error": "internal server error"})
 		return
@@ -130,11 +133,10 @@ func (h *Handler) HandleListTokens(c *gin.Context) {
 	c.JSON(200, gin.H{"tokens": tokens})
 }
 
-// HandleCreateToken 创建 Token
 func (h *Handler) HandleCreateToken(c *gin.Context) {
 	var req struct {
-		AccountID string `json:"account_id"` // 空=全部账号
-		Name      string `json:"name"`
+		ToUser string `json:"to_user"` // 空=推送全部客户
+		Name   string `json:"name"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
@@ -156,7 +158,7 @@ func (h *Handler) HandleCreateToken(c *gin.Context) {
 
 	t := database.NotifyToken{
 		ID:        id,
-		AccountID: req.AccountID,
+		ToUser:    req.ToUser,
 		Name:      req.Name,
 		Token:     token,
 		Enabled:   true,

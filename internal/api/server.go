@@ -411,8 +411,7 @@ func (s *APIServer) handleStats(c *gin.Context) {
 	})
 }
 
-// sendNotifyMessage 发送通知消息
-func (s *APIServer) sendNotifyMessage(ctx context.Context, toUser, content, accountID string) error {
+func (s *APIServer) sendNotifyMessage(ctx context.Context, toUser, content string) error {
 	accounts, err := s.db.ListAccounts()
 	if err != nil || len(accounts) == 0 {
 		return fmt.Errorf("no accounts available")
@@ -420,9 +419,6 @@ func (s *APIServer) sendNotifyMessage(ctx context.Context, toUser, content, acco
 
 	var errs []error
 	for _, acct := range accounts {
-		if accountID != "" && acct.AccountID != accountID {
-			continue
-		}
 		if acct.Token == "" || acct.BaseURL == "" {
 			continue
 		}

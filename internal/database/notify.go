@@ -4,7 +4,7 @@ import "log"
 
 type NotifyToken struct {
 	ID        string `json:"id"`
-	AccountID string `json:"account_id"` // 绑定的微信账号（空=全部）
+	ToUser    string `json:"to_user"` // 绑定的推送目标（空=全部客户）
 	Name      string `json:"name"`
 	Token     string `json:"token"`
 	Enabled   bool   `json:"enabled"`
@@ -12,7 +12,7 @@ type NotifyToken struct {
 }
 
 func (db *DB) ListNotifyTokens() ([]NotifyToken, error) {
-	rows, err := db.conn.Query("SELECT id, account_id, name, token, enabled, created_at FROM notify_tokens ORDER BY created_at")
+	rows, err := db.conn.Query("SELECT id, to_user, name, token, enabled, created_at FROM notify_tokens ORDER BY created_at")
 	if err != nil {
 		return nil, err
 	}
@@ -22,7 +22,7 @@ func (db *DB) ListNotifyTokens() ([]NotifyToken, error) {
 	for rows.Next() {
 		var t NotifyToken
 		var enabled int
-		if err := rows.Scan(&t.ID, &t.AccountID, &t.Name, &t.Token, &enabled, &t.CreatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.ToUser, &t.Name, &t.Token, &enabled, &t.CreatedAt); err != nil {
 			log.Printf("scan error: %v", err)
 			continue
 		}
@@ -42,8 +42,8 @@ func (db *DB) CreateNotifyToken(t NotifyToken) error {
 		enabled = 1
 	}
 	_, err := db.conn.Exec(
-		"INSERT INTO notify_tokens (id, account_id, name, token, enabled, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-		t.ID, t.AccountID, t.Name, t.Token, enabled, t.CreatedAt,
+		"INSERT INTO notify_tokens (id, to_user, name, token, enabled, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+		t.ID, t.ToUser, t.Name, t.Token, enabled, t.CreatedAt,
 	)
 	return err
 }

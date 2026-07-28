@@ -10,32 +10,57 @@ import { ListItemSkeleton } from '../components/ui/Skeleton'
 
 interface Token {
   id: string
-  account_id: string
+  to_user: string
   name: string
   token: string
   enabled: boolean
   created_at: string
 }
 
-interface Account {
-  account_id: string
-  user_id: string
-  account_name: string
-}
 
 export default function NotificationPage() {
   const { toast } = useToast()
   const [tokens, setTokens] = useState<Token[]>([])
-  const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [newName, setNewName] = useState('')
-  const [newAccountId, setNewAccountId] = useState('')
+  const [newToUser, setNewToUser] = useState('')
   const [creating, setCreating] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [showToken, setShowToken] = useState<{ id: string; token: string } | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const copyTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const [testToken, setTestToken] = useState('')
+  const [testContent, setTestContent] = useState('')
+  const [testSending, setTestSending] = useState(false)
+  const [testResult, setTestResult] = useState<{ success: boolean; msg: string } | null>(null)
+  const [testTokenSelect, setTestTokenSelect] = useState('')
+  const handleTestSend = useCallback(async () => {
+    const token = testTokenSelect || testToken
+    if (!token || !testContent.trim()) return
+    setTestSending(true)
+    setTestResult(null)
+    try {
+      const res = await fetch('/api/v1/notify/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ content: testContent.trim() }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setTestResult({ success: true, msg: '推送成功' })
+        toast('推送成功', 'success')
+      } else {
+        setTestResult({ success: false, msg: data.error || '推送失败' })
+        toast(data.error || '推送失败', 'error')
+      }
+    } catch {
+      setTestResult({ success: false, msg: '网络错误' })
+      toast('网络错误', 'error')
+    } finally {
+      setTestSending(false)
+    }
+  }, [testToken, testTokenSelect, testContent, toast])
 
 
   useEffect(() => {
@@ -45,12 +70,8 @@ export default function NotificationPage() {
   const fetchData = async () => {
     setLoading(true)
     try {
-      const [tokensRes, accountsRes] = await Promise.all([
-        api.get<{ tokens: Token[] }>('/api/v1/notify/tokens'),
-        api.get<{ accounts: Account[] }>('/api/v1/accounts'),
-      ])
-      setTokens(tokensRes.tokens || [])
-      setAccounts(accountsRes.accounts || [])
+      const res = await api.get<{ tokens: Token[] }>('/api/v1/notify/tokens')
+      setTokens(res.tokens || [])
     } catch {
       toast('加载失败', 'error')
     } finally {
@@ -64,12 +85,12 @@ export default function NotificationPage() {
     try {
       const res = await api.post<{ id: string; token: string }>('/api/v1/notify/tokens', {
         name: newName.trim(),
-        account_id: newAccountId,
+        to_user: newToUser,
       })
       toast('Token 创建成功', 'success')
       setShowCreate(false)
       setNewName('')
-      setNewAccountId('')
+      setNewToUser('')
       setShowToken({ id: res.id, token: res.token })
       fetchData()
     } catch {
@@ -77,7 +98,7 @@ export default function NotificationPage() {
     } finally {
       setCreating(false)
     }
-  }, [newName, newAccountId, toast])
+  }, [newName, newToUser, toast])
 
   const handleDelete = useCallback(async (id: string) => {
     try {
@@ -116,10 +137,9 @@ export default function NotificationPage() {
     return () => clearTimeout(copyTimerRef.current)
   }, [])
 
-  const getAccountName = (accountId: string) => {
-    if (!accountId) return '全部账号'
-    const account = accounts.find(a => a.account_id === accountId)
-    return account ? (account.account_name || account.user_id) : accountId
+  const getToUserLabel = (toUser: string) => {
+    if (!toUser) return '全部客户'
+    return toUser
   }
 
   return (
@@ -169,7 +189,7 @@ export default function NotificationPage() {
                     <div className="list-item-info">
                       <div className="list-item-title">{t.name}</div>
                       <div className="list-item-subtitle">
-                        绑定: {getAccountName(t.account_id)}
+                        推送目标: {getToUserLabel(t.to_user)}
                       </div>
                       <div className="list-item-subtitle">
                         创建: {new Date(t.created_at).toLocaleString('zh-CN')}
@@ -211,19 +231,13 @@ export default function NotificationPage() {
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
               />
-              <Select
-                label="绑定账号"
-                value={newAccountId}
-                onChange={(e) => setNewAccountId(e.target.value)}
-                hint="选择要绑定的微信账号，留空则可发送到任意账号"
-              >
-                <option value="">全部账号</option>
-                {accounts.map((a) => (
-                  <option key={a.account_id} value={a.account_id}>
-                    {a.account_name || a.user_id} ({a.account_id})
-                  </option>
-                ))}
-              </Select>
+              <Input
+                label="推送目标"
+                placeholder="wxid_xxx，留空则推送全部客户"
+                value={newToUser}
+                onChange={(e) => setNewToUser(e.target.value)}
+                hint="指定消息接收者的微信 ID，留空则推送给所有联系人"
+              />
               <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
                 <Button onClick={handleCreate} loading={creating} disabled={!newName.trim()}>
                   创建
@@ -273,9 +287,9 @@ export default function NotificationPage() {
             <h2 className="card-title">使用说明</h2>
           </div>
           <div className="notification-guide">
-            <p>1. 创建 Token，选择要绑定的微信账号</p>
+            <p>1. 创建 Token，设置推送目标（客户微信 ID）</p>
             <p>2. 复制 Token 并保存</p>
-            <p>3. 外部系统使用 Token 调用 API 发送消息</p>
+            <p>3. 外部系统使用 Token 调用 API 推送消息到绑定的客户</p>
             <p>4. Token 仅在创建时显示，请妥善保管</p>
           </div>
 
@@ -285,9 +299,56 @@ export default function NotificationPage() {
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer <token>" \\
   -d '{
-    "to_user": "wxid_xxx",
     "content": "Hello!"
   }'`}</pre>
+          </div>
+        </div>
+
+        {/* 测试发送 */}
+        <div className="card">
+          <div className="card-header">
+            <h2 className="card-title">测试推送</h2>
+          </div>
+          <div className="manage-form">
+            {tokens.length > 0 && (
+              <Select
+                label="选择 Token"
+                value={testTokenSelect}
+                onChange={(e) => { setTestTokenSelect(e.target.value); setTestToken('') }}
+                hint="选择已有 Token，或手动输入下方 Token"
+              >
+                <option value="">手动输入</option>
+                {tokens.map((t) => (
+                  <option key={t.id} value={t.token}>
+                    {t.name} ({getToUserLabel(t.to_user)})
+                  </option>
+                ))}
+              </Select>
+            )}
+            {!testTokenSelect && (
+              <Input
+                label="Token"
+                placeholder="粘贴 Token 进行测试"
+                value={testToken}
+                onChange={(e) => setTestToken(e.target.value)}
+              />
+            )}
+            <Input
+              label="推送内容"
+              placeholder="输入要推送的消息内容"
+              value={testContent}
+              onChange={(e) => setTestContent(e.target.value)}
+            />
+            <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+              <Button onClick={handleTestSend} loading={testSending} disabled={!(testToken || testTokenSelect) || !testContent.trim()}>
+                发送测试
+              </Button>
+              {testResult && (
+                <span style={{ fontSize: '13px', color: testResult.success ? 'var(--success)' : '#ef4444' }}>
+                  {testResult.msg}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>

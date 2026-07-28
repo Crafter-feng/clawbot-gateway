@@ -28,7 +28,7 @@ func setupTestDB(t *testing.T) *database.DB {
 
 func TestNewHandler(t *testing.T) {
 	db := setupTestDB(t)
-	sendFunc := func(ctx context.Context, toUser, content, accountID string) error {
+	sendFunc := func(ctx context.Context, toUser, content string) error {
 		return nil
 	}
 
@@ -50,7 +50,7 @@ func TestNewHandlerNilSendFunc(t *testing.T) {
 func TestNewHandlerContextType(t *testing.T) {
 	db := setupTestDB(t)
 	sendCalled := false
-	sendFunc := func(ctx context.Context, toUser, content, accountID string) error {
+	sendFunc := func(ctx context.Context, toUser, content string) error {
 		sendCalled = true
 		return nil
 	}
@@ -63,7 +63,7 @@ func TestNewHandlerContextType(t *testing.T) {
 	// Verify the sendFunc is stored by calling it indirectly
 	// We can't call HandleSend without a full HTTP request, but we can verify
 	// the handler was created successfully
-	_ = sendFunc(context.Background(), "user", "hello", "account1")
+	_ = sendFunc(context.Background(), "user", "hello")
 	if !sendCalled {
 		t.Error("sendFunc was not called")
 	}
@@ -73,8 +73,8 @@ func TestNewHandlerSendFuncInterface(t *testing.T) {
 	db := setupTestDB(t)
 
 	// Test that the sendFunc type matches the expected signature
-	type sendFuncType func(ctx context.Context, toUser, content, accountID string) error
-	var fn sendFuncType = func(ctx context.Context, toUser, content, accountID string) error {
+	type sendFuncType func(ctx context.Context, toUser, content string) error
+	var fn sendFuncType = func(ctx context.Context, toUser, content string) error {
 		return nil
 	}
 

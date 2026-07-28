@@ -392,10 +392,10 @@ func TestNotifyTokensCRUD(t *testing.T) {
 
 	// Create
 	t1 := NotifyToken{
-		ID:        "token1",
-		AccountID: "",
-		Name:      "Token One",
-		Token:     "tok_abc123",
+		ID:    "token1",
+		ToUser: "",
+		Name:  "Token One",
+		Token: "tok_abc123",
 		Enabled:   true,
 		CreatedAt: "2025-01-01 00:00:00",
 	}
@@ -423,10 +423,10 @@ func TestNotifyTokensCRUD(t *testing.T) {
 
 	// Create second token
 	t2 := NotifyToken{
-		ID:        "token2",
-		AccountID: "account_x",
-		Name:      "Token Two",
-		Token:     "tok_xyz789",
+		ID:    "token2",
+		ToUser: "wxid_test",
+		Name:  "Token Two",
+		Token: "tok_xyz789",
 		Enabled:   false,
 		CreatedAt: "2025-01-02 00:00:00",
 	}

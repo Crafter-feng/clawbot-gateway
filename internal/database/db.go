@@ -93,7 +93,7 @@ func (db *DB) migrate() error {
 		)`,
 		`CREATE TABLE IF NOT EXISTS notify_tokens (
 			id TEXT PRIMARY KEY,
-			account_id TEXT NOT NULL DEFAULT '',
+			to_user TEXT NOT NULL DEFAULT '',
 			name TEXT NOT NULL,
 			token TEXT NOT NULL UNIQUE,
 			enabled INTEGER DEFAULT 1,
