@@ -147,7 +147,7 @@ func (r *ClientRegistry) Unregister(accountID string) {
 	delete(r.bots, accountID)
 }
 
-// Get 获取虚拟 Bot（返回快照，避免外部无锁访问）
+// Get 获取虚拟 Bot
 func (r *ClientRegistry) Get(accountID string) *VirtualBot {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -155,8 +155,7 @@ func (r *ClientRegistry) Get(accountID string) *VirtualBot {
 	if !ok {
 		return nil
 	}
-	copy := *b
-	return &copy
+	return b
 }
 
 // GetByToken 通过 token 查找虚拟 Bot

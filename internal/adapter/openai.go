@@ -14,6 +14,10 @@ import (
 	"clawbot-gateway/internal/database"
 )
 
+
+var httpClient = &http.Client{
+	Timeout: 30 * time.Second,
+}
 // ── OpenAI 兼容适配器 ──
 
 type OpenAICompatibleAdapter struct {
@@ -50,7 +54,7 @@ func (o *OpenAICompatibleAdapter) HealthCheck(ctx context.Context) bool {
 		return false
 	}
 	req.Header.Set("Authorization", "Bearer "+o.apiKey)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return false
 	}
@@ -102,7 +106,7 @@ func (o *OpenAICompatibleAdapter) Handle(ctx context.Context, req *ChatRequest) 
 		httpReq.Header.Set("Content-Type", "application/json")
 		httpReq.Header.Set("Authorization", "Bearer "+o.apiKey)
 
-		resp, httpErr = http.DefaultClient.Do(httpReq)
+		resp, httpErr = httpClient.Do(httpReq)
 		if httpErr != nil {
 			return nil, fmt.Errorf("api call: %w", httpErr)
 		}
@@ -166,7 +170,7 @@ func (o *OpenAICompatibleAdapter) HandleStream(ctx context.Context, req *ChatReq
 	httpReq.Header.Set("Authorization", "Bearer "+o.apiKey)
 	httpReq.Header.Set("Accept", "text/event-stream")
 
-	resp, err := http.DefaultClient.Do(httpReq)
+	resp, err := httpClient.Do(httpReq)
 	if err != nil {
 		return fmt.Errorf("stream api call: %w", err)
 	}

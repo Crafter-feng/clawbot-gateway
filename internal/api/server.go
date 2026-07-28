@@ -27,6 +27,9 @@ import (
 	"clawbot-gateway/internal/version"
 )
 
+// revokedTokens 存储已撤销的 JWT token 的 jti（JWT ID）
+var revokedTokens sync.Map
+
 type APIServer struct {
 	config       *config.Config
 	db           *database.DB
@@ -79,6 +82,8 @@ func (s *APIServer) Start(addr string) error {
 	if s.log != nil {
 		rest.Use(log.GinMiddleware(s.log))
 	}
+	rest.Use(maxBodySizeMiddleware(1 << 20)) // 1MB request body limit
+	rest.Use(securityHeadersMiddleware())
 
 	// 公开端点
 	rest.GET("/health", s.handleHealth)
@@ -273,15 +278,34 @@ func extractBearerToken(c *gin.Context) string {
 	if strings.HasPrefix(auth, "Bearer ") {
 		return strings.TrimPrefix(auth, "Bearer ")
 	}
-	return auth
+	return ""
 }
 
 func (s *APIServer) validateJWT(token string) bool {
 	if token == "" || s.config.API.JWTSecret == "" {
 		return false
 	}
-	_, err := VerifyJWT(s.config.API.JWTSecret, token)
-	return err == nil
+	claims, err := VerifyJWT(s.config.API.JWTSecret, token)
+	if err != nil {
+		return false
+	}
+	// 检查 token 是否已被撤销
+	if _, revoked := revokedTokens.Load(claims.Jti); revoked {
+		return false
+	}
+	return true
+}
+
+// revokeJWT 将指定 JWT token 加入黑名单
+func (s *APIServer) revokeJWT(token string) {
+	if token == "" || s.config.API.JWTSecret == "" {
+		return
+	}
+	claims, err := VerifyJWT(s.config.API.JWTSecret, token)
+	if err != nil {
+		return
+	}
+	revokedTokens.Store(claims.Jti, true)
 }
 
 func (s *APIServer) validateAPIToken(token string) bool {
@@ -290,6 +314,24 @@ func (s *APIServer) validateAPIToken(token string) bool {
 	}
 	expected := s.db.GetSetting("api.token")
 	return expected != "" && subtle.ConstantTimeCompare([]byte(token), []byte(expected)) == 1
+}
+
+// maxBodySizeMiddleware limits request body size to prevent DoS
+func maxBodySizeMiddleware(maxSize int64) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxSize)
+		c.Next()
+	}
+}
+
+// securityHeadersMiddleware sets security-related HTTP headers
+func securityHeadersMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("X-Content-Type-Options", "nosniff")
+		c.Header("X-Frame-Options", "DENY")
+		c.Header("Content-Security-Policy", "default-src 'self'")
+		c.Next()
+	}
 }
 
 // ── WebSocket ──
@@ -376,14 +418,24 @@ func (s *APIServer) sendNotifyMessage(ctx context.Context, toUser, content, acco
 		return fmt.Errorf("no accounts available")
 	}
 
+	var errs []error
 	for _, acct := range accounts {
-		if accountID == "" || acct.AccountID == accountID {
-			return s.connector.SendTextWithCreds(ctx, &bot.Credentials{
-				Token:   acct.Token,
-				BaseURL: acct.BaseURL,
-			}, toUser, content, "")
+		if accountID != "" && acct.AccountID != accountID {
+			continue
+		}
+		if acct.Token == "" || acct.BaseURL == "" {
+			continue
+		}
+		if err := s.connector.SendTextWithCreds(ctx, &bot.Credentials{
+			Token:   acct.Token,
+			BaseURL: acct.BaseURL,
+		}, toUser, content, ""); err != nil {
+			errs = append(errs, err)
 		}
 	}
 
-	return fmt.Errorf("account not found")
+	if len(errs) > 0 {
+		return fmt.Errorf("send errors: %v", errs)
+	}
+	return nil
 }

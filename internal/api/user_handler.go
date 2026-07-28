@@ -33,7 +33,8 @@ func (s *APIServer) handleSwitchUserBackend(c *gin.Context) {
 		BackendID string `json:"backend_id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		log.Printf("bad request: %v", err)
+		c.JSON(400, gin.H{"error": "请求参数错误"})
 		return
 	}
 
@@ -73,7 +74,8 @@ func (s *APIServer) handleSetUserRouteMode(c *gin.Context) {
 		RouteMode string `json:"route_mode"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		log.Printf("bad request: %v", err)
+		c.JSON(400, gin.H{"error": "请求参数错误"})
 		return
 	}
 

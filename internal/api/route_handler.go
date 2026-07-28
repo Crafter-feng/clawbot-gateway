@@ -30,6 +30,10 @@ func (s *APIServer) handleGetRouteRule(c *gin.Context) {
 
 	rule, err := s.db.GetRouteRule(id)
 	if err != nil {
+		c.JSON(500, gin.H{"error": "internal server error"})
+		return
+	}
+	if rule == nil {
 		c.JSON(404, gin.H{"error": "rule not found"})
 		return
 	}
@@ -40,7 +44,8 @@ func (s *APIServer) handleGetRouteRule(c *gin.Context) {
 func (s *APIServer) handleCreateRouteRule(c *gin.Context) {
 	var rule database.RouteRule
 	if err := c.ShouldBindJSON(&rule); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		log.Printf("bad request: %v", err)
+		c.JSON(400, gin.H{"error": "请求参数错误"})
 		return
 	}
 
@@ -90,7 +95,8 @@ func (s *APIServer) handleUpdateRouteRule(c *gin.Context) {
 
 	var rule database.RouteRule
 	if err := c.ShouldBindJSON(&rule); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		log.Printf("bad request: %v", err)
+		c.JSON(400, gin.H{"error": "请求参数错误"})
 		return
 	}
 
@@ -162,7 +168,8 @@ func (s *APIServer) handleReorderRouteRules(c *gin.Context) {
 		IDs []int `json:"ids"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		log.Printf("bad request: %v", err)
+		c.JSON(400, gin.H{"error": "请求参数错误"})
 		return
 	}
 
@@ -187,7 +194,8 @@ func (s *APIServer) handleTestRouteRule(c *gin.Context) {
 		MsgType  string `json:"msg_type"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		log.Printf("bad request: %v", err)
+		c.JSON(400, gin.H{"error": "请求参数错误"})
 		return
 	}
 

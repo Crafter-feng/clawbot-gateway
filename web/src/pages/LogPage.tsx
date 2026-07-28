@@ -1,8 +1,6 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { api } from '../api/client'
 import Button from '../components/ui/Button'
-import Select from '../components/ui/Select'
-import { ListItemSkeleton } from '../components/ui/Skeleton'
 
 interface LogEntry {
   time: string
@@ -12,57 +10,37 @@ interface LogEntry {
   attrs?: Record<string, string | number | boolean>
 }
 
-// 分类定义：大类 → 子类映射
-const CATEGORIES: Record<string, { label: string; subFilter: { label: string; cmp: string }[] }> = {
-  '': { label: '全部', subFilter: [] },
-  api: {
-    label: 'API',
-    subFilter: [
-      { label: '全部', cmp: '' },
-      { label: '管理 API', cmp: 'api' },
-    ],
-  },
-  bot: {
-    label: '机器人',
-    subFilter: [
-      { label: '全部', cmp: '' },
-      { label: '连接器', cmp: 'bot' },
-    ],
-  },
-  pipeline: {
-    label: '管道',
-    subFilter: [
-      { label: '全部', cmp: '' },
-      { label: '消息处理', cmp: 'pipeline' },
-      { label: '命令解析', cmp: 'command' },
-    ],
-  },
-  ilink: {
-    label: 'iLink',
-    subFilter: [
-      { label: '全部', cmp: '' },
-      { label: '服务端', cmp: 'ilink' },
-    ],
-  },
-  backend: {
-    label: '后端',
-    subFilter: [
-      { label: '全部', cmp: '' },
-      { label: 'Echo', cmp: 'echo' },
-    ],
-  },
-  system: {
-    label: '系统',
-    subFilter: [
-      { label: '全部', cmp: '' },
-      { label: '主进程', cmp: 'main' },
-    ],
-  },
+const CATEGORIES: { key: string; label: string; icon: string }[] = [
+  { key: '', label: '全部', icon: '◉' },
+  { key: 'api', label: 'API', icon: '⇄' },
+  { key: 'bot', label: '机器人', icon: '◈' },
+  { key: 'pipeline', label: '管道', icon: '⇝' },
+  { key: 'ilink', label: 'iLink', icon: '◎' },
+  { key: 'backend', label: '后端', icon: '⚙' },
+  { key: 'system', label: '系统', icon: '⊞' },
+]
+
+const CMP_MAP: Record<string, { label: string; cmp: string }[]> = {
+  api: [{ label: '管理 API', cmp: 'api' }],
+  bot: [{ label: '连接器', cmp: 'bot' }],
+  pipeline: [
+    { label: '消息处理', cmp: 'pipeline' },
+    { label: '命令解析', cmp: 'command' },
+  ],
+  ilink: [{ label: '服务端', cmp: 'ilink' }],
+  system: [{ label: '主进程', cmp: 'main' }],
 }
 
+const LEVEL_META: Record<string, { color: string; label: string }> = {
+  DEBUG: { color: '#6b7280', label: 'DBG' },
+  INFO: { color: '#22c55e', label: 'INF' },
+  WARN: { color: '#eab308', label: 'WRN' },
+  ERROR: { color: '#ef4444', label: 'ERR' },
+}
 export default function LogPage() {
   const [entries, setEntries] = useState<LogEntry[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const [category, setCategory] = useState('')
   const [subCmp, setSubCmp] = useState('')
   const [backends, setBackends] = useState<string[]>([])
@@ -70,225 +48,364 @@ export default function LogPage() {
   const [limit, setLimit] = useState('100')
   const [autoRefresh, setAutoRefresh] = useState(true)
   const timerRef = useRef<ReturnType<typeof setInterval>>(undefined)
+  const listRef = useRef<HTMLDivElement>(null)
+
+  // 当前选中分类对应的 component 筛选值
+  // category 直接映射为 component 筛选参数（如 'api' → component=api）
+  // 只有 backend 分类走子类下拉
+  const activeComponent = category === '' || category === 'backend' ? subCmp : (subCmp || category)
 
   const fetchLogs = useCallback(async () => {
     try {
+      setError('')
       const params = new URLSearchParams()
       if (limit) params.set('limit', limit)
-      if (subCmp) params.set('component', subCmp)
+      if (activeComponent) params.set('component', activeComponent)
       if (backendId) params.set('backend', backendId)
       const res = await api.get<{ entries: LogEntry[] }>(`/api/v1/logs?${params}`)
       setEntries(res.entries || [])
     } catch {
-      // silent
+      setError('加载日志失败')
     } finally {
       setLoading(false)
     }
-  }, [subCmp, backendId, limit])
-
+  }, [activeComponent, backendId, limit])
   const fetchCategories = useCallback(async () => {
     try {
       const res = await api.get<{ backends: string[] }>('/api/v1/logs/categories')
       setBackends(res.backends || [])
     } catch {
-      // silent
+      setError('加载分类失败')
     }
   }, [])
 
-  useEffect(() => {
-    fetchLogs()
-    fetchCategories()
-  }, [fetchLogs, fetchCategories])
 
+  useEffect(() => { fetchLogs(); fetchCategories() }, [fetchLogs])
   useEffect(() => {
     if (autoRefresh) {
       timerRef.current = setInterval(fetchLogs, 5000)
       return () => clearInterval(timerRef.current)
-    } else {
-      if (timerRef.current) clearInterval(timerRef.current)
     }
+    clearInterval(timerRef.current)
+    timerRef.current = undefined
   }, [autoRefresh, fetchLogs])
 
-  // 切换分类时重置子筛选
-  const handleCategoryChange = (cat: string) => {
-    setCategory(cat)
+  const handleCategory = (key: string) => {
+    setCategory(key)
     setSubCmp('')
     setBackendId('')
+    setLoading(true)
   }
-
-  const catInfo = CATEGORIES[category] || CATEGORIES['']
   const showSubCmp = category === 'backend'
     ? backends.map(b => ({ label: b, cmp: b }))
-    : catInfo.subFilter
+    : (CMP_MAP[category] || [])
 
-  const levelColors: Record<string, string> = {
-    DEBUG: 'var(--text-muted)',
-    INFO: 'var(--accent)',
-    WARN: 'var(--warning)',
-    ERROR: 'var(--danger)',
-  }
-
-  const getBackendInfo = (entry: LogEntry): string | null => {
-    if (entry.attrs?.cmp) {
-      const cmp = entry.attrs.cmp as string
-      if (entry.attrs?.backend) return `${cmp} > ${entry.attrs.backend}`
-      return cmp
-    }
-    return null
+  const getCmp = (e: LogEntry): string => {
+    const c = e.attrs?.cmp as string | undefined
+    const b = e.attrs?.backend as string | undefined
+    return b ? `${c || ''} ${b}` : (c || '')
   }
 
   return (
-    <div>
-      <div className="page-header">
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* Header */}
+      <div className="page-header" style={{ flexShrink: 0 }}>
         <h1>日志</h1>
-        <p>系统运行日志</p>
+        <p>系统运行日志 · 实时监控</p>
       </div>
 
-      <div className="dashboard-content">
-        <div className="card">
-          <div className="card-header">
-            <h2 className="card-title">日志查询</h2>
-          </div>
-          <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-            {/* 分类选择 */}
-            <div className="segmented-control" style={{ display: 'flex', gap: 0, border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
-              {Object.entries(CATEGORIES).map(([key, val]) => (
-                <button
-                  key={key}
-                  onClick={() => handleCategoryChange(key)}
-                  style={{
-                    padding: 'var(--space-1) var(--space-3)',
-                    border: 'none',
-                    background: category === key ? 'var(--accent)' : 'transparent',
-                    color: category === key ? 'white' : 'var(--text)',
-                    cursor: 'pointer',
-                    fontSize: 'var(--font-size-sm)',
-                    fontWeight: category === key ? 600 : 400,
-                  }}
-                >
-                  {val.label}
-                </button>
-              ))}
-            </div>
+      {/* Filter bar */}
+      <div style={{
+        flexShrink: 0,
+        margin: '0 var(--space-4) var(--space-3)',
+        background: 'var(--surface)',
+        borderRadius: 'var(--radius)',
+        border: '1px solid var(--border)',
+        overflow: 'hidden',
+      }}>
+        {/* Category tabs */}
+        <div style={{
+          display: 'flex',
+          gap: 0,
+          borderBottom: '1px solid var(--border)',
+          background: 'var(--surface-dim)',
+          padding: '0 var(--space-2)',
+        }}>
+          {CATEGORIES.map(c => (
+            <button
+              key={c.key}
+              onClick={() => handleCategory(c.key)}
+              style={{
+                flex: 1,
+                padding: '10px 8px',
+                border: 'none',
+                borderBottom: category === c.key ? '2px solid var(--accent)' : '2px solid transparent',
+                background: 'transparent',
+                color: category === c.key ? 'var(--accent)' : 'var(--text-muted)',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: category === c.key ? 600 : 400,
+                transition: 'color .15s, border-color .15s',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+              }}
+            >
+              <span style={{ fontSize: '14px' }}>{c.icon}</span>
+              <span>{c.label}</span>
+            </button>
+          ))}
+        </div>
 
-            {/* 子类 / 后端筛选 */}
+        {/* Sub filters — single row */}
+        <div style={{
+          display: 'flex',
+          gap: 'var(--space-3)',
+          alignItems: 'center',
+          padding: 'var(--space-3)',
+        }}>
+          {/* Left: sub-category */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+              {category === 'backend' ? '后端' : '子类'}
+            </label>
             {category === 'backend' ? (
-              <Select
-                label="后端"
+              <select
                 value={backendId}
-                onChange={(e) => setBackendId(e.target.value)}
-                style={{ minWidth: 140 }}
+                onChange={e => { setBackendId(e.target.value); setLoading(true) }}
+                style={{
+                  fontSize: '12px',
+                  padding: '4px 8px',
+                  borderRadius: 'var(--radius)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface)',
+                  color: 'var(--text)',
+                  minWidth: 120,
+                }}
               >
                 <option value="">全部后端</option>
-                {backends.map((b) => (
-                  <option key={b} value={b}>{b}</option>
-                ))}
-              </Select>
-            ) : showSubCmp.length > 0 ? (
-              <Select
-                label="子类"
+                {backends.map(b => <option key={b} value={b}>{b}</option>)}
+              </select>
+            ) : (
+              <select
                 value={subCmp}
-                onChange={(e) => setSubCmp(e.target.value)}
-                style={{ minWidth: 140 }}
+                onChange={e => { setSubCmp(e.target.value); setLoading(true) }}
+                style={{
+                  fontSize: '12px',
+                  padding: '4px 8px',
+                  borderRadius: 'var(--radius)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface)',
+                  color: 'var(--text)',
+                  minWidth: 120,
+                }}
               >
-                {showSubCmp.map((s) => (
+                <option value="">全部</option>
+                {showSubCmp.map(s => (
                   <option key={s.cmp} value={s.cmp}>{s.label}</option>
                 ))}
-              </Select>
-            ) : null}
+              </select>
+            )}
+          </div>
 
-            <Select
-              label="条数"
-              value={limit}
-              onChange={(e) => setLimit(e.target.value)}
-              style={{ minWidth: 100 }}
-            >
-              <option value="50">50</option>
-              <option value="100">100</option>
-              <option value="200">200</option>
-              <option value="500">500</option>
-            </Select>
+          {/* Spacer */}
+          <div style={{ flex: 1 }} />
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', paddingBottom: 'var(--space-1)' }}>
-              <label style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-muted)' }}>
-                <input
-                  type="checkbox"
-                  checked={autoRefresh}
-                  onChange={(e) => setAutoRefresh(e.target.checked)}
-                  style={{ marginRight: 'var(--space-1)' }}
-                />
-                自动刷新
-              </label>
+          {/* Right: count + auto-refresh + refresh */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <label style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>条数</label>
+              <select
+                value={limit}
+                onChange={e => setLimit(e.target.value)}
+                style={{
+                  fontSize: '12px',
+                  padding: '4px 8px',
+                  borderRadius: 'var(--radius)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface)',
+                  color: 'var(--text)',
+                  minWidth: 65,
+                }}
+              >
+                {[50, 100, 200, 500].map(n => (
+                  <option key={n} value={String(n)}>{n}</option>
+                ))}
+              </select>
             </div>
-            <Button onClick={fetchLogs} variant="secondary" size="sm">
+
+            <label style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px',
+              fontSize: '12px',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}>
+              <input
+                type="checkbox"
+                checked={autoRefresh}
+                onChange={e => setAutoRefresh(e.target.checked)}
+                style={{ accentColor: 'var(--accent)' }}
+              />
+              {autoRefresh ? '自动刷新中' : '自动刷新'}
+              {autoRefresh && (
+                <span style={{
+                  display: 'inline-block',
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  background: '#22c55e',
+                  animation: 'pulse 2s ease-in-out infinite',
+                }} />
+              )}
+            </label>
+
+            <Button
+              onClick={() => { setLoading(true); fetchLogs() }}
+              variant="secondary"
+              size="sm"
+            >
               刷新
             </Button>
           </div>
         </div>
+      </div>
 
-        <div className="card" style={{ overflow: 'hidden' }}>
-          <div
-            className="code-block"
-            style={{
-              maxHeight: '70vh',
-              overflowY: 'auto',
-              fontSize: 'var(--font-size-xs)',
-              fontFamily: 'var(--font-mono)',
-              lineHeight: 1.6,
-              padding: 0,
-              background: 'var(--surface-dim)',
-            }}
-          >
-            {loading ? (
-              <div style={{ padding: 'var(--space-3)' }}>
-                <ListItemSkeleton />
-              </div>
-            ) : entries.length === 0 ? (
-              <div style={{ padding: 'var(--space-4)', textAlign: 'center', color: 'var(--text-muted)' }}>
-                暂无日志
-              </div>
-            ) : (
-              entries.map((entry, i) => (
+      {/* Log table */}
+      <div style={{
+        flex: 1,
+        margin: '0 var(--space-4) var(--space-4)',
+        background: 'var(--surface)',
+        borderRadius: 'var(--radius)',
+        border: '1px solid var(--border)',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+      }}>
+        {/* Table header */}
+        <div style={{
+          display: 'flex',
+          gap: 0,
+          borderBottom: '1px solid var(--border)',
+          background: 'var(--surface-dim)',
+          fontSize: '11px',
+          fontWeight: 600,
+          color: 'var(--text-muted)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.05em',
+          flexShrink: 0,
+        }}>
+          <div style={{ width: 72, padding: '10px 12px' }}>时间</div>
+          <div style={{ width: 52, padding: '10px 12px' }}>级别</div>
+          <div style={{ width: 160, padding: '10px 12px' }}>组件</div>
+          <div style={{ flex: 1, padding: '10px 12px' }}>消息</div>
+        </div>
+
+        {/* Table body */}
+        <div ref={listRef} style={{
+          flex: 1,
+          overflowY: 'auto',
+          fontFamily: "'JetBrains Mono', ui-monospace, 'SF Mono', monospace",
+          fontSize: '12px',
+          lineHeight: 1.6,
+        }}>
+          {loading ? (
+            <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>
+              <div style={{
+                display: 'inline-block',
+                width: 20,
+                height: 20,
+                border: '2px solid var(--border)',
+                borderTopColor: 'var(--accent)',
+                borderRadius: '50%',
+                animation: 'spin .6s linear infinite',
+              }} />
+            </div>
+          ) : error ? (
+            <div style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--text-muted)' }}>
+              <div style={{ fontSize: '24px', marginBottom: '8px', opacity: 0.3 }}>⚠</div>
+              <div style={{ fontSize: '13px', color: '#ef4444' }}>{error}</div>
+              <Button onClick={() => { setLoading(true); fetchLogs() }} variant="secondary" size="sm" style={{ marginTop: 12 }}>
+                重试
+              </Button>
+            </div>
+          ) : entries.length === 0 ? (
+            <div style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--text-muted)' }}>
+              <div style={{ fontSize: '24px', marginBottom: '8px', opacity: 0.3 }}>⏚</div>
+              <div style={{ fontSize: '13px' }}>暂无日志</div>
+            </div>
+          ) : (
+            entries.map((entry, i) => {
+              const meta = LEVEL_META[entry.level] || { color: 'var(--text)', label: entry.level }
+              const cmp = getCmp(entry)
+              return (
                 <div
                   key={i}
                   style={{
-                    padding: 'var(--space-1) var(--space-3)',
-                    borderBottom: '1px solid var(--border)',
                     display: 'flex',
-                    gap: 'var(--space-2)',
-                    alignItems: 'flex-start',
+                    gap: 0,
+                    borderBottom: '1px solid var(--border)',
+                    background: entry.level === 'ERROR' ? 'rgba(239,68,68,0.04)' : (i % 2 === 1 ? 'rgba(128,128,128,0.02)' : 'transparent'),
+                    transition: 'background .15s',
+                    animation: i < 10 ? `fadeIn .2s ease-out ${i * 20}ms both` : undefined,
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(128,128,128,0.06)')}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = entry.level === 'ERROR'
+                      ? 'rgba(239,68,68,0.04)'
+                      : (i % 2 === 1 ? 'rgba(128,128,128,0.02)' : 'transparent')
                   }}
                 >
-                  <span style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap', minWidth: '10ch' }}>
+                  <div style={{ width: 72, padding: '4px 12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                     {entry.time ? entry.time.slice(11, 19) : ''}
-                  </span>
-                  <span
-                    style={{
-                      color: levelColors[entry.level] || 'var(--text)',
-                      fontWeight: 600,
-                      minWidth: '4ch',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {entry.level}
-                  </span>
-                  <span style={{ color: 'var(--text-muted)', minWidth: '12ch', whiteSpace: 'nowrap' }}>
-                    {getBackendInfo(entry) || ''}
-                  </span>
-                  <span style={{ flex: 1, wordBreak: 'break-all', color: 'var(--text)' }}>
+                  </div>
+                  <div style={{ width: 52, padding: '4px 12px' }}>
+                    <span style={{
+                      display: 'inline-block',
+                      padding: '0 6px',
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      lineHeight: '18px',
+                      borderRadius: 3,
+                      background: `${meta.color}18`,
+                      color: meta.color,
+                      letterSpacing: '0.03em',
+                    }}>
+                      {meta.label}
+                    </span>
+                  </div>
+                  <div style={{
+                    width: 160,
+                    padding: '4px 12px',
+                    color: 'var(--text-muted)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}>
+                    {cmp}
+                  </div>
+                  <div style={{ flex: 1, padding: '4px 12px', color: 'var(--text)', wordBreak: 'break-all' }}>
                     {entry.message}
                     {entry.attrs?.error && (
-                      <span style={{ color: 'var(--danger)', marginLeft: 'var(--space-1)' }}>
-                        ({String(entry.attrs.error)})
-                      </span>
+                      <span style={{ color: '#ef4444', marginLeft: 6 }}>({String(entry.attrs.error)})</span>
                     )}
-                  </span>
+                  </div>
                 </div>
-              ))
-            )}
-          </div>
+              )
+            })
+          )}
         </div>
       </div>
+
+      {/* Keyframes injection */}
+      <style>{`
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+      `}</style>
     </div>
   )
 }

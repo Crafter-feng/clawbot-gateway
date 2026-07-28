@@ -329,9 +329,12 @@ func TestGetRouteRule(t *testing.T) {
 	}
 
 	// Get non-existent
-	_, err = db.GetRouteRule(99999)
-	if err == nil {
-		t.Error("GetRouteRule on non-existent ID should return error")
+	got, err = db.GetRouteRule(99999)
+	if err != nil {
+		t.Fatalf("GetRouteRule on non-existent ID should not return error: %v", err)
+	}
+	if got != nil {
+		t.Error("GetRouteRule on non-existent ID should return nil")
 	}
 }
 

@@ -46,8 +46,8 @@ func (s *APIServer) handleGetQRCode(c *gin.Context) {
 		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
-	// 不 defer scanCancel()——轮询 goroutine 在 CreateScan 内创建自己的派生 context 并管理生命周期
-	_ = scanCancel
+	// 轮询 goroutine 在 CreateScan 内创建自己的派生 context 并管理生命周期，此处可安全取消
+	scanCancel()
 
 	c.JSON(200, gin.H{
 		"success": true,
@@ -64,7 +64,8 @@ func (s *APIServer) handleQRStatus(c *gin.Context) {
 		QRCode string `json:"qrcode"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		log.Printf("bad request: %v", err)
+		c.JSON(400, gin.H{"error": "请求参数错误"})
 		return
 	}
 
@@ -153,7 +154,8 @@ func (s *APIServer) handleSaveWechatAccount(c *gin.Context) {
 		AccountName string `json:"account_name"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		log.Printf("bad request: %v", err)
+		c.JSON(400, gin.H{"error": "请求参数错误"})
 		return
 	}
 

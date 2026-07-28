@@ -18,6 +18,13 @@ type loginAttempt struct {
 	blocked   bool
 	blockedAt time.Time
 }
+// maskToken 对令牌进行掩码处理，只显示前4位和后4位
+func maskToken(token string) string {
+	if len(token) <= 8 {
+		return "****"
+	}
+	return token[:4] + "****" + token[len(token)-4:]
+}
 
 func (s *APIServer) handleGetAPIToken(c *gin.Context) {
 	token := s.db.GetSetting("api.token")
@@ -31,7 +38,7 @@ func (s *APIServer) handleGetAPIToken(c *gin.Context) {
 		token = hex.EncodeToString(b)
 		s.db.SetSetting("api.token", token)
 	}
-	c.JSON(200, gin.H{"token": token})
+	c.JSON(200, gin.H{"token": maskToken(token)})
 }
 
 func (s *APIServer) handleRegenAPIToken(c *gin.Context) {
@@ -63,19 +70,19 @@ func (s *APIServer) handleLogin(c *gin.Context) {
 		attempt.count = 0
 		attempt.blocked = false
 	}
-	attempt.mu.Unlock()
 
 	var req struct {
 		Password string `json:"password"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		attempt.mu.Unlock()
+		log.Printf("bad request: %v", err)
+		c.JSON(400, gin.H{"error": "请求参数错误"})
 		return
 	}
 
 	// 使用 config 中的密码（已处理环境变量和自动生成）
 	if subtle.ConstantTimeCompare([]byte(req.Password), []byte(s.config.API.LoginPassword)) != 1 {
-		attempt.mu.Lock()
 		attempt.count++
 		if attempt.count >= 5 {
 			attempt.blocked = true
@@ -87,7 +94,6 @@ func (s *APIServer) handleLogin(c *gin.Context) {
 	}
 
 	// 登录成功，清零尝试次数
-	attempt.mu.Lock()
 	attempt.count = 0
 	attempt.blocked = false
 	attempt.mu.Unlock()
@@ -112,8 +118,8 @@ func (s *APIServer) handleChangePassword(c *gin.Context) {
 		return
 	}
 
-	if req.NewPassword == "" {
-		c.JSON(400, gin.H{"error": "new password is required"})
+	if len(req.NewPassword) < 8 {
+		c.JSON(400, gin.H{"error": "密码长度至少8位"})
 		return
 	}
 
@@ -123,14 +129,13 @@ func (s *APIServer) handleChangePassword(c *gin.Context) {
 		return
 	}
 
-	// 更新数据库
-	if err := s.db.SetSetting("api.login_password", req.NewPassword); err != nil {
-		c.JSON(500, gin.H{"error": "internal server error"})
-		return
-	}
-
 	// 更新内存中的配置
 	s.config.API.LoginPassword = req.NewPassword
+
+	// 将当前 JWT token 加入黑名单，使旧 token 失效
+	if token := extractBearerToken(c); token != "" {
+		s.revokeJWT(token)
+	}
 
 	c.JSON(200, gin.H{"success": true})
 }

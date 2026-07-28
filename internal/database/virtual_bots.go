@@ -1,5 +1,7 @@
 package database
 
+import "log"
+
 type VirtualBot struct {
 	ID        string `json:"id"`
 	AccountID string `json:"account_id"`
@@ -19,6 +21,7 @@ func (db *DB) ListVirtualBots() ([]VirtualBot, error) {
 	for rows.Next() {
 		var vb VirtualBot
 		if err := rows.Scan(&vb.ID, &vb.AccountID, &vb.UserID, &vb.BaseURL, &vb.Token); err != nil {
+			log.Printf("scan error: %v", err)
 			continue
 		}
 		result = append(result, vb)

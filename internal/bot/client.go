@@ -114,12 +114,6 @@ func (c *Connector) GetAccountTokenByVirtualID(virtualAccountID string) string {
 			}
 		}
 	}
-	// Fallback: 返回第一个可用账号
-	for _, a := range c.accounts {
-		if a.Credentials != nil && a.Credentials.Token != "" {
-			return a.Credentials.Token
-		}
-	}
 	return ""
 }
 

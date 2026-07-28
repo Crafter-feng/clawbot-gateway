@@ -70,7 +70,8 @@ func (s *APIServer) handleRegisterBackend(c *gin.Context) {
 		Enabled *bool                  `json:"enabled"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		log.Printf("bad request: %v", err)
+		c.JSON(400, gin.H{"error": "请求参数错误"})
 		return
 	}
 	if req.ID == "" || req.Name == "" || req.Type == "" {
@@ -130,7 +131,8 @@ func (s *APIServer) handleUpdateBackend(c *gin.Context) {
 		Enabled *bool                  `json:"enabled"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		log.Printf("bad request: %v", err)
+		c.JSON(400, gin.H{"error": "请求参数错误"})
 		return
 	}
 
@@ -164,14 +166,14 @@ func (s *APIServer) handleUpdateBackend(c *gin.Context) {
 
 func (s *APIServer) handleRemoveBackend(c *gin.Context) {
 	id := c.Param("id")
-	if err := s.db.DeleteVirtualBot(id); err != nil {
-		log.Printf("ERROR: failed to delete virtual bot %s: %v", id, err)
+	if err := s.db.DeleteBackend(id); err != nil {
+		log.Printf("ERROR: failed to delete backend %s: %v", id, err)
 		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
 	s.clientReg.Unregister("gw_" + id)
-	if err := s.db.DeleteBackend(id); err != nil {
-		log.Printf("ERROR: failed to delete backend %s: %v", id, err)
+	if err := s.db.DeleteVirtualBot(id); err != nil {
+		log.Printf("ERROR: failed to delete virtual bot %s: %v", id, err)
 		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
@@ -221,7 +223,8 @@ func (s *APIServer) handleSetDefaultBackend(c *gin.Context) {
 		BackendID string `json:"backend_id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		log.Printf("bad request: %v", err)
+		c.JSON(400, gin.H{"error": "请求参数错误"})
 		return
 	}
 	s.db.SetSetting("route.default_backend", req.BackendID)

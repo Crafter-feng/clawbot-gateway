@@ -2,6 +2,7 @@ package database
 
 import (
 	"database/sql"
+	"log"
 	"time"
 )
 
@@ -27,6 +28,7 @@ func (db *DB) ListBackends() ([]Backend, error) {
 		var b Backend
 		var enabled int
 		if err := rows.Scan(&b.ID, &b.Name, &b.Type, &b.Config, &enabled); err != nil {
+			log.Printf("scan error: %v", err)
 			continue
 		}
 		b.Enabled = enabled == 1

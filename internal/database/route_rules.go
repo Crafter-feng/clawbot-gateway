@@ -1,6 +1,7 @@
 package database
 
 import (
+	"database/sql"
 	"encoding/json"
 	"time"
 )
@@ -140,6 +141,9 @@ func (db *DB) GetRouteRule(id int) (*RouteRule, error) {
 		&createdAt,
 		&updatedAt,
 	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}

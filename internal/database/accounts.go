@@ -1,5 +1,7 @@
 package database
 
+import "log"
+
 type Account struct {
 	AccountID   string `json:"account_id"`
 	UserID      string `json:"user_id"`
@@ -20,6 +22,7 @@ func (db *DB) ListAccounts() ([]Account, error) {
 	for rows.Next() {
 		var a Account
 		if err := rows.Scan(&a.AccountID, &a.UserID, &a.Token, &a.BaseURL, &a.AccountName, &a.LoginAt); err != nil {
+			log.Printf("scan error: %v", err)
 			continue
 		}
 		result = append(result, a)

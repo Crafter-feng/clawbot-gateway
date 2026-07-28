@@ -258,15 +258,6 @@ func (r *Router) GetUserRouteMode(userID string) string {
 	return "single"
 }
 
-// SetUserSecondaries 设置用户次要后端（兼容旧接口）
-func (r *Router) SetUserSecondaries(userID string, secondaries []string) {
-	// 当前实现不支持多后端路由
-}
-
-// GetUserSecondaries 获取用户次要后端（兼容旧接口）
-func (r *Router) GetUserSecondaries(userID string) []string {
-	return nil
-}
 
 // Route 路由决策
 func (r *Router) Route(message, userID, fromUser, toUser, msgType string) RouteDecision {

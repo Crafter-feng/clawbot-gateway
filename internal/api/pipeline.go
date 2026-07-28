@@ -58,17 +58,18 @@ func NewMessagePipeline(
 // Start 启动消息处理循环
 func (p *MessagePipeline) Start(ctx context.Context) {
 	p.log.Info("message pipeline started")
-	go func() {
+	var processLoopFunc func()
+	processLoopFunc = func() {
 		defer func() {
 			if r := recover(); r != nil {
 				p.log.Error("processLoop panic", "panic", r, "stack", string(debug.Stack()))
-				// 自动恢复：重新启动处理循环
 				time.Sleep(time.Second)
-				go p.processLoop(ctx)
+				go processLoopFunc()
 			}
 		}()
 		p.processLoop(ctx)
-	}()
+	}
+	go processLoopFunc()
 	go p.cleanupLoop(ctx)
 }
 
@@ -212,8 +213,8 @@ func (p *MessagePipeline) processMessage(ctx context.Context, msg bot.Normalized
 		History:   convertChatHistory(ctxSession.GetHistory()),
 	})
 	if err != nil {
-		p.log.Warn("backend error", "seq", seq, "backend", backendID, "error", err)
-		reply := fmt.Sprintf("⚠️ [%s] 处理出错: %s", backendID, err.Error())
+		p.log.Error("backend error", "seq", seq, "backend", backendID, "error", err)
+		reply := fmt.Sprintf("⚠️ [%s] 处理出错，请稍后重试", backendID)
 		creds := p.connector.GetAccountCredentials(msg.AccountID)
 		if creds != nil {
 			contextToken := p.connector.GetContextToken(msg.AccountID, msg.FromUser)
@@ -280,8 +281,8 @@ func (p *MessagePipeline) forwardToBackend(ctx context.Context, msg bot.Normaliz
 		History:   convertChatHistory(ctxSession.GetHistory()),
 	})
 	if err != nil {
-		p.log.Warn("backend error", "seq", seq, "backend", backendID, "error", err)
-		reply := fmt.Sprintf("⚠️ [%s] 处理出错: %s", backendID, err.Error())
+		p.log.Error("backend error", "seq", seq, "backend", backendID, "error", err)
+		reply := fmt.Sprintf("⚠️ [%s] 处理出错，请稍后重试", backendID)
 		creds := p.connector.GetAccountCredentials(msg.AccountID)
 		if creds != nil {
 			contextToken := p.connector.GetContextToken(msg.AccountID, msg.FromUser)

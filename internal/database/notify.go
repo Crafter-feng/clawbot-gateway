@@ -1,5 +1,7 @@
 package database
 
+import "log"
+
 type NotifyToken struct {
 	ID        string `json:"id"`
 	AccountID string `json:"account_id"` // 绑定的微信账号（空=全部）
@@ -21,6 +23,7 @@ func (db *DB) ListNotifyTokens() ([]NotifyToken, error) {
 		var t NotifyToken
 		var enabled int
 		if err := rows.Scan(&t.ID, &t.AccountID, &t.Name, &t.Token, &enabled, &t.CreatedAt); err != nil {
+			log.Printf("scan error: %v", err)
 			continue
 		}
 		t.Enabled = enabled == 1
@@ -32,17 +35,6 @@ func (db *DB) ListNotifyTokens() ([]NotifyToken, error) {
 	return result, nil
 }
 
-func (db *DB) GetNotifyToken(token string) (*NotifyToken, error) {
-	var t NotifyToken
-	var enabled int
-	err := db.conn.QueryRow("SELECT id, account_id, name, token, enabled, created_at FROM notify_tokens WHERE token = ?", token).
-		Scan(&t.ID, &t.AccountID, &t.Name, &t.Token, &enabled, &t.CreatedAt)
-	if err != nil {
-		return nil, err
-	}
-	t.Enabled = enabled == 1
-	return &t, nil
-}
 
 func (db *DB) CreateNotifyToken(t NotifyToken) error {
 	enabled := 0

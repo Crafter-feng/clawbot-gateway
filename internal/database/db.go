@@ -91,11 +91,6 @@ func (db *DB) migrate() error {
 			route_mode TEXT DEFAULT 'single',
 			secondaries TEXT DEFAULT '[]'
 		)`,
-		`CREATE TABLE IF NOT EXISTS api_tokens (
-			token TEXT PRIMARY KEY,
-			name TEXT DEFAULT '',
-			created_at TEXT DEFAULT (datetime('now'))
-		)`,
 		`CREATE TABLE IF NOT EXISTS notify_tokens (
 			id TEXT PRIMARY KEY,
 			account_id TEXT NOT NULL DEFAULT '',

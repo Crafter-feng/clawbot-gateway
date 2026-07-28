@@ -83,7 +83,9 @@ func LoadFromDB(db *database.DB) *Config {
 	}
 	cfg.API.JWTExpiryHours = intEnvOrDefault("CLAWBOT_JWT_EXPIRY_HOURS", db.GetSetting("api.jwt_expiry_hours"), 24)
 	originStr := envOrDefault("CLAWBOT_ALLOWED_ORIGINS", db.GetSetting("api.allowed_origins"))
-	if originStr == "" || originStr == "*" {
+	if originStr == "" {
+		cfg.API.AllowedOrigins = []string{"http://localhost:5173", "http://localhost:8080"}
+	} else if originStr == "*" {
 		cfg.API.AllowedOrigins = []string{"*"}
 	} else {
 		parts := strings.Split(originStr, ",")

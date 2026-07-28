@@ -106,7 +106,7 @@
   --bg-elevated: #ffffff;
   --text-primary: var(--n-900);
   --text-secondary: var(--n-500);
-  --text-muted: var(--n-400);
+  --text-muted: var(--n-500);
   --border: var(--n-200);
   --border-light: var(--n-100);
 
@@ -1427,6 +1427,253 @@ textarea.input {
   }
 }
 
+/* --- Log Page --- */
+.log-filter-bar {
+  flex-shrink: 0;
+  margin: 0 var(--space-4) var(--space-3);
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.log-filter-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-dim);
+  padding: 0 var(--space-2);
+}
+
+.log-filter-tab {
+  flex: 1;
+  padding: 10px 8px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 400;
+  transition: color .15s, border-color .15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.log-filter-tab:hover {
+  color: var(--text-secondary);
+}
+
+.log-filter-tab--active {
+  color: var(--accent);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+
+.log-filter-tab-icon {
+  font-size: 14px;
+}
+
+.log-filter-controls {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3);
+}
+
+.log-filter-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.log-filter-select {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  outline: none;
+}
+
+.log-flex-spacer {
+  flex: 1;
+}
+
+.log-filter-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.log-filter-count {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.log-filter-autorefresh {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.log-filter-autorefresh input {
+  accent-color: var(--accent);
+}
+
+.log-refresh-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+/* Log table */
+.log-table {
+  flex: 1;
+  margin: 0 var(--space-4) var(--space-4);
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.log-table-header {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-dim);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.log-table-header-cell {
+  padding: 10px 12px;
+}
+
+.log-table-header-cell--time {
+  width: 72px;
+}
+
+.log-table-header-cell--level {
+  width: 52px;
+}
+
+.log-table-header-cell--component {
+  width: 160px;
+}
+
+.log-table-header-cell--message {
+  flex: 1;
+}
+
+.log-table-body {
+  flex: 1;
+  overflow-y: auto;
+  font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.log-table-row {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  transition: background .15s;
+}
+
+.log-table-row--even {
+  background: rgba(128,128,128,0.02);
+}
+
+.log-table-row--error {
+  background: rgba(239,68,68,0.04);
+}
+
+.log-table-row:hover {
+  background: rgba(128,128,128,0.06) !important;
+}
+
+.log-table-cell {
+  padding: 4px 12px;
+}
+
+.log-table-cell--time {
+  width: 72px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.log-table-cell--level {
+  width: 52px;
+}
+
+.log-table-cell--component {
+  width: 160px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.log-table-cell--message {
+  flex: 1;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.log-level-badge {
+  display: inline-block;
+  padding: 0 6px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 18px;
+  border-radius: 3px;
+  letter-spacing: 0.03em;
+}
+
+.log-error-attrs {
+  color: #ef4444;
+  margin-left: 6px;
+}
+
+.log-empty-state {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.log-empty-state-icon {
+  font-size: 24px;
+  margin-bottom: 8px;
+  opacity: 0.3;
+}
+
+.log-empty-state-text {
+  font-size: 13px;
+}
+
+.log-spinner-wrap {
+  padding: 32px;
+  text-align: center;
+  color: var(--text-muted);
+}
 /* --- Responsive --- */
 @media (max-width: 768px) {
   :root {

@@ -116,7 +116,7 @@ func (qm *QRCodeManager) CreateScan(ctx context.Context, qrcode string) error {
 			body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // 限制 1MB
 			resp.Body.Close()
 
-			qm.log().Info("poll status response", "status_code", resp.StatusCode, "body", string(body))
+			qm.log().Debug("poll status response", "status_code", resp.StatusCode)
 			status, creds, redirectHost := parseQRStatusResponse(body, qm.connector.baseURL)
 			qm.log().Info("parsed status", "status", status)
 
