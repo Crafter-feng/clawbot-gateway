@@ -21,6 +21,7 @@ import (
 	"clawbot-gateway/internal/log"
 	"clawbot-gateway/internal/route"
 	"clawbot-gateway/internal/session"
+	"clawbot-gateway/internal/version"
 )
 
 func main() {
@@ -46,6 +47,9 @@ func main() {
 		case "reset-password":
 			cmdResetPassword(dbPath)
 			return
+		case "version", "--version", "-v":
+			fmt.Printf("ClawBot Gateway %s (commit %s, built %s)\n", version.Version, version.Commit, version.BuildTime)
+			return
 		case "help", "--help", "-h":
 			printUsage()
 			return
@@ -57,7 +61,6 @@ func main() {
 			}
 		}
 	}
-
 	// 1. 初始化数据库
 	db, err := database.New(dbPath)
 	if err != nil {
@@ -198,7 +201,7 @@ func main() {
 
 	// 10. 初始化消息处理管道
 	pipelineCtx, pipelineCancel := context.WithCancel(context.Background())
-	pipeline := api.NewMessagePipeline(conn, r, af, cm)
+	pipeline := api.NewMessagePipeline(conn, r, af, cm, clientRegistry)
 	pipeline.SetLogger(log)
 	pipeline.Start(pipelineCtx)
 
@@ -253,6 +256,7 @@ func printUsage() {
 
 命令:
   reset-password [密码]   重置登录密码（不指定则生成随机密码）
+  version, -v           显示版本信息
   help, -h, --help       显示此帮助信息
 
 环境变量:

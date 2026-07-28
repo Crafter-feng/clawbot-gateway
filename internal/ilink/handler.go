@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -83,73 +84,46 @@ func (s *Server) forwardToILink(endpoint string, body []byte, baseURL string, bo
 	return s.httpClient.Do(req)
 }
 
-// handleGetUpdates 透明代理 - 长轮询
-// 过滤掉 Gateway 内部命令（以 / 开头的消息），避免转发到外部客户端
+// handleGetUpdates 从虚拟 Bot 消息队列消费消息（长轮询）
+// 不直接转发到腾讯 iLink API；消息由 Connector 独占轮询后经 Pipeline 路由入队
 func (s *Server) handleGetUpdates(c *gin.Context) {
-	// 先验证 token
+	// 1. 验证虚拟 Bot token
 	accountID := s.validateToken(c)
 	if accountID == "" {
-		c.JSON(401, gin.H{"error": "unauthorized"})
+		c.JSON(401, gin.H{"ret": -1, "errmsg": "unauthorized"})
 		return
 	}
 	s.registry.UpdateLastActive(accountID)
 
-	// 获取虚拟 Bot 配置
+	// 2. 获取虚拟 Bot 配置
 	vbot := s.registry.Get(accountID)
 	if vbot == nil {
-		c.JSON(500, gin.H{"error": "bot not found"})
+		c.JSON(500, gin.H{"ret": -1, "errmsg": "bot not found"})
 		return
 	}
 
-	// 获取真实 bot token
-	realBotToken := s.bot.GetAccountTokenByVirtualID(accountID)
-	if realBotToken == "" {
-		c.JSON(500, gin.H{"error": "no real bot token"})
-		return
-	}
+	// 3. 阻塞等待队列中的消息（长轮询，最长等待 35 秒）
+	// 外部客户端可能在请求体中传入 get_updates_buf，我们忽略（管道侧自管理游标）
+	_, _ = io.ReadAll(io.LimitReader(c.Request.Body, 1<<20))
 
-	// 读取请求体
-	body, err := io.ReadAll(io.LimitReader(c.Request.Body, 1<<20))
-	if err != nil {
-		c.JSON(500, gin.H{"error": "read body error"})
-		return
-	}
+	msgs, timedOut := vbot.Dequeue(35 * time.Second)
 
-	// 转发到真实 iLink API
-	endpoint := c.FullPath()
-	resp, err := s.forwardToILink(endpoint, body, vbot.BaseURL, realBotToken)
-	if err != nil {
-		s.log.Error("forward error", "error", err, "endpoint", endpoint, "account_id", accountID)
-		c.JSON(502, gin.H{"error": "forward error"})
-		return
-	}
-	defer resp.Body.Close()
-
-	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-
-	// 过滤 Gateway 内部命令：以 / 开头的消息
-	var result struct {
-		Ret           int              `json:"ret"`
-		Errmsg        string           `json:"errmsg,omitempty"`
+	// 4. 返回 iLink 兼容响应格式
+	// get_updates_buf 由外部客户端自管理，这里返回占位
+	result := struct {
+		Ret           int                   `json:"ret"`
+		Errmsg        string                `json:"errmsg,omitempty"`
 		Msgs          []bot.RawMessageItem `json:"msgs"`
-		GetUpdatesBuf string           `json:"get_updates_buf"`
+		GetUpdatesBuf string                `json:"get_updates_buf"`
+	}{
+		Ret:           0,
+		Msgs:          msgs,
+		GetUpdatesBuf: "",
 	}
-	if err := json.Unmarshal(respBody, &result); err == nil && len(result.Msgs) > 0 {
-		filtered := make([]bot.RawMessageItem, 0, len(result.Msgs))
-		for _, msg := range result.Msgs {
-			text := bot.ExtractText(msg.ItemList)
-			if strings.HasPrefix(text, "/") {
-				continue
-			}
-			filtered = append(filtered, msg)
-		}
-		result.Msgs = filtered
-		if newBody, err := json.Marshal(result); err == nil {
-			respBody = newBody
-		}
-	}
+	resultBytes, _ := json.Marshal(result)
+	_ = timedOut // 不区分超时/正常返回，均为 200
 
-	c.Data(resp.StatusCode, "application/json", respBody)
+	c.Data(200, "application/json", resultBytes)
 }
 
 // handleSendMessage 透明代理 - 发送消息

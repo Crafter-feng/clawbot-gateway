@@ -189,52 +189,9 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* 路由规则 */}
-        <div className="card">
-          <div className="card-header">
-            <h2 className="card-title">路由规则</h2>
-            <Button variant="ghost" size="sm" onClick={() => navigate('/manage')}>
-              管理
-            </Button>
-          </div>
-          {routes.items.length === 0 ? (
-            <EmptyState
-              icon={
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="16 3 21 3 21 8" />
-                  <line x1="4" y1="20" x2="21" y2="3" />
-                  <polyline points="21 16 21 21 16 21" />
-                  <line x1="15" y1="15" x2="21" y2="21" />
-                  <line x1="4" y1="4" x2="9" y2="9" />
-                </svg>
-              }
-              title="暂无路由规则"
-              description="创建路由规则以自动分发消息"
-              action={
-                <Button size="sm" onClick={() => navigate('/manage')}>
-                  创建规则
-                </Button>
-              }
-            />
-          ) : (
-            <div className="list-section">
-              {routes.items.map((r) => (
-                <div key={r.id} className="list-item">
-                  <div className="list-item-content">
-                    <div className="list-item-info">
-                      <div className="list-item-title">
-                        {r.name}
-                        {!r.enabled && <Tag variant="neutral" style={{ marginLeft: '8px' }}>停用</Tag>}
-                      </div>
-                      <div className="list-item-subtitle">
-                        转发至: {r.backend_id}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+        {/* 版本信息 */}
+        <div style={{ textAlign: 'center', padding: 'var(--space-4)', color: 'var(--text-muted)', fontSize: 'var(--font-size-sm)' }}>
+          ClawBot Gateway {stats.version || 'dev'} · Built with Go + React
         </div>
       </div>
     </div>

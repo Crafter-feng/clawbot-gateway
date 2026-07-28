@@ -24,6 +24,7 @@ import (
 	"clawbot-gateway/internal/log"
 	"clawbot-gateway/internal/route"
 	"clawbot-gateway/internal/session"
+	"clawbot-gateway/internal/version"
 )
 
 type APIServer struct {
@@ -148,6 +149,10 @@ func (s *APIServer) Start(addr string) error {
 	conn.GET("", s.handleListConnections)
 	conn.GET("/stats", s.handleConnectionStats)  // 静态路径必须在参数化路径之前
 	conn.GET("/:id", s.handleGetConnection)
+	// 日志
+	logs := api.Group("/logs")
+	logs.GET("", s.handleGetLogs)
+	logs.GET("/categories", s.handleGetLogCategories)
 
 	// 消息 API
 	msg := api.Group("/message")
@@ -360,6 +365,7 @@ func (s *APIServer) handleStats(c *gin.Context) {
 	backends, _ := s.db.ListBackends()
 	c.JSON(200, gin.H{
 		"backends": len(backends),
+		"version":  version.Version,
 	})
 }
 

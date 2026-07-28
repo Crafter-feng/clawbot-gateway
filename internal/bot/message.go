@@ -94,6 +94,16 @@ type NormalizedMessage struct {
 	Timestamp    int64           `json:"timestamp"`
 	ContextToken string          `json:"context_token,omitempty"`
 	Raw          json.RawMessage `json:"raw,omitempty"`
+
+	// rawItem 保留原始 RawMessageItem（不导出，避免 JSON 序列化）
+	// 用于 ilink_proxy 路由场景：管道入队需要原始格式
+	rawItem *RawMessageItem `json:"-"`
+}
+
+// RawMessageItem 返回归一化前的原始 iLink 消息项（如可用）
+// 用于 ilink_proxy 后端入队：保留原始格式供外部服务消费
+func (m NormalizedMessage) GetRawItem() *RawMessageItem {
+	return m.rawItem
 }
 
 type BaseInfo struct {
@@ -188,8 +198,6 @@ type RawMessageItem_RefMsg struct {
 	MessageItem *RawMessageItem_Item `json:"message_item,omitempty"`
 }
 
-// ── 消息解析 ──
-
 // normalize 将原始 iLink 消息转换为标准化格式
 func normalize(raw RawMessageItem) NormalizedMessage {
 	content := ExtractText(raw.ItemList)
@@ -203,6 +211,7 @@ func normalize(raw RawMessageItem) NormalizedMessage {
 		Items:        items,
 		Timestamp:    raw.Timestamp,
 		ContextToken: raw.ContextToken,
+		rawItem:      &raw,
 	}
 }
 

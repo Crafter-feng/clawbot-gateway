@@ -6,25 +6,32 @@ import (
 	"encoding/hex"
 	"sync"
 	"time"
+
+	"clawbot-gateway/internal/bot"
 )
 
 // ── 虚拟 Bot ──
 
 // VirtualBot 虚拟 Bot 实例
-// 透明代理模式：只存储连接配置，不存储消息队列
+// 队列消费模式：Pipeline 生产消息入队，外部服务通过 getupdates 消费
 type VirtualBot struct {
-	AccountID  string         // 虚拟 Bot ID（如 gw_a1b2c3d4）
-	UserID     string         // 用户 ID（如 gw_a1b2c3d4@im.wechat）
-	BaseURL    string         // iLink API 地址
-	Token      string         // 随机生成的认证 token
+	AccountID  string         // 虚拟 Bot ID（如 gw_hermes）
+	UserID     string        // 用户 ID（如 gw_hermes@im.wechat）
+	BaseURL    string         // iLink API 地址（用于回复类端点透明转发）
+	Token      string         // 随机生成的认证 token（持久化到数据库）
 	LastActive time.Time      // 最后活跃时间
 	CreatedAt  time.Time      // 创建时间
+
+	// 消息队列：Pipeline 路由到此后入队，外部服务 getupdates 消费
+	queueMu sync.Mutex
+	queue   []bot.RawMessageItem
+	notify  chan struct{} // buffered cap 1: Enqueue 发信号唤醒等待的 Dequeue
 }
 
 // ── 客户端注册表 ──
 
 // ClientRegistry 管理所有虚拟 Bot
-// 透明代理模式：只管理虚拟 Bot 的连接配置
+// 队列消费模式：管理虚拟 Bot 的连接配置和消息队列
 type ClientRegistry struct {
 	mu   sync.RWMutex
 	bots map[string]*VirtualBot // accountID → VirtualBot
@@ -66,8 +73,71 @@ func (r *ClientRegistry) Register(accountID, userID, baseURL, token string) *Vir
 		LastActive: time.Now(),
 		CreatedAt:  time.Now(),
 	}
+	bot.notify = make(chan struct{}, 1)
 	r.bots[accountID] = bot
 	return bot
+}
+
+// Enqueue 将消息入队（由 Pipeline 调用）
+// 唤醒等待中的 getupdates 长轮询
+func (b *VirtualBot) Enqueue(msg bot.RawMessageItem) {
+	b.queueMu.Lock()
+	b.queue = append(b.queue, msg)
+	b.queueMu.Unlock()
+	// 非阻塞发信号：notify buffered cap 1，没有等待者时不阻塞
+	select {
+	case b.notify <- struct{}{}:
+	default:
+	}
+}
+
+// Dequeue 阻塞等待并取出队列中的所有消息（由 iLink 服务端 getupdates 调用）
+// timeout 为最长等待时间；返回消息列表和是否超时
+// 取出后清空队列
+func (b *VirtualBot) Dequeue(timeout time.Duration) ([]bot.RawMessageItem, bool) {
+	// 快速路径：先检查队列是否有消息
+	b.queueMu.Lock()
+	if len(b.queue) > 0 {
+		msgs := b.queue
+		b.queue = nil
+		b.queueMu.Unlock()
+		return msgs, false
+	}
+	b.queueMu.Unlock()
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	select {
+	case <-b.notify:
+		// 有消息入队，取出所有
+		b.queueMu.Lock()
+		defer b.queueMu.Unlock()
+		if len(b.queue) > 0 {
+			msgs := b.queue
+			b.queue = nil
+			return msgs, false
+		}
+		// 信号被消费但没有消息：其他 Dequeue 已经取走，返回空
+		return nil, false
+	case <-timer.C:
+		// 超时最后一次检查，避免丢失在 select 之前 Enqueue 的消息
+		b.queueMu.Lock()
+		defer b.queueMu.Unlock()
+		if len(b.queue) > 0 {
+			msgs := b.queue
+			b.queue = nil
+			return msgs, false
+		}
+		return nil, true
+	}
+}
+
+// QueueLength 返回队列中消息数（用于统计/调试）
+func (b *VirtualBot) QueueLength() int {
+	b.queueMu.Lock()
+	defer b.queueMu.Unlock()
+	return len(b.queue)
 }
 
 // Unregister 注销虚拟 Bot

@@ -9,6 +9,7 @@ const ChannelsPage = lazy(() => import('./pages/ChannelsPage'))
 const ManagePage = lazy(() => import('./pages/ManagePage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const NotificationPage = lazy(() => import('./pages/NotificationPage'))
+const LogPage = lazy(() => import('./pages/LogPage'))
 
 function LoadingFallback() {
   return (
@@ -40,8 +41,9 @@ export const router = createBrowserRouter([
           { path: '/dashboard', element: <DashboardPage /> },
           { path: '/channels', element: <ChannelsPage /> },
           { path: '/manage', element: <ManagePage /> },
+          { path: '/notify', element: <NotificationPage /> },
+          { path: '/logs', element: <LogPage /> },
           { path: '/settings', element: <SettingsPage /> },
-          { path: '/notify', element: <NotificationPage /> }
         ],
       },
     ],

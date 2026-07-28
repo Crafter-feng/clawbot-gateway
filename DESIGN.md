@@ -2,12 +2,12 @@
 
 ## 项目概述
 
-ClawBot Gateway 是一个微信多后端代理网关。通过 iLink 协议接入微信，作为唯一的 iLink 轮询者管理微信连接，同时对外提供 iLink 兼容 API，让外部服务（Hermes Agent、OpenClaw、OpenCode 等）无缝接入。
+ClawBot Gateway 是一个微信多后端代理网关。通过 iLink 协议接入微信，作为**唯一的 iLink 轮询者**管理微信连接，消息统一经过命令→路由→后端管线处理，同时对外提供 iLink 兼容 API 让外部服务（Hermes Agent、OpenClaw、OpenCode 等）接入。
 
 **核心能力**：
-- 作为 iLink 客户端连接真实微信
-- 作为 iLink 服务端对外提供 API
-- 消息路由到多个 AI 后端
+- 作为 iLink 客户端连接真实微信，**独占轮询**
+- 作为 iLink 服务端对外提供 API，供外部服务获取**已路由的消息**
+- 消息统一经过 Pipeline：命令解析 → 路由决策 → 后端处理 → 回复
 - 文件中转到 Obsidian 等外部服务
 
 ## 核心概念
@@ -36,13 +36,12 @@ Gateway 同时扮演两个角色，必须清晰区分：
 │  │  作用：对外提供 iLink 兼容 API                                 │  │
 │  │  方向：外部服务 → Gateway:8080/ilink/bot/*                     │  │
 │  │  功能：                                                       │  │
-│  │    - 接收外部服务的 getupdates 请求                            │  │
-│  │    - 转发外部服务的 sendmessage 到真实微信                     │  │
-│  │    - 管理虚拟 Bot 的消息队列                                   │  │
+│  │    - getupdates：从 Pipeline 维护的虚拟 Bot 队列消费已路由消息  │  │
+│  │    - sendmessage：透明转发到真实 iLink API（回复用户）         │  │
+│  │    - sendtyping/getconfig/getuploadurl：透明转发到真实 API    │  │
+│  │    - 管理虚拟 Bot 的消息队列（按后端隔离）                     │  │
 │  │  代码：internal/ilink/                                        │  │
 │  └──────────────────────────────────────────────────────────────┘  │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
 ```
 
 **关键区别**：
@@ -54,111 +53,157 @@ Gateway 同时扮演两个角色，必须清晰区分：
 | 连接目标 | 腾讯 iLink API | 外部服务（Hermes、OpenClaw） |
 | 主要端点 | `getupdates`, `sendmessage` | `/ilink/bot/*` |
 | 认证方式 | `bot_token`（真实微信凭证） | `Bearer <虚拟token>` |
-| 消息流向 | 微信 → Gateway | 外部服务 → Gateway → 微信 |
+| 消息流向 | 微信 → Gateway | Gateway 队列 → 外部服务 → Gateway → 微信 |
+| 消息来源 | 腾讯 iLink API（独占轮询） | Pipeline 维护的虚拟 Bot 消息队列 |
+### 消息流转
 
-### 消息流转示例
+**核心原则**：iLink 客户端（Connector）是**唯一轮询者**，所有消息统一经过 Pipeline，没有任何消息能绕过Pipeline。
 
-#### 两种转发模式
-
-| 模式 | 说明 | 是否需要解析消息 |
-|------|------|-----------------|
-| **iLink → iLink 透传** | 虚拟 Bot 代理，外部服务通过 Gateway 访问真实 iLink API | 否（透明通道） |
-| **iLink → AI/Relay** | AI 处理或文件中转，需要解析消息内容 | 是（需要 NormalizedMessage） |
+iLink 客户端和 iLink 服务端之间通过**管道**交互，不是各自直连腾讯服务器。
 
 ```
-                    ┌─────────────────┐
-                    │    微信用户      │
-                    └────────┬────────┘
-                             │
-              ┌──────────────▼──────────────┐
-              │  iLink 客户端（Connector）    │
-              │  accountPollLoop()           │
-              └──────────────┬──────────────┘
-                             │
-                    NormalizedMessage
-                             │
-              ┌──────────────▼──────────────┐
-              │         消息分发点           │
-              └──────────────┬──────────────┘
-                             │
-        ┌────────────────────┼────────────────────┐
-        │                    │                    │
-        ▼                    ▼                    ▼
-┌─────────────┐      ┌─────────────┐      ┌─────────────┐
-│  Path A:    │      │  Path B:    │      │  Path C:    │
-│  AI 处理    │      │  iLink 透传 │      │  文件中转   │
-│  (需要解析) │      │  (不需要)   │      │  (需要解析) │
-└──────┬──────┘      └──────┬──────┘      └──────┬──────┘
-       │                    │                    │
-       ▼                    ▼                    ▼
-┌─────────────┐      ┌─────────────┐      ┌─────────────┐
-│  Pipeline   │      │  透明代理    │      │  RelayMgr   │
-│  → Adapter  │      │  直接转发    │      │  → 文件     │
-└──────┬──────┘      └──────┬──────┘      └─────────────┘
-       │                    │
-       ▼                    ▼
-┌─────────────┐      ┌─────────────┐
-│  AI API     │      │  腾讯 iLink  │
-│  (Claude等) │      │  API        │
-└──────┬──────┘      └──────┬──────┘
-       │                    │
-       └────────┬───────────┘
-                │
-     ┌──────────▼──────────┐
-     │  iLink 客户端发送   │
-     │  Connector.Send()   │
-     └──────────┬──────────┘
-                │
-     ┌──────────▼──────────┐
-     │    微信用户          │
-     └─────────────────────┘
+                    ┌──────────────────────────────────────────┐
+                    │          微信用户                         │
+                    └───────────────┬──────────────────────────┘
+                                    │
+                    ┌───────────────▼──────────────────────────┐
+                    │     iLink API (腾讯)                      │
+                    │  ilinkai.weixin.qq.com                   │
+                    └───────────────┬──────────────────────────┘
+                                    │
+                                    │  唯一轮询者（独占）
+                    ┌───────────────▼──────────────────────────┐
+                    │      Connector (轮询)                     │
+                    │  accountPollLoop()                       │
+                    └───────────────┬──────────────────────────┘
+                                    │
+                          NormalizedMessage
+                                    │
+                    ┌───────────────▼──────────────────────────┐
+                    │      MessagePipeline                      │
+                    │  ┌─────────────────────────────────────┐  │
+                    │  │ Command Processor (命令解析)        │  │
+                    │  │  /use → 切换后端                     │  │
+                    │  │  /backends → 列出后端                │  │
+                    │  │  /help → 显示帮助                    │  │
+                    │  │  /<id> → 一次性转发到后端            │  │
+                    │  │  /help <id> [args] → 代理后端命令    │  │
+                    │  └─────────────────────────────────────┘  │
+                    │                    │                       │
+                    │  ┌─────────────────▼───────────────────┐  │
+                    │  │ Router (路由决策)                    │  │
+                    │  │  1. 用户会话级覆写 (/use)            │  │
+                    │  │  2. 关键词规则匹配                   │  │
+                    │  │  3. 默认后端兜底                     │  │
+                    │  └─────────────────┬───────────────────┘  │
+                    │                    │                       │
+                    │         ┌──────────┼──────────┐            │
+                    │         ▼                     ▼          │
+                    │  ┌──────────────┐    ┌──────────────────┐  │
+                    │  │ BackendAdapter│    │ ConnectionAdapter│  │
+                    │  │ (echo/openai) │    │ (ilink_proxy)    │  │
+                    │  │ → Handle()    │    │ → 消息入队        │  │
+                    │  │ → AI API     │    │ → 外部服务消费    │  │
+                    │  └──────┬───────┘    └────────┬─────────┘  │
+                    └─────────┼─────────────────────┼────────────┘
+                              │                     │
+                              ▼                     ▼
+                    ┌─────────────────┐  ┌─────────────────────┐
+                    │  AI API 响应      │  │  iLink 服务端队列     │
+                    └────────┬────────┘  └─────────┬───────────┘
+                             │                     │
+                             │      ┌──────────────┘
+                             │      │ 外部服务 getupdates
+                             │      ▼
+                             │  ┌─────────────┐
+                             │  │ 外部服务     │
+                             │  │ (Hermes等)   │
+                             │  └──────┬──────┘
+                             │         │ sendmessage
+                             │         ▼
+                             │  ┌─────────────────┐
+                             │  │ iLink 服务端     │
+                             │  │ (透明转发回复)   │
+                             │  └────────┬────────┘
+                             │           │
+                             └─────┬─────┘
+                                   │
+                    ┌──────────────▼──────────────────────────┐
+                    │  Connector.Send()                        │
+                    │  转发到真实 iLink API                    │
+                    └──────────────┬──────────────────────────┘
+                                   │
+                    ┌──────────────▼──────────────────────────┐
+                    │    微信用户                               │
+                    └─────────────────────────────────────────┘
 ```
 
-#### iLink → iLink 透传模式
+#### Pipeline 消息处理流程
+
+**所有消息**统一经过 Pipeline，没有消息能绕过这个管线。
 
 ```
-外部服务 (Hermes/OpenClaw)
+Connector 收到消息
     │
-    │ POST /ilink/bot/getupdates
     ▼
-Gateway iLink 服务端 (透明代理)
-    │
-    │ 直接转发，不解析消息
-    ▼
-腾讯 iLink API
+NormalizedMessage (标准化)
     │
     ▼
-微信用户
+┌─── Command Processor ──────────────────────────────────────┐
+│  解析以 / 开头的命令                                        │
+│                                                            │
+│  内部命令（Gateway 处理，不转发）：                         │
+│    /use            → 显示状态 / 切换后端                    │
+│    /backends       → 列出所有后端                            │
+│    /help           → 显示 Gateway 帮助                      │
+│                                                            │
+│  代理命令（转发到后端处理）：                                │
+│    /<id>           → 显示后端状态（无参数时）                │
+│    /<id> <msg>     → 剥离前缀，<msg> 转发到 <id> 后端         │
+│    /help <id>      → 转发 /help 到 <id> 后端                 │
+│    /help <id> args → 转发 /help args 到 <id> 后端            │
+└────────────────────┬───────────────────────────────────────┘
+                     │ 非命令消息
+                     ▼
+┌─── Router ────────────────────────────────────────────────┐
+│  三层优先级：                                               │
+│    1. 用户会话级覆写（/use 设置）— 最高                      │
+│    2. 关键词规则匹配 — 按优先级遍历                          │
+│    3. 默认后端兜底                                         │
+│                                                            │
+│  路由结果：backendID                                       │
+└────────────────────┬───────────────────────────────────────┘
+                     │
+         ┌───────────┴───────────┐
+         ▼                       ▼
+┌─── BackendAdapter ───┐  ┌─── ConnectionAdapter (ilink_proxy) ───┐
+│  echo                │  │  消息写入虚拟 Bot 消息队列               │
+│  openai_compatible   │  │  （不调用 Handle()，不回复）              │
+│  → Handle()          │  │  外部服务通过 getupdates 消费队列         │
+│  → AI API 响应       │  │  处理后通过 sendmessage 回复              │
+│  → 管道回复用户      │  │                                          │
+└──────────┬───────────┘  └────────────────────┬─────────────────────┘
+           │                                    │
+           │                       ┌────────────┘
+           │                       │ 外部服务处理后
+           │                       │ POST /ilink/bot/sendmessage
+           │                       ▼
+           │              ┌─────────────────┐
+           │              │ iLink 服务端     │
+           │              │ 透明转发回复     │
+           │              └────────┬────────┘
+           │                       │
+           └───────────┬───────────┘
+                       │
+            ┌──────────▼──────────┐
+            │  Connector.Send()   │
+            │  转发到真实 iLink    │
+            └──────────┬──────────┘
+                       │
+            ┌──────────▼──────────┐
+            │    微信用户          │
+            └─────────────────────┘
 ```
-
-**特点**：
-- 不需要解析消息内容
-- 直接转发请求和响应
-- 用于虚拟 Bot 代理场景
-
-#### iLink → AI/Relay 模式
-
-```
-微信用户
-    │
-    ▼
-iLink 客户端 (Connector)
-    │
-    │ 解析为 NormalizedMessage
-    ▼
-消息分发点
-    │
-    ├──→ Pipeline → Adapter → AI API → 回复
-    │
-    └──→ RelayMgr → 文件保存
-```
-
-**特点**：
-- 需要解析消息内容
-- 转换为 NormalizedMessage 格式
-- 用于 AI 处理和文件中转场景
-
-### Adapter 是配置单元
 
 **关键理解**：
 - **Adapter** 是配置单元，定义了外部服务如何连接到 Gateway
@@ -317,16 +362,11 @@ curl -X POST http://localhost:8080/api/v1/notify/send \
 │                                                                      │
 └─────────────────────────────────────────────────────────────────────┘
 ```
-
-#### 工作原理
-
 1. **一个真实账号**：用户通过 QR 扫码登录一个真实的微信账号（仅主客户端需要）
-2. **代理转发**：Gateway 作为 iLink 客户端轮询真实微信，接收所有消息
-3. **透明代理**：虚拟 Bot 通过 iLink 服务端直接转发到真实 iLink API，无需消息队列或广播机制
+2. **独占轮询**：Gateway 作为 iLink 客户端唯一轮询真实微信，接收所有消息
+3. **管道分发**：所有消息统一经过 Pipeline（命令→路由→后端），路由到 ilink_proxy 后端的消息进入虚拟 Bot 消息队列
 4. **独立使用**：每个外部服务通过独立的虚拟 Bot token 认证，互不干扰
 5. **统一发送**：外部服务发送的消息通过 Gateway 代理转发到真实微信
-
-**注意**：虚拟 Bot 不需要 QR 扫码登录。Gateway 直接生成连接配置（account_id、user_id、base_url），用户复制到外部服务即可使用。
 
 #### 优势
 
@@ -395,113 +435,7 @@ curl -X POST http://localhost:8080/api/v1/notify/send \
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 数据流转图
-
-#### 完整数据流
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                          数据流转全景图                                   │
-└─────────────────────────────────────────────────────────────────────────┘
-
-                          ┌──────────────────┐
-                          │    微信用户       │
-                          └────────┬─────────┘
-                                   │
-                    ┌──────────────▼──────────────┐
-                    │     iLink API (腾讯)         │
-                    │  ilinkai.weixin.qq.com       │
-                    └──────────────┬──────────────┘
-                                   │
-                    ┌──────────────▼──────────────┐
-                    │      Connector (轮询)        │
-                    │  accountPollLoop()           │
-                    └──────────────┬──────────────┘
-                                   │
-                          NormalizedMessage
-                                   │
-                    ┌──────────────▼──────────────┐
-                    │      消息分发点              │
-                    └──────────────┬──────────────┘
-                                   │
-              ┌────────────────────┼────────────────────┐
-              │                    │                    │
-              ▼                    ▼                    ▼
-    ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-    │  Path A:        │  │  Path B:        │  │  Path C:        │
-    │  内置 AI 处理    │  │  虚拟 Bot 代理   │  │  文件中转       │
-    └────────┬────────┘  └────────┬────────┘  └────────┬────────┘
-             │                    │                    │
-    ┌─────────────────┐  ┌─────────────────┐
-    │ MessagePipeline │  │  iLink 服务端    │
-    │ → CommandProc   │  │  → 透明代理      │
-    │ → Router        │  │  → 直接转发      │
-    └────────┬────────┘  └────────┬────────┘
-             │                    │
-             │                    │
-             ▼                    ▼
-    ┌─────────────────┐  ┌─────────────────┐
-    │ Adapter         │  │  腾讯 iLink API  │
-    │ (OpenAI/Notify) │  │  (直接转发)      │
-    └────────┬────────┘  └────────┬────────┘
-             │                    │
-             └──────────┬─────────┘
-                        │
-             ┌──────────▼──────────┐
-             │  Connector.Send()   │
-             │  转发到真实 iLink    │
-             └──────────┬──────────┘
-                        │
-             ┌──────────▼──────────┐
-             │  iLink API (腾讯)   │
-             └──────────┬──────────┘
-                        │
-             ┌──────────▼──────────┐
-             │    微信用户          │
-             └─────────────────────┘
-             │                    │
-             ▼                    ▼
-    ┌─────────────────┐  ┌─────────────────┐
-    │ AI 后端处理      │  │ iLink 透传       │
-    │ (Pipeline→Adapter)│ │ (透明代理→腾讯)  │
-    └────────┬────────┘  └────────┬────────┘
-             │                    │
-             ▼                    ▼
-    ┌─────────────────┐  ┌─────────────────┐
-    │ AI API 响应      │  │ 外部服务        │
-    │ (Claude/DeepSeek)│  │ (Hermes/OpenClaw)│
-    └────────┬────────┘  └────────┬────────┘
-             │                    │
-             └──────────┬─────────┘
-                        │
-             ┌──────────▼──────────┐
-             │  Connector.Send()   │
-             │  转发到真实 iLink    │
-             └──────────┬──────────┘
-                        │
-             ┌──────────▼──────────┐
-             │  iLink API (腾讯)   │
-             └──────────┬──────────┘
-                        │
-             ┌──────────▼──────────┐
-             │    微信用户          │
-             └─────────────────────┘
-```
-
-#### 两条主要路径
-
-**路径 A：内置 AI 处理（BackendAdapter）**
-```
-微信消息 → Connector → Pipeline → Router → Adapter.Handle() → AI API → 回复
-```
-
-**路径 B：虚拟 Bot 代理（ConnectionAdapter）**
-```
-微信消息 → Connector → iLink 服务端透明代理 → 外部服务 getupdates
-    → 外部服务处理 → sendmessage → 回复
-```
-
-#### 关键数据结构流转
+### 数据结构流转
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -644,25 +578,31 @@ Connector 使用的真实 iLink API 端点（腾讯服务器）：
 
 ### iLink 服务端端点（Server）
 
-Gateway 对外提供的 iLink 兼容 API，供虚拟 Bot 连接。**所有端点都是透明代理**，直接转发到真实 iLink API，不解析消息内容。
+Gateway 对外提供的 iLink 兼容 API，供虚拟 Bot 连接。
 
 | 端点 | 方法 | 说明 | 实现方式 |
 |------|------|------|----------|
-| `/ilink/bot/getupdates` | POST | 长轮询获取消息 | 透明代理 |
-| `/ilink/bot/sendmessage` | POST | 发送消息 | 透明代理 |
-| `/ilink/bot/sendtyping` | POST | 输入状态 | 透明代理 |
-| `/ilink/bot/getconfig` | POST | 获取配置 | 透明代理 |
-| `/ilink/bot/getuploadurl` | POST | 获取上传 URL | 透明代理 |
+| `/ilink/bot/getupdates` | POST | 长轮询获取消息 | **队列消费**：从 Pipeline 维护的虚拟 Bot 队列获取已路由消息，不直接转发到腾讯 |
+| `/ilink/bot/sendmessage` | POST | 发送消息 | 透明转发到真实 iLink API（回复用户） |
+| `/ilink/bot/sendtyping` | POST | 输入状态 | 透明转发到真实 iLink API |
+| `/ilink/bot/getconfig` | POST | 获取配置 | 透明转发到真实 iLink API |
+| `/ilink/bot/getuploadurl` | POST | 获取上传 URL | 透明转发到真实 iLink API |
 
-**透明代理流程**：
+**getupdates 设计（队列消费）**：
 ```
-外部服务 → Gateway iLink 服务端 → 验证虚拟 Bot token → 获取真实 bot_token → 转发到腾讯 iLink API → 返回响应
+外部服务 → Gateway iLink 服务端 → 验证虚拟 Bot token → 从虚拟 Bot 消息队列取出消息（长轮询）→ 返回消息列表
+```
+
+**sendmessage 设计（透明转发）**：
+```
+外部服务 → Gateway iLink 服务端 → 验证虚拟 Bot token → 透明转发到腾讯 iLink API → 微信用户收到回复
 ```
 
 **注意**：
 - 虚拟 Bot 不需要 QR 扫码登录，Gateway 直接生成连接配置
 - `/get_bot_qrcode` 和 `/get_qrcode_status` 端点不在服务端提供
-- iLink 服务端只负责透传，不参与消息解析和 AI 处理
+- `getupdates` 不直接转发到腾讯，而是从 Pipeline 管理的虚拟 Bot 消息队列消费
+- `sendmessage`/`sendtyping`/`getconfig`/`getuploadurl` 透明转发到腾讯 iLink API
 
 ### iLink 服务端实现细节
 
@@ -675,35 +615,30 @@ func (s *Server) RegisterRoutes(r *gin.Engine) {
     ilink.Use(s.rateLimitMiddleware())
     ilink.Use(maxBodySizeMiddleware(MaxRequestBodySize))
     {
-        ilink.POST("/getupdates", s.handleGetUpdates)
-        ilink.POST("/sendmessage", s.handleSendMessage)
-        ilink.POST("/sendtyping", s.handleSendTyping)
-        ilink.POST("/getconfig", s.handleGetConfig)
-        ilink.POST("/getuploadurl", s.handleGetUploadURL)
+        ilink.POST("/getupdates", s.handleGetUpdates)     // 队列消费
+        ilink.POST("/sendmessage", s.handleSendMessage)   // 透明转发
+        ilink.POST("/sendtyping", s.handleSendTyping)     // 透明转发
+        ilink.POST("/getconfig", s.handleGetConfig)       // 透明转发
+        ilink.POST("/getuploadurl", s.handleGetUploadURL) // 透明转发
     }
 }
 
-// handler.go - 透明代理
-func (s *Server) handleProxy(c *gin.Context) {
-    // 1. 验证虚拟 Bot token
-    // 2. 获取真实 bot_token
-    // 3. 读取请求体
-    // 4. 转发到真实 iLink API
-    // 5. 返回响应
-}
+// handler.go
+// handleGetUpdates: 从虚拟 Bot 消息队列消费消息（不转发到腾讯）
+// handleProxy (sendmessage等): 透明转发到腾讯 iLink API
 ```
 
 #### 架构特点
 
-- **透明代理**：不解析消息内容，直接转发
-- **无消息队列**：虚拟 Bot 不需要本地消息缓存
-- **无重试机制**：依赖腾讯 iLink API 的重试
+- **getupdates 队列消费**：从 Pipeline 维护的虚拟 Bot 消息队列获取已路由消息，不直接转发到腾讯
+- **其他端点透明转发**：sendmessage/sendtyping/getconfig/getuploadurl 透明转发到真实 iLink API
+- **虚拟 Bot 消息队列**：由 Pipeline 生产消息，外部服务通过 getupdates 消费
 
 **注意**：虚拟 Bot 不需要 QR 扫码登录，Gateway 直接生成连接配置，因此 `/get_bot_qrcode` 和 `/get_qrcode_status` 端点不在服务端提供。
 
 ### 虚拟 Bot 管理
 
-透明代理模式下，虚拟 Bot 只存储连接配置，不需要消息队列：
+#### 虚拟 Bot 结构
 
 ```go
 // VirtualBot 虚拟 Bot 实例
@@ -711,6 +646,7 @@ type VirtualBot struct {
     AccountID  string         // 虚拟 Bot ID（如 gw_a1b2c3d4）
     UserID     string         // 用户 ID（如 gw_a1b2c3d4@im.wechat）
     BaseURL    string         // iLink API 地址
+    Token      string         // 随机生成的认证 token（持久化到数据库）
     LastActive time.Time      // 最后活跃时间
     CreatedAt  time.Time      // 创建时间
 }
@@ -722,22 +658,42 @@ type ClientRegistry struct {
 }
 ```
 
-**透明代理模式特点**：
-- 不需要消息队列
-- 不需要消息持久化
-- 不需要重试机制
-- 只需要管理虚拟 Bot 的连接配置
+#### 虚拟 Bot 消息队列
+
+每个虚拟 Bot 拥有独立的消息队列，由 Pipeline 生产消息，外部服务通过 getupdates 消费。
+
+```
+Pipeline 路由到 ilink_proxy 后端
+    │
+    ▼
+将 NormalizedMessage 转换为 iLink 原始格式（RawMessageItem）
+    │
+    ▼
+放入虚拟 Bot 消息队列
+    │
+    ▼
+外部服务通过 getupdates 长轮询消费队列中的消息
+    │
+    ▼
+消费后消息从队列中移除
+```
+
+**队列模式特点**：
+- 消息按后端隔离，每个虚拟 Bot 独立队列
+- Pipeline 生产消息，外部服务消费消息
+- 未选择后端时消息不进入虚拟 Bot 队列
+- 消息消费后从队列中移除
 
 #### 消息流
 
-**iLink 透传模式（虚拟 Bot 代理）**：
+**虚拟 Bot 代理（ConnectionAdapter / ilink_proxy）**：
 ```
-外部服务 → Gateway iLink 服务端 → 验证 token → 获取真实 bot_token → 转发到腾讯 iLink API → 返回响应
+微信消息 → Connector → Pipeline → 路由到 ilink_proxy → 消息入队 → 外部服务 getupdates 消费 → 外部服务处理 → sendmessage 回复
 ```
 
-**iLink → AI 处理模式**：
+**内置 AI 处理（BackendAdapter）**：
 ```
-微信消息 → Connector.PollLoop() → NormalizedMessage → MessagePipeline → Adapter → AI API → 回复
+微信消息 → Connector → Pipeline → 路由到 openai_compatible → Handle() → AI API → 回复
 ```
 
 #### 认证方式
@@ -960,24 +916,27 @@ func generateID() string {
 
 命令解析始终优先于路由，用户输入以 `/` 开头时优先匹配命令。
 
-### 一级命令
+### 一级命令（Gateway 内部命令）
 
 | 命令 | 说明 |
 |------|------|
 | `/use` | 显示当前状态（后端、会话数） |
 | `/use <后端ID>` | 持久切换到指定后端 |
 | `/backends` | 列出所有可用后端（含健康状态） |
-| `/help` | 显示帮助信息 |
+| `/help` | 显示 Gateway 帮助信息 |
 
-### 二级命令（动态生成）
+一级命令由 Gateway 的 CommandProcessor 直接处理，**不转发到任何后端**。
+
+### 二级命令（代理命令）
 
 根据配置的 providers 自动生成，格式为 `/<backend_id>`：
 
-```
-/hermes      → 一次性转发到 hermes 后端
-/openclaw    → 一次性转发到 openclaw 后端
-/deepseek    → 一次性转发到 deepseek 后端
-```
+| 命令 | 行为 |
+|------|------|
+| `/<id>` (无参数) | 显示该后端状态 |
+| `/<id> <msg>` | 剥离 `/<id>` 前缀，将 `<msg>` 一次性转发到 `<id>` 后端 |
+| `/help <id>` (无参数) | 转发 `/help` 到 `<id>` 后端 |
+| `/help <id> <args>` | 转发 `/help <args>` 到 `<id>` 后端 |
 
 **注意**：二级命令是**一次性**的，不改变用户的持久后端选择。
 
@@ -1291,16 +1250,12 @@ type SessionContext struct {
 
 管理所有会话上下文，支持过期清理：
 
-- **get_context**：获取或创建用户会话
-- **switch_backend**：切换后端时的上下文策略（keep/clear/isolated）
+- **get_context**：获取或创建用户会话（按 userID:backendID 隔离，独立模式）
 - **cleanup_expired**：定期清理过期会话
 
 ## 多账号管理
 
-### 账号存储
-
 每个账号独立存储在 `data/accounts/` 目录下：
-
 ```
 data/accounts/
 ├── account_abc123.json
@@ -1417,7 +1372,6 @@ CLAWBOT_LOG_LEVEL=info
 | `api.jwt_expiry_hours` | `24` | JWT 有效期（小时） |
 | `api.allowed_origins` | `*` | 允许的来源 |
 | `context.max_history` | `20` | 最大历史条数 |
-| `context.switch_strategy` | `keep` | 切换策略（keep/clear/isolated） |
 | `context.ttl` | `3600` | 会话超时（秒） |
 | `route.default_backend` | - | 默认后端 |
 
@@ -1566,7 +1520,7 @@ clawbot-gateway/
 └── data/                        # 运行时数据
     ├── clawbot.db               # SQLite 数据库
 | `ClientRegistry` 虚拟 Bot 管理 | ✅ 已实现 | `ilink/registry.go` |
-| `VirtualBot` 透明代理 | ✅ 已实现 | 直接转发到真实 iLink API |
+| `VirtualBot` 队列消费 | 🔄 待实现 | getupdates 从虚拟 Bot 队列消费（当前为透明代理，待改造） |
 | `accountPollLoop` 消息轮询 | ✅ 已实现 | `bot/account.go` |
 ### 实现状态（2026-07-26 更新）
 #### 当前存在的问题
@@ -1574,7 +1528,7 @@ clawbot-gateway/
 | 严重度 | 位置 | 描述 | 原因 |
 |-------|------|------|------|
 | 1 | `ilink/handler.go` | `forwardToILink()` 请求体为空 | 已修复 |
-| 2 | `ilink/handler.go` | `handleGetUpdates` 直接代理而非使用队列 | 已修复 - 透明代理模式，无需队列 |
+| 2 | `ilink/handler.go` | `handleGetUpdates` 直接代理而非使用队列 | 🔄 待改造 - 需改为从虚拟 Bot 队列消费 |
 | 3 | `ilink/handler.go` | 自引用 URL 循环 | 虚拟 Bot 的 `BaseURL` 配置错误可能导致循环 |
 
 #### 遗留设计参考
@@ -1582,10 +1536,10 @@ clawbot-gateway/
 | 组件 | 状态 | 说明 |
 |------|------|------|
 | `ClientRegistry` 虚拟 Bot 管理 | ✅ 已实现 | `ilink/registry.go` |
-| `VirtualBot` 透明代理 | ✅ 已实现 | 直接转发到真实 iLink API |
+| `VirtualBot` 队列消费 | 🔄 待实现 | getupdates 从虚拟 Bot 队列消费（当前为透明代理，待改造） |
 | `accountPollLoop` 消息轮询 | ✅ 已实现 | `bot/account.go` |
-| `MessageQueue` 消息队列 | 🚫 已废弃 | 透明代理模式不再需要 |
-| `MessageBroadcaster` 接口 | 🚫 已废弃 | 保留接口但未被调用，等待后续清理 |
+| `MessageQueue` 消息队列 | 🔄 待实现 | 管道模式需要为每个虚拟 Bot 维护消息队列 |
+| `MessageBroadcaster` 接口 | 🚫 已废弃 | 管道模式不再需要广播，改用队列 |
 
 **注意**：虚拟 Bot 不需要 QR 扫码登录，因此 `/get_bot_qrcode` 和 `/get_qrcode_status` 端点不在服务端提供。
 
@@ -1642,7 +1596,7 @@ func NewILinkProxyAdapter(id, name, accountID, userID, baseURL string) *ILinkPro
 #### 3. ClientRegistry（虚拟 Bot 管理）
 
 ```go
-// ilink/registry.go - 透明代理模式
+// ilink/registry.go - 虚拟 Bot 管理（队列消费模式）
 
 type VirtualBot struct {
     AccountID  string
@@ -1722,11 +1676,11 @@ func (c *Connector) GetAccountTokenByVirtualID(virtualAccountID string) string {
 }
 ```
 
-**透明代理模式特点**：
-- 不需要消息队列
-- 不需要广播机制
-- 直接转发到真实 iLink API
-
+**虚拟 Bot 队列模式特点**：
+- 消息按后端隔离，每个虚拟 Bot 独立队列
+- Pipeline 生产消息，外部服务消费消息
+- 未选择后端时消息不进入虚拟 Bot 队列
+- 消息消费后从队列中移除
 ## 实现状态
 
 ### 已完成

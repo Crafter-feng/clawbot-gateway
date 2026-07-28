@@ -1,16 +1,19 @@
 package log
 
 import (
+	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
-	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
-// Level wraps slog.Level for convenience.
+// ── 日志级别 ──
+
 type Level slog.Level
 
 const (
@@ -20,99 +23,229 @@ const (
 	LevelError = Level(slog.LevelError)
 )
 
-// Logger wraps slog.Logger with structured logging helpers.
+// ── 日志条目 ──
+
+type Entry struct {
+	Time    string `json:"time"`
+	Level   string `json:"level"`
+	Message string `json:"message"`
+	Source  string `json:"source,omitempty"`
+	Attrs   any    `json:"attrs,omitempty"`
+}
+
+// ── 日志缓冲区 ──
+
+type Buffer struct {
+	mu       sync.RWMutex
+	entries  []Entry
+	capacity int
+}
+
+func NewBuffer(capacity int) *Buffer {
+	return &Buffer{
+		entries:  make([]Entry, 0, capacity),
+		capacity: capacity,
+	}
+}
+
+func (b *Buffer) Append(e Entry) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if len(b.entries) >= b.capacity {
+		b.entries = b.entries[1:]
+	}
+	b.entries = append(b.entries, e)
+}
+func (b *Buffer) Entries(limit int, level string, component string, backend string) []Entry {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	if len(b.entries) == 0 {
+		return nil
+	}
+
+	filtered := make([]Entry, 0, len(b.entries))
+	for i := len(b.entries) - 1; i >= 0; i-- {
+		e := b.entries[i]
+		if level != "" && e.Level != level {
+			continue
+		}
+		if component != "" {
+			attrs, ok := e.Attrs.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			cmp, _ := attrs["cmp"].(string)
+			if cmp != component {
+				continue
+			}
+		}
+		if backend != "" {
+			attrs, ok := e.Attrs.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			bid, _ := attrs["backend"].(string)
+			if bid != backend {
+				continue
+			}
+		}
+		filtered = append(filtered, e)
+	}
+	// reverse to chronological order
+	for i, j := 0, len(filtered)-1; i < j; i, j = i+1, j-1 {
+		filtered[i], filtered[j] = filtered[j], filtered[i]
+	}
+	if limit > 0 && len(filtered) > limit {
+		filtered = filtered[len(filtered)-limit:]
+	}
+	return filtered
+}
+
+func (b *Buffer) GetComponents() (components []string, backends []string) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	cmpSet := make(map[string]bool)
+	bkSet := make(map[string]bool)
+	for _, e := range b.entries {
+		if attrs, ok := e.Attrs.(map[string]interface{}); ok {
+			if c, ok := attrs["cmp"].(string); ok && c != "" {
+				cmpSet[c] = true
+			}
+			if b, ok := attrs["backend"].(string); ok && b != "" {
+				bkSet[b] = true
+			}
+		}
+	}
+	components = make([]string, 0, len(cmpSet))
+	for c := range cmpSet {
+		components = append(components, c)
+	}
+	backends = make([]string, 0, len(bkSet))
+	for b := range bkSet {
+		backends = append(backends, b)
+	}
+	return
+}
+
+// ── Logger ──
+
 type Logger struct {
 	*slog.Logger
+	buffer *Buffer
 }
 
 var defaultLogger *Logger
 
 func init() {
-	defaultLogger = New("info")
+	SetDefault(New("info"))
 }
 
-// New creates a new Logger with the given level string ("debug", "info", "warn", "error").
-// Output goes to stderr. Includes source file:line.
 func New(level string) *Logger {
-	lvl := &slog.LevelVar{}
-	switch strings.ToLower(level) {
-	case "debug":
-		lvl.Set(slog.LevelDebug)
-	case "info":
-		lvl.Set(slog.LevelInfo)
-	case "warn":
-		lvl.Set(slog.LevelWarn)
-	case "error":
-		lvl.Set(slog.LevelError)
-	default:
-		lvl.Set(slog.LevelInfo)
-	}
-
-	h := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level:     lvl,
-		AddSource: true,
-		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			// Format time as ISO8601 with milliseconds
-			if a.Key == slog.TimeKey {
-				return slog.Attr{Key: a.Key, Value: slog.StringValue(a.Value.Time().Format("2006-01-02T15:04:05.000Z07:00"))}
-			}
-			return a
-		},
-	})
-	return &Logger{slog.New(h)}
+	return NewWriter(os.Stderr, level)
 }
 
-// NewWriter creates a Logger that writes to an arbitrary writer (useful for tests).
 func NewWriter(w io.Writer, level string) *Logger {
-	lvl := &slog.LevelVar{}
-	switch strings.ToLower(level) {
+	l := &slog.LevelVar{}
+	switch level {
 	case "debug":
-		lvl.Set(slog.LevelDebug)
+		l.Set(slog.LevelDebug)
 	case "info":
-		lvl.Set(slog.LevelInfo)
+		l.Set(slog.LevelInfo)
 	case "warn":
-		lvl.Set(slog.LevelWarn)
+		l.Set(slog.LevelWarn)
 	case "error":
-		lvl.Set(slog.LevelError)
+		l.Set(slog.LevelError)
 	default:
-		lvl.Set(slog.LevelInfo)
+		l.Set(slog.LevelInfo)
 	}
-	h := slog.NewTextHandler(w, &slog.HandlerOptions{
-		Level:     lvl,
-		AddSource: true,
+	opts := &slog.HandlerOptions{
+		Level: l,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			if a.Key == slog.TimeKey {
-				return slog.Attr{Key: a.Key, Value: slog.StringValue(a.Value.Time().Format("2006-01-02T15:04:05.000Z07:00"))}
+			if a.Key == slog.TimeKey && len(groups) == 0 {
+				return slog.Attr{}
 			}
 			return a
 		},
-	})
-	return &Logger{slog.New(h)}
+	}
+	buf := NewBuffer(500)
+	h := &bufferHandler{
+		handler: slog.NewJSONHandler(w, opts),
+		buffer:  buf,
+	}
+	return &Logger{slog.New(h), buf}
 }
 
-// SetDefault sets the package-level default logger.
 func SetDefault(l *Logger) {
 	defaultLogger = l
 	slog.SetDefault(l.Logger)
 }
 
-// Default returns the package-level default logger.
 func Default() *Logger {
 	return defaultLogger
 }
 
-// WithComponent returns a child logger tagged with the named component.
+func GetBuffer() *Buffer {
+	if defaultLogger == nil {
+		return nil
+	}
+	return defaultLogger.buffer
+}
+
 func (l *Logger) WithComponent(name string) *Logger {
-	return &Logger{l.With("cmp", name)}
+	return &Logger{l.With("cmp", name), l.buffer}
 }
 
-// WithField adds a key-value attribute.
 func (l *Logger) WithField(key string, value any) *Logger {
-	return &Logger{l.With(key, value)}
+	return &Logger{l.With(key, value), l.buffer}
 }
 
-// GinMiddleware returns a Gin middleware that logs every request with
-// status, method, path, latency, and client IP.
+// ── bufferHandler ──
+
+type bufferHandler struct {
+	handler slog.Handler
+	buffer  *Buffer
+}
+
+func (h *bufferHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	return h.handler.Enabled(ctx, level)
+}
+
+func (h *bufferHandler) Handle(ctx context.Context, r slog.Record) error {
+	if err := h.handler.Handle(ctx, r); err != nil {
+		return err
+	}
+	entry := Entry{
+		Time:    r.Time.Format(time.RFC3339),
+		Level:   r.Level.String(),
+		Message: r.Message,
+	}
+	if r.PC != 0 {
+		entry.Source = fmt.Sprintf("0x%x", r.PC)
+	}
+	attrs := make(map[string]interface{})
+	r.Attrs(func(a slog.Attr) bool {
+		attrs[a.Key] = a.Value.Any()
+		return true
+	})
+	if len(attrs) > 0 {
+		entry.Attrs = attrs
+	}
+	h.buffer.Append(entry)
+	return nil
+}
+
+func (h *bufferHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &bufferHandler{h.handler.WithAttrs(attrs), h.buffer}
+}
+
+func (h *bufferHandler) WithGroup(name string) slog.Handler {
+	return &bufferHandler{h.handler.WithGroup(name), h.buffer}
+}
+
+// ── Gin 中间件 ──
+
 func GinMiddleware(log *Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
@@ -132,7 +265,6 @@ func GinMiddleware(log *Logger) gin.HandlerFunc {
 			slog.String("ip", c.ClientIP()),
 		}
 		if query != "" {
-			// Mask sensitive params in query string
 			safeQuery := c.Request.URL.Query()
 			sensitiveParams := []string{"token", "password", "secret", "key"}
 			for _, p := range sensitiveParams {

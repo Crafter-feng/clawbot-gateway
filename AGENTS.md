@@ -6,21 +6,27 @@
 
 | 组件 | 位置 | 职责 |
 |------|------|------|
-| iLink 客户端 | `internal/bot/` | 连接腾讯 iLink API，接收/发送微信消息 |
-| iLink 服务端 | `internal/ilink/` | 对外提供 iLink 兼容 API，供虚拟 Bot 连接 |
+| iLink 客户端 | `internal/bot/` | **唯一**连接腾讯 iLink API，独占轮询、收发微信消息 |
+| iLink 服务端 | `internal/ilink/` | 对外提供 iLink 兼容 API，`getupdates` 从队列消费，其它端点透明转发回复到腾讯 |
 
-**禁止**：
-- 在 iLink 服务端代码中直接调用腾讯 iLink API
+**绝对禁止**（任何场景，不许例外）：
+- 在 iLink 服务端代码中直接调用腾讯 iLink API 的 `getupdates`（即使作为"代理"也不行）
+- 在 iLink 服务端代码中通过 `http.NewRequest`、`http.Post`、`forwardToILink` 等任何方式向腾讯 iLink API 发起 `getupdates` 调用
 - 在 iLink 客户端代码中处理外部服务请求
 
-### 2. 两种转发模式必须区分
+**说明**：iLink 服务端的 `sendmessage`/`sendtyping`/`getconfig`/`getuploadurl` 可以透明转发到腾讯 iLink API（这些是回复/配置类端点，不涉及消息获取）。但 `getupdates` 必须从 Pipeline 维护的虚拟 Bot 消息队列消费，**绝不许直接转发到腾讯**。
+
+### 2. Pipeline 是消息统一入口
+
+所有微信消息统一经过 `MessagePipeline`（命令→路由→后端），没有任何消息能绕过 Pipeline。
 
 | 模式 | 说明 | 是否需要解析消息 |
 |------|------|-----------------|
-| iLink → iLink 透传 | 虚拟 Bot 代理，外部服务通过 Gateway 访问真实 iLink API | 否（透明通道） |
-| iLink → AI/Relay | AI 处理或文件中转，需要解析消息内容 | 是（需要 NormalizedMessage） |
+| 后端处理 | 路由到 BackendAdapter（如 openai_compatible、echo），调用 `Handle()` 处理后回复 | 是（NormalizedMessage → ChatRequest） |
+| 虚拟 Bot 代理 | 路由到 ConnectionAdapter（如 ilink_proxy），消息入虚拟 Bot 队列，外部服务通过 getupdates 消费 | 是（NormalizedMessage → RawMessageItem 入队） |
+| 文件中转 | 路由到 RelayMgr 转发文件 | 是（NormalizedMessage → FileMessage） |
 
-**iLink 服务端只负责透传**，不参与消息解析和 AI 处理。
+**iLink 服务端不参与消息解析和路由**。iLink 服务端只和 Pipeline 交互：从队列拿消息（getupdates），回复透明转发到腾讯（sendmessage 等）。
 
 ### 3. 虚拟 Bot 不需要 QR 扫码
 
@@ -83,8 +89,7 @@
 **运行时配置（数据库）**：
 - 后端适配器配置
 - 路由规则配置
-- 系统设置（JWT 有效期、会话策略等）
-- 通知 Token 配置
+- 系统设置（JWT 有效期、会话超时等，独立模式内置，无切换策略配置）
 
 ## 代码规则
 
@@ -101,6 +106,8 @@ internal/database → (无外部依赖)
 **禁止**：
 - `internal/bot` 依赖 `internal/ilink`（会导致循环依赖）
 - `internal/ilink` 依赖 `internal/api`
+- 任何 PR 不许新增 `ilink/handler.go` 中 `handleGetUpdates` 对 `forwardToILink`/腾讯 iLink API 的调用（违反架构规则 1）
+- code review 必须检查 `internal/ilink/handler.go` 的 `handleGetUpdates` 实现：确认它从虚拟 Bot 队列消费，而非 `forwardToILink` 转发
 
 ### 9. 错误处理
 

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"runtime/debug"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"clawbot-gateway/internal/adapter"
 	"clawbot-gateway/internal/bot"
+	"clawbot-gateway/internal/ilink"
 	"clawbot-gateway/internal/log"
 	"clawbot-gateway/internal/route"
 	"clawbot-gateway/internal/session"
@@ -17,12 +19,12 @@ import (
 
 // ── 消息处理管道 ──
 // 将 ClawBot 收到的消息经过：命令解析 → 路由决策 → 后端处理 → 回复
-
 type MessagePipeline struct {
 	connector   *bot.Connector
 	router      *route.Router
 	adapters    *adapter.AdapterFactory
 	ctxManager  *session.ContextManager
+	clientReg   *ilink.ClientRegistry
 	commandProc *CommandProcessor
 
 	msgCount int64
@@ -34,19 +36,20 @@ type MessagePipeline struct {
 func (p *MessagePipeline) SetLogger(l *log.Logger) {
 	p.log = l.WithComponent("pipeline")
 }
-
 func NewMessagePipeline(
 	conn *bot.Connector,
 	r *route.Router,
 	af *adapter.AdapterFactory,
 	cm *session.ContextManager,
+	clientReg *ilink.ClientRegistry,
 ) *MessagePipeline {
 
 	p := &MessagePipeline{
-		connector:  conn,
-		router:     r,
-		adapters:   af,
+		connector: conn,
+		router:    r,
+		adapters:  af,
 		ctxManager: cm,
+		clientReg: clientReg,
 	}
 	p.commandProc = NewCommandProcessor(r, af, cm, conn)
 	return p
@@ -183,6 +186,20 @@ func (p *MessagePipeline) processMessage(ctx context.Context, msg bot.Normalized
 		return
 	}
 
+	// 5a. ilink_proxy 是连接适配器：消息入虚拟 Bot 队列，不调用 Handle()，不回复
+	if adapter.IsConnectionAdapter(bak.Type()) {
+		if p.enqueueToVirtualBot(msg, backendID, seq) {
+			return
+		}
+		reply := fmt.Sprintf("❌ 后端 [%s] 虚拟 Bot 未注册", backendID)
+		creds := p.connector.GetAccountCredentials(msg.AccountID)
+		if creds != nil {
+			contextToken := p.connector.GetContextToken(msg.AccountID, msg.FromUser)
+			_ = p.connector.SendTextWithCreds(context.WithoutCancel(ctx), creds, msg.FromUser, reply, contextToken)
+		}
+		return
+	}
+
 	// 5. 处理消息
 	ctxSession := p.ctxManager.GetContext(msg.FromUser, backendID)
 	backendCtx, cancel := context.WithTimeout(ctx, 120*time.Second)
@@ -235,10 +252,19 @@ func (p *MessagePipeline) forwardToBackend(ctx context.Context, msg bot.Normaliz
 		return
 	}
 
-	// ilink_proxy 是连接适配器，消息已通过透传到达外部客户端
-	// 不需要调用 Handle()，也不需要回复，外部客户端会自行处理
+	// ilink_proxy 是连接适配器：消息入虚拟 Bot 队列，不调用 Handle()，不回复
+	// 外部服务通过 getupdates 消费队列后处理并回复
 	if adapter.IsConnectionAdapter(bak.Type()) {
-		p.log.Info("forwarded to ilink_proxy backend", "seq", seq, "backend", backendID)
+		if p.enqueueToVirtualBot(msg, backendID, seq) {
+			return
+		}
+		// 找不到虚拟 Bot：回复错误
+		reply := fmt.Sprintf("❌ 后端 [%s] 虚拟 Bot 未注册", backendID)
+		creds := p.connector.GetAccountCredentials(msg.AccountID)
+		if creds != nil {
+			contextToken := p.connector.GetContextToken(msg.AccountID, msg.FromUser)
+			_ = p.connector.SendTextWithCreds(context.WithoutCancel(ctx), creds, msg.FromUser, reply, contextToken)
+		}
 		return
 	}
 
@@ -279,6 +305,39 @@ func (p *MessagePipeline) forwardToBackend(ctx context.Context, msg bot.Normaliz
 	}
 
 	p.log.Info("message processed", "seq", seq, "backend", backendID, "reply_chars", len(replyText))
+}
+
+// enqueueToVirtualBot 将消息入队到 ilink_proxy 后端对应的虚拟 Bot 队列
+// 返回 true 表示成功，false 表示虚拟 Bot 未注册
+func (p *MessagePipeline) enqueueToVirtualBot(msg bot.NormalizedMessage, backendID string, seq int64) bool {
+	if p.clientReg == nil {
+		p.log.Warn("clientReg not set, cannot enqueue", "seq", seq, "backend", backendID)
+		return false
+	}
+	accountID := "gw_" + backendID
+	vbot := p.clientReg.Get(accountID)
+	if vbot == nil {
+		p.log.Warn("virtual bot not registered", "seq", seq, "backend", backendID, "account_id", accountID)
+		return false
+	}
+	// 优先使用原始 RawMessageItem（保留格式），否则从 NormalizedMessage 重建
+	rawMsg := msg.GetRawItem()
+	if rawMsg == nil {
+		rawMsg = &bot.RawMessageItem{
+			FromUserid: msg.FromUser,
+			MsgID:      json.Number(msg.MsgID),
+			MsgType:    msg.Type,
+			ItemList: []bot.RawMessageItem_Item{{
+				Type:     1,
+				TextItem: &bot.RawMessageItem_TextItem{Text: msg.Content},
+			}},
+			Timestamp:    msg.Timestamp,
+			ContextToken: msg.ContextToken,
+		}
+	}
+	vbot.Enqueue(*rawMsg)
+	p.log.Info("enqueued to virtual bot queue", "seq", seq, "backend", backendID, "queue_len", vbot.QueueLength())
+	return true
 }
 
 func (p *MessagePipeline) typingKeepalive(ctx context.Context, accountID, userID string, done chan struct{}) {

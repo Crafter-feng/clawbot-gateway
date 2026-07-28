@@ -1,8 +1,8 @@
-FROM node:20-alpine AS frontend-builder
+FROM node:22-alpine AS frontend-builder
 
 WORKDIR /build/web
-COPY web/package.json web/pnpm-lock.yaml* ./
-RUN corepack enable && pnpm install --frozen-lockfile
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
 COPY web/ .
 RUN npm run build
 
@@ -14,15 +14,17 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o /clawbot-gateway .
 
-FROM scratch
+FROM alpine:3.19
 
-COPY --from=backend-builder /etc/ssl/cert.pem /etc/ssl/cert.pem
-COPY --from=backend-builder /usr/share/zoneinfo/Asia/Shanghai /usr/share/zoneinfo/Asia/Shanghai
-
-COPY --from=backend-builder /clawbot-gateway /app/clawbot-gateway
-COPY --from=frontend-builder /build/web/dist/ /app/web/dist/
+RUN apk add --no-cache tzdata ca-certificates
+RUN cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    echo "Asia/Shanghai" > /etc/timezone
 
 WORKDIR /app
+
+COPY --from=backend-builder /clawbot-gateway .
+COPY --from=frontend-builder /build/web/dist/ web/dist/
+
 VOLUME ["/app/data"]
 EXPOSE 8080
 
@@ -31,4 +33,4 @@ ENV CLAWBOT_HOST=0.0.0.0
 ENV CLAWBOT_PORT=8080
 ENV CLAWBOT_LOG_LEVEL=info
 
-CMD ["/app/clawbot-gateway"]
+CMD ["./clawbot-gateway"]
