@@ -17,7 +17,6 @@ const CATEGORIES: { key: string; label: string; icon: string }[] = [
   { key: 'bot', label: '连接', icon: '◈' },
   { key: 'pipeline', label: '管道', icon: '⇝' },
   { key: 'ilink', label: 'iLink', icon: '◎' },
-  { key: 'system', label: '系统', icon: '⊞' },
 ]
 const CMP_MAP: Record<string, { label: string; cmp: string }[]> = {
   api: [{ label: 'HTTP 请求', cmp: 'api' }],
@@ -30,7 +29,6 @@ const CMP_MAP: Record<string, { label: string; cmp: string }[]> = {
     { label: '命令解析', cmp: 'command' },
   ],
   ilink: [{ label: '服务端', cmp: 'ilink' }],
-  system: [{ label: '主进程', cmp: 'main' }],
 }
 
 const LEVEL_META: Record<string, { color: string; label: string }> = {
