@@ -13,17 +13,18 @@ interface LogEntry {
 
 const CATEGORIES: { key: string; label: string; icon: string }[] = [
   { key: '', label: '全部', icon: '◉' },
-  { key: 'api', label: 'API', icon: '⇄' },
-  { key: 'bot', label: '机器人', icon: '◈' },
+  { key: 'api', label: 'HTTP', icon: '⇄' },
+  { key: 'bot', label: '连接', icon: '◈' },
   { key: 'pipeline', label: '管道', icon: '⇝' },
   { key: 'ilink', label: 'iLink', icon: '◎' },
-  { key: 'backend', label: '后端', icon: '⚙' },
   { key: 'system', label: '系统', icon: '⊞' },
 ]
-
 const CMP_MAP: Record<string, { label: string; cmp: string }[]> = {
-  api: [{ label: '管理 API', cmp: 'api' }],
-  bot: [{ label: '连接器', cmp: 'bot' }],
+  api: [{ label: 'HTTP 请求', cmp: 'api' }],
+  bot: [
+    { label: '连接器', cmp: 'bot' },
+    { label: '扫码登录', cmp: 'qr' },
+  ],
   pipeline: [
     { label: '消息处理', cmp: 'pipeline' },
     { label: '命令解析', cmp: 'command' },
@@ -44,17 +45,13 @@ export default function LogPage() {
   const [error, setError] = useState('')
   const [category, setCategory] = useState('')
   const [subCmp, setSubCmp] = useState('')
-  const [backends, setBackends] = useState<string[]>([])
-  const [backendId, setBackendId] = useState('')
   const [limit, setLimit] = useState('100')
   const [autoRefresh, setAutoRefresh] = useState(true)
   const timerRef = useRef<ReturnType<typeof setInterval>>(undefined)
   const listRef = useRef<HTMLDivElement>(null)
 
   // 当前选中分类对应的 component 筛选值
-  // category 直接映射为 component 筛选参数（如 'api' → component=api）
-  // 只有 backend 分类走子类下拉
-  const activeComponent = category === '' || category === 'backend' ? subCmp : (subCmp || category)
+  const activeComponent = category ? (subCmp || category) : subCmp
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -62,7 +59,6 @@ export default function LogPage() {
       const params = new URLSearchParams()
       if (limit) params.set('limit', limit)
       if (activeComponent) params.set('component', activeComponent)
-      if (backendId) params.set('backend', backendId)
       const res = await api.get<{ entries: LogEntry[] }>(`/api/v1/logs?${params}`)
       setEntries(res.entries || [])
     } catch {
@@ -70,18 +66,9 @@ export default function LogPage() {
     } finally {
       setLoading(false)
     }
-  }, [activeComponent, backendId, limit])
-  const fetchCategories = useCallback(async () => {
-    try {
-      const res = await api.get<{ backends: string[] }>('/api/v1/logs/categories')
-      setBackends(res.backends || [])
-    } catch {
-      setError('加载分类失败')
-    }
-  }, [])
+  }, [activeComponent, limit])
 
-
-  useEffect(() => { fetchLogs(); fetchCategories() }, [fetchLogs])
+  useEffect(() => { fetchLogs() }, [fetchLogs])
   useEffect(() => {
     if (autoRefresh) {
       timerRef.current = setInterval(fetchLogs, 5000)
@@ -94,17 +81,18 @@ export default function LogPage() {
   const handleCategory = (key: string) => {
     setCategory(key)
     setSubCmp('')
-    setBackendId('')
     setLoading(true)
   }
-  const showSubCmp = category === 'backend'
-    ? backends.map(b => ({ label: b, cmp: b }))
-    : (CMP_MAP[category] || [])
-
+  const showSubCmp = CMP_MAP[category] || []
   const getCmp = (e: LogEntry): string => {
     const c = e.attrs?.cmp as string | undefined
-    const b = e.attrs?.backend as string | undefined
-    return b ? `${c || ''} ${b}` : (c || '')
+    if (!c) return ''
+    for (const items of Object.values(CMP_MAP)) {
+      for (const item of items) {
+        if (item.cmp === c) return item.label
+      }
+    }
+    return c
   }
 
   return (
@@ -169,47 +157,27 @@ export default function LogPage() {
           {/* Left: sub-category */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <label style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-              {category === 'backend' ? '后端' : '子类'}
+              子类
             </label>
-            {category === 'backend' ? (
-              <select
-                value={backendId}
-                onChange={e => { setBackendId(e.target.value); setLoading(true) }}
-                style={{
-                  fontSize: '12px',
-                  padding: '4px 8px',
-                  borderRadius: 'var(--radius)',
-                  border: '1px solid var(--border)',
-                  background: 'var(--surface)',
-                  color: 'var(--text)',
-                  minWidth: 120,
-                }}
-              >
-                <option value="">全部后端</option>
-                {backends.map(b => <option key={b} value={b}>{b}</option>)}
-              </select>
-            ) : (
-              <select
-                value={subCmp}
-                onChange={e => { setSubCmp(e.target.value); setLoading(true) }}
-                style={{
-                  fontSize: '12px',
-                  padding: '4px 8px',
-                  borderRadius: 'var(--radius)',
-                  border: '1px solid var(--border)',
-                  background: 'var(--surface)',
-                  color: 'var(--text)',
-                  minWidth: 120,
-                }}
-              >
-                <option value="">全部</option>
-                {showSubCmp.map(s => (
-                  <option key={s.cmp} value={s.cmp}>{s.label}</option>
-                ))}
-              </select>
-            )}
+            <select
+              value={subCmp}
+              onChange={e => { setSubCmp(e.target.value); setLoading(true) }}
+              style={{
+                fontSize: '12px',
+                padding: '4px 8px',
+                borderRadius: 'var(--radius)',
+                border: '1px solid var(--border)',
+                background: 'var(--surface)',
+                color: 'var(--text)',
+                minWidth: 120,
+              }}
+            >
+              <option value="">全部</option>
+              {showSubCmp.map(s => (
+                <option key={s.cmp} value={s.cmp}>{s.label}</option>
+              ))}
+            </select>
           </div>
-
           {/* Spacer */}
           <div style={{ flex: 1 }} />
 
