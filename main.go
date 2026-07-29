@@ -132,6 +132,22 @@ func main() {
 		}
 	}
 
+	// 首次启动：数据库无后端时注册默认 echo 调试后端
+	if len(backends) == 0 {
+		log.Info("first startup detected, registering default echo debug backend")
+		echoBackend := database.Backend{
+			ID:      "echo",
+			Name:    "Echo Debug",
+			Type:    "echo",
+			Config:  "{}",
+			Enabled: true,
+		}
+		if err := db.CreateBackend(echoBackend); err != nil {
+			log.Warn("failed to save default echo backend", "error", err)
+		}
+		af.Register(adapter.NewEchoAdapter("echo", "Echo Debug"))
+	}
+
 	// 4b. 加载 ilink_proxy 连接适配器
 	vbots, err := db.ListVirtualBots()
 	if err != nil {
@@ -142,8 +158,6 @@ func main() {
 		}
 	}
 
-	// 注册默认 echo 调试后端
-	af.Register(adapter.NewEchoAdapter("echo", "Echo Debug"))
 	log.Info("adapter factory initialized", "backends", len(af.List()), "connections", len(af.ListConnections()))
 
 	// 5. 初始化上下文管理器

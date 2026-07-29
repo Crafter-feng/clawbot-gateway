@@ -16,7 +16,7 @@ var defaults = map[string]string{
 	"api.allowed_origins":   "*",
 	"context.max_history":   "20",
 	"context.ttl":           "3600",
-	"route.default_backend": "echo",
+	"route.default_backend": "",
 	"notify.url":           "",
 	"notify.token":         "",
 	"notify.enabled":       "false",
