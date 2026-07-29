@@ -7,8 +7,8 @@ const STORAGE_KEY = 'clawbot_theme'
 function getInitialTheme(): Theme {
   const stored = localStorage.getItem(STORAGE_KEY)
   if (stored === 'light' || stored === 'dark') return stored
-  if (window.matchMedia?.('(prefers-color-scheme: light)').matches) return 'light'
-  return 'dark'
+  if (window.matchMedia?.('(prefers-color-scheme: dark)').matches) return 'dark'
+  return 'light'
 }
 
 function applyTheme(theme: Theme) {
@@ -23,7 +23,7 @@ interface ThemeState {
 }
 
 export const useThemeStore = create<ThemeState>((set, get) => ({
-  theme: 'dark',
+  theme: 'light',
 
   toggle() {
     const next = get().theme === 'dark' ? 'light' : 'dark'

@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { api } from '../api/client'
 import { useToast } from '../components/Toast'
 import { useBackendsStore } from '../stores/backends'
+import { useThemeStore } from '../stores/theme'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import Select from '../components/ui/Select'
@@ -19,6 +20,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const backends = useBackendsStore()
+  const theme = useThemeStore(s => s.theme)
 
   /* Password change */
   const [pwdOld, setPwdOld] = useState('')
@@ -183,6 +185,49 @@ export default function SettingsPage() {
             <Button onClick={handleChangePassword} loading={pwdLoading} variant="secondary">
               修改密码
             </Button>
+          </div>
+        </div>
+
+        {/* 主题设置 */}
+        <div className="card">
+          <div className="card-header">
+            <h2 className="card-title">主题设置</h2>
+          </div>
+          <div className="manage-form">
+            <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center' }}>
+              <Button
+                onClick={() => useThemeStore.getState().setTheme('light')}
+                variant={theme === 'light' ? 'primary' : 'secondary'}
+                style={{ flex: 1 }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="5" />
+                    <line x1="12" y1="1" x2="12" y2="3" />
+                    <line x1="12" y1="21" x2="12" y2="23" />
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                    <line x1="1" y1="12" x2="3" y2="12" />
+                    <line x1="21" y1="12" x2="23" y2="12" />
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+                  </svg>
+                  浅色
+                </span>
+              </Button>
+              <Button
+                onClick={() => useThemeStore.getState().setTheme('dark')}
+                variant={theme === 'dark' ? 'primary' : 'secondary'}
+                style={{ flex: 1 }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+                  </svg>
+                  深色
+                </span>
+              </Button>
+            </div>
           </div>
         </div>
 
