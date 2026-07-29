@@ -29,6 +29,7 @@ type Entry struct {
 	Time    string `json:"time"`
 	Level   string `json:"level"`
 	Message string `json:"message"`
+	Count   int    `json:"count"`
 	Source  string `json:"source,omitempty"`
 	Attrs   any    `json:"attrs,omitempty"`
 }
@@ -57,9 +58,20 @@ func NewBuffer(capacity int) *Buffer {
 func (b *Buffer) Append(e Entry) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	// 与最后一条合并（相同消息+级别+属性）
+	if n := len(b.entries); n > 0 {
+		last := &b.entries[n-1]
+		if last.Message == e.Message && last.Level == e.Level && attrsEqual(last.Attrs, e.Attrs) {
+			last.Count++
+			last.Time = e.Time // 更新时间戳为最新
+			return
+		}
+	}
 	if len(b.entries) >= b.capacity {
-		// 环形：丢弃最旧的一条
 		b.entries = b.entries[1:]
+	}
+	if e.Count == 0 {
+		e.Count = 1
 	}
 	b.entries = append(b.entries, e)
 }
@@ -324,27 +336,40 @@ func GinMiddleware(logger *Logger) gin.HandlerFunc {
 			slog.Duration("latency", latency),
 			slog.String("ip", c.ClientIP()),
 		}
+		msg := fmt.Sprintf("%s %s", c.Request.Method, path)
 		if query != "" {
-			safeQuery := c.Request.URL.Query()
-			sensitiveParams := []string{"token", "password", "secret", "key"}
-			for _, p := range sensitiveParams {
-				if safeQuery.Has(p) {
-					safeQuery.Set(p, "***")
-				}
-			}
-			attrs = append(attrs, slog.String("query", safeQuery.Encode()))
+			msg += "?" + c.Request.URL.Query().Encode()
 		}
-		if len(c.Errors) > 0 {
-			attrs = append(attrs, slog.String("gin_errors", c.Errors.String()))
-		}
-
 		switch {
 		case status >= 500:
-			logger.LogAttrs(nil, slog.LevelError, "api request", attrs...)
+			logger.LogAttrs(nil, slog.LevelError, msg, attrs...)
 		case status >= 400:
-			logger.LogAttrs(nil, slog.LevelWarn, "api request", attrs...)
+			logger.LogAttrs(nil, slog.LevelWarn, msg, attrs...)
 		default:
-			logger.LogAttrs(nil, slog.LevelInfo, "api request", attrs...)
+			logger.LogAttrs(nil, slog.LevelInfo, msg, attrs...)
 		}
 	}
+}
+// attrsEqual 比较两个 Attrs 是否相等（用于合并重复日志）
+func attrsEqual(a, b any) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	am, aok := a.(map[string]interface{})
+	bm, bok := b.(map[string]interface{})
+	if !aok || !bok {
+		return false
+	}
+	if len(am) != len(bm) {
+		return false
+	}
+	for k, v := range am {
+		if bv, ok := bm[k]; !ok || v != bv {
+			return false
+		}
+	}
+	return true
 }

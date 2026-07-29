@@ -6,6 +6,7 @@ interface LogEntry {
   time: string
   level: string
   message: string
+  count?: number
   source?: string
   attrs?: Record<string, string | number | boolean>
 }
@@ -387,8 +388,22 @@ export default function LogPage() {
                   }}>
                     {cmp}
                   </div>
-                  <div style={{ flex: 1, padding: '4px 12px', color: 'var(--text)', wordBreak: 'break-all' }}>
-                    {entry.message}
+                  <div style={{ flex: 1, padding: '4px 12px', color: 'var(--text)', wordBreak: 'break-all', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ flex: 1 }}>{entry.message}</span>
+                    {entry.count && entry.count > 1 && (
+                      <span style={{
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        lineHeight: '16px',
+                        padding: '0 5px',
+                        borderRadius: 8,
+                        background: 'var(--surface-dim)',
+                        color: 'var(--text-muted)',
+                        flexShrink: 0,
+                      }}>
+                        ×{entry.count}
+                      </span>
+                    )}
                     {entry.attrs?.error && (
                       <span style={{ color: '#ef4444', marginLeft: 6 }}>({String(entry.attrs.error)})</span>
                     )}
