@@ -184,9 +184,7 @@ func (s *APIServer) Start(addr string) error {
 	} else {
 		dist := "./web/dist"
 		rest.Static("/assets", dist+"/assets")
-		rest.StaticFile("/sw.js", dist+"/sw.js")
 		rest.StaticFile("/manifest.webmanifest", dist+"/manifest.webmanifest")
-		rest.StaticFile("/registerSW.js", dist+"/registerSW.js")
 		rest.GET("/", func(c *gin.Context) {
 			c.File(dist + "/index.html")
 		})
@@ -196,6 +194,13 @@ func (s *APIServer) Start(addr string) error {
 				c.JSON(404, gin.H{"error": "not found"})
 				return
 			}
+			// 尝试查找静态文件（sw.js, workbox-*.js, registerSW.js 等）
+			filePath := dist + p
+			if _, err := os.Stat(filePath); err == nil {
+				c.File(filePath)
+				return
+			}
+			// SPA 路由 fallback
 			c.File(dist + "/index.html")
 		})
 	}
