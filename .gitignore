@@ -42,3 +42,10 @@ web/node_modules/*
 
 # ── Logs ──
 server.log
+
+# ── Tauri ──
+web/src-tauri/target/
+web/src-tauri/binaries/*.exe
+web/src-tauri/binaries/*-darwin
+web/src-tauri/binaries/*-linux-gnu
+web/src-tauri/gen/

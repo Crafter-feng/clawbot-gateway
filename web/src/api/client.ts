@@ -1,3 +1,7 @@
+// 在 Tauri 生产模式下使用绝对 URL，开发模式使用相对路径（Vite proxy）
+const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+const BASE_URL = isTauri ? 'http://localhost:8080' : ''
+
 let token: string | null = null
 let onUnauthorized: (() => void) | null = null
 
@@ -5,7 +9,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (token) headers['Authorization'] = `Bearer ${token}`
 
-  const res = await fetch(path, {
+  const res = await fetch(`${BASE_URL}${path}`, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,

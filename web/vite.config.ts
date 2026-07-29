@@ -2,6 +2,9 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// Tauri 开发模式下使用 1420 端口
+const host = process.env.TAURI_DEV_HOST || 'localhost'
+
 export default defineConfig({
   plugins: [
     react(),
@@ -30,7 +33,9 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    port: 5173,
+    port: 1420,
+    strictPort: true,
+    host: host,
     proxy: {
       '/api': { target: 'http://localhost:8080', changeOrigin: true },
       '/auth': { target: 'http://localhost:8080', changeOrigin: true },
