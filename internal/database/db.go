@@ -113,6 +113,21 @@ func (db *DB) migrate() error {
 			updated_at TEXT DEFAULT (datetime('now'))
 		)`,
 	}
+
+	// 迁移：notify_tokens 表 account_id → to_user
+	// 检查旧列是否存在
+	var colCount int
+	err := db.conn.QueryRow("SELECT COUNT(*) FROM pragma_table_info('notify_tokens') WHERE name='account_id'").Scan(&colCount)
+	if err == nil && colCount > 0 {
+		execs := []string{
+			"ALTER TABLE notify_tokens RENAME COLUMN account_id TO to_user",
+		}
+		for _, q := range execs {
+			if _, err := db.conn.Exec(q); err != nil {
+				return fmt.Errorf("migrate notify_tokens: %w", err)
+			}
+		}
+	}
 	for _, q := range queries {
 		if _, err := db.conn.Exec(q); err != nil {
 			return err

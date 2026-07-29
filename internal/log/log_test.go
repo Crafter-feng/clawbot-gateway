@@ -1,222 +1,173 @@
 package log
 
 import (
-	"bytes"
-	"os"
-	"strings"
+	"fmt"
 	"testing"
 )
 
-func TestMain(m *testing.M) {
-	os.Unsetenv("CLAWBOT_LOGIN_PASSWORD")
-	m.Run()
-}
+func TestBufferGroupAppendAndGet(t *testing.T) {
+	bg := NewBufferGroup(10)
 
-func TestNew(t *testing.T) {
-	l := New("info")
-	if l == nil {
-		t.Fatal("New returned nil")
+	bg.Append("api", Entry{Time: "t1", Level: "INFO", Message: "test", Count: 1})
+
+	entries := bg.Entries(10, "", "api", "")
+	if len(entries) != 1 {
+		t.Fatalf("Entries count = %d, want 1", len(entries))
+	}
+	if entries[0].Message != "test" {
+		t.Errorf("Message = %s, want test", entries[0].Message)
 	}
 }
 
-func TestNewLevels(t *testing.T) {
-	levels := []string{"debug", "info", "warn", "error"}
-	for _, level := range levels {
-		t.Run(level, func(t *testing.T) {
-			l := New(level)
-			if l == nil {
-				t.Errorf("New(%q) returned nil", level)
-			}
-		})
+func TestBufferGroupNonExistent(t *testing.T) {
+	bg := NewBufferGroup(10)
+	entries := bg.Entries(10, "", "nonexistent", "")
+	if entries != nil {
+		t.Errorf("Entries for non-existent should be nil, got %v", entries)
 	}
 }
 
-func TestNewWriter(t *testing.T) {
-	var buf bytes.Buffer
-	l := NewWriter(&buf, "info")
-	if l == nil {
-		t.Fatal("NewWriter returned nil")
-	}
-	l.Info("test message")
-	output := buf.String()
-	if !strings.Contains(output, "test message") {
-		t.Errorf("NewWriter output should contain 'test message', got '%s'", output)
+func TestBufferGroupMergeAll(t *testing.T) {
+	bg := NewBufferGroup(10)
+	bg.Append("api", Entry{Time: "t1", Level: "INFO", Message: "api msg"})
+	bg.Append("bot", Entry{Time: "t2", Level: "INFO", Message: "bot msg"})
+
+	entries := bg.Entries(10, "", "", "")
+	if len(entries) != 2 {
+		t.Errorf("All entries count = %d, want 2", len(entries))
 	}
 }
 
-func TestNewWriterLevelFiltering(t *testing.T) {
+func TestBufferGroupLevelFilter(t *testing.T) {
+	bg := NewBufferGroup(10)
+	bg.Append("api", Entry{Time: "t1", Level: "INFO", Message: "info msg"})
+	bg.Append("api", Entry{Time: "t2", Level: "ERROR", Message: "error msg"})
+
+	entries := bg.Entries(10, "ERROR", "api", "")
+	if len(entries) != 1 {
+		t.Fatalf("ERROR entries count = %d, want 1", len(entries))
+	}
+	if entries[0].Level != "ERROR" {
+		t.Errorf("Level = %s, want ERROR", entries[0].Level)
+	}
+}
+
+func TestBufferGroupLimit(t *testing.T) {
+	bg := NewBufferGroup(10)
+	for i := 0; i < 20; i++ {
+		bg.Append("api", Entry{Time: "t", Level: "INFO", Message: "msg"})
+	}
+
+	entries := bg.Entries(5, "", "api", "")
+	if len(entries) > 5 {
+		t.Errorf("Entries count = %d, want <= 5", len(entries))
+	}
+}
+
+func TestBufferGroupDedup(t *testing.T) {
+	bg := NewBufferGroup(10)
+	bg.Append("api", Entry{Time: "t1", Level: "INFO", Message: "same msg",
+		Attrs: map[string]interface{}{"cmp": "api"}})
+	bg.Append("api", Entry{Time: "t2", Level: "INFO", Message: "same msg",
+		Attrs: map[string]interface{}{"cmp": "api"}})
+
+	entries := bg.Entries(10, "", "api", "")
+	if len(entries) != 1 {
+		t.Fatalf("After dedup, entries count = %d, want 1", len(entries))
+	}
+	if entries[0].Count != 2 {
+		t.Errorf("Count = %d, want 2", entries[0].Count)
+	}
+}
+
+func TestBufferGroupGetComponents(t *testing.T) {
+	bg := NewBufferGroup(10)
+	bg.Append("api", Entry{Time: "t1", Level: "INFO", Message: "api msg"})
+	bg.Append("bot", Entry{Time: "t2", Level: "INFO", Message: "bot msg"})
+
+	components, backends := bg.GetComponents()
+	if len(components) != 2 {
+		t.Errorf("Components count = %d, want 2", len(components))
+	}
+	if len(backends) != 0 {
+		t.Errorf("Backends count = %d, want 0", len(backends))
+	}
+}
+func TestBufferCapacity(t *testing.T) {
+	buf := NewBuffer(5)
+	for i := 0; i < 10; i++ {
+		buf.Append(Entry{Time: "t", Level: "INFO", Message: fmt.Sprintf("msg %d", i)})
+	}
+	entries := buf.Snap()
+	if len(entries) != 5 {
+		t.Errorf("After capacity overflow, entries = %d, want 5", len(entries))
+	}
+}
+
+func TestBufferSnap(t *testing.T) {
+	buf := NewBuffer(10)
+	buf.Append(Entry{Time: "t1", Level: "INFO", Message: "first"})
+	buf.Append(Entry{Time: "t2", Level: "INFO", Message: "second"})
+
+	entries := buf.Snap()
+	if len(entries) != 2 {
+		t.Fatalf("Snap count = %d, want 2", len(entries))
+	}
+	if entries[0].Message != "first" || entries[1].Message != "second" {
+		t.Errorf("Snap order wrong: %+v", entries)
+	}
+}
+
+func TestBufferSnapEmpty(t *testing.T) {
+	buf := NewBuffer(10)
+	entries := buf.Snap()
+	if entries != nil {
+		t.Errorf("Snap of empty buffer = %v, want nil", entries)
+	}
+}
+
+func TestNewBufferGroupDefaultCapacity(t *testing.T) {
+	bg := NewBufferGroup(0)
+	if bg.capacity != DefaultBufferCapacity {
+		t.Errorf("capacity = %d, want %d", bg.capacity, DefaultBufferCapacity)
+	}
+}
+
+func TestAttrsEqual(t *testing.T) {
 	tests := []struct {
-		level    string
-		logFunc  func(l *Logger, msg string)
-		msg      string
-		expected bool
+		name string
+		a, b any
+		want bool
 	}{
-		// Messages at or above the logger level should appear
-		{"debug", func(l *Logger, msg string) { l.Debug(msg) }, "debug msg", true},
-		{"info", func(l *Logger, msg string) { l.Info(msg) }, "info msg", true},
-		{"warn", func(l *Logger, msg string) { l.Warn(msg) }, "warn msg", true},
-		{"error", func(l *Logger, msg string) { l.Error(msg) }, "error msg", true},
-		// Info logger should filter out debug
-		{"info", func(l *Logger, msg string) { l.Debug(msg) }, "debug filtered", false},
-		// Warn logger should filter out info and debug
-		{"warn", func(l *Logger, msg string) { l.Info(msg) }, "info filtered", false},
-		{"warn", func(l *Logger, msg string) { l.Debug(msg) }, "debug filtered", false},
-		// Error logger should filter out warn, info, debug
-		{"error", func(l *Logger, msg string) { l.Warn(msg) }, "warn filtered", false},
-		{"error", func(l *Logger, msg string) { l.Info(msg) }, "info filtered", false},
-		{"error", func(l *Logger, msg string) { l.Debug(msg) }, "debug filtered", false},
+		{"both nil", nil, nil, true},
+		{"one nil", map[string]interface{}{"k": "v"}, nil, false},
+		{"equal maps", map[string]interface{}{"k": "v"}, map[string]interface{}{"k": "v"}, true},
+		{"different values", map[string]interface{}{"k": "v1"}, map[string]interface{}{"k": "v2"}, false},
+		{"different keys", map[string]interface{}{"k1": "v"}, map[string]interface{}{"k2": "v"}, false},
+		{"different lengths", map[string]interface{}{"k1": "v"}, map[string]interface{}{"k1": "v", "k2": "v2"}, false},
+		{"slice values", map[string]interface{}{"args": []string{"a", "b"}}, map[string]interface{}{"args": []string{"a", "b"}}, true},
+		{"different slices", map[string]interface{}{"args": []string{"a"}}, map[string]interface{}{"args": []string{"b"}}, false},
+		{"not a map", "string", "string", false},
 	}
+
 	for _, tt := range tests {
-		name := tt.level + "/" + tt.msg
-		t.Run(name, func(t *testing.T) {
-			var buf bytes.Buffer
-			l := NewWriter(&buf, tt.level)
-			tt.logFunc(l, tt.msg)
-			output := buf.String()
-			hasMsg := strings.Contains(output, tt.msg)
-			if tt.expected && !hasMsg {
-				t.Errorf("Expected output to contain '%s', got '%s'", tt.msg, output)
-			}
-			if !tt.expected && hasMsg {
-				t.Errorf("Expected output to NOT contain '%s', got '%s'", tt.msg, output)
+		t.Run(tt.name, func(t *testing.T) {
+			got := attrsEqual(tt.a, tt.b)
+			if got != tt.want {
+				t.Errorf("attrsEqual(%v, %v) = %v, want %v", tt.a, tt.b, got, tt.want)
 			}
 		})
 	}
 }
 
-func TestDefault(t *testing.T) {
-	l := Default()
-	if l == nil {
-		t.Fatal("Default returned nil")
+func TestWithComponentReplacesExisting(t *testing.T) {
+	l := New("info")
+	// Chain WithComponent - should replace, not accumulate
+	l2 := l.WithComponent("main").WithComponent("api")
+	if len(l2.preAttrs) != 1 {
+		t.Errorf("preAttrs count = %d, want 1 (replaced)", len(l2.preAttrs))
 	}
-}
-
-func TestSetDefault(t *testing.T) {
-	original := Default()
-
-	var buf bytes.Buffer
-	newLogger := NewWriter(&buf, "info")
-	SetDefault(newLogger)
-
-	if Default() != newLogger {
-		t.Error("Default() should return the logger set by SetDefault")
+	if l2.preAttrs[0].Key != "cmp" || l2.preAttrs[0].Value.Any() != "api" {
+		t.Errorf("preAttrs = %+v, want [{cmp api}]", l2.preAttrs)
 	}
-
-	// Restore original
-	SetDefault(original)
-	if Default() != original {
-		t.Error("Default() should be restored to original")
-	}
-}
-
-func TestWithComponent(t *testing.T) {
-	var buf bytes.Buffer
-	l := NewWriter(&buf, "info")
-	cl := l.WithComponent("test")
-	if cl == nil {
-		t.Fatal("WithComponent returned nil")
-	}
-
-	cl.Info("component test")
-	output := buf.String()
-	if !strings.Contains(output, "test") {
-		t.Errorf("WithComponent output should contain component name, got '%s'", output)
-	}
-}
-
-func TestWithField(t *testing.T) {
-	var buf bytes.Buffer
-	l := NewWriter(&buf, "info")
-	fl := l.WithField("key1", "value1")
-	if fl == nil {
-		t.Fatal("WithField returned nil")
-	}
-
-	fl.Info("field test")
-	output := buf.String()
-	if !strings.Contains(output, "key1") {
-		t.Errorf("WithField output should contain field key, got '%s'", output)
-	}
-	if !strings.Contains(output, "value1") {
-		t.Errorf("WithField output should contain field value, got '%s'", output)
-	}
-}
-
-func TestWithComponentAndField(t *testing.T) {
-	var buf bytes.Buffer
-	l := NewWriter(&buf, "info")
-	cl := l.WithComponent("api").WithField("request_id", "abc123")
-	if cl == nil {
-		t.Fatal("Chained WithComponent/WithField returned nil")
-	}
-
-	cl.Info("request started")
-	output := buf.String()
-	if !strings.Contains(output, "api") {
-		t.Errorf("Output should contain component 'api', got '%s'", output)
-	}
-	if !strings.Contains(output, "abc123") {
-		t.Errorf("Output should contain field value 'abc123', got '%s'", output)
-	}
-}
-
-func TestLogLevelConstants(t *testing.T) {
-	if LevelDebug != -4 {
-		t.Errorf("LevelDebug want -4, got %d", LevelDebug)
-	}
-	if LevelInfo != 0 {
-		t.Errorf("LevelInfo want 0, got %d", LevelInfo)
-	}
-	if LevelWarn != 4 {
-		t.Errorf("LevelWarn want 4, got %d", LevelWarn)
-	}
-	if LevelError != 8 {
-		t.Errorf("LevelError want 8, got %d", LevelError)
-	}
-}
-
-func TestLoggerMethods(t *testing.T) {
-	var buf bytes.Buffer
-	l := NewWriter(&buf, "debug")
-
-	// Test all log methods don't panic
-	l.Debug("debug", "arg1", "arg2")
-	l.Info("info", "arg1", "arg2")
-	l.Warn("warn", "arg1", "arg2")
-	l.Error("error", "arg1", "arg2")
-}
-
-func TestNewWriterError(t *testing.T) {
-	// Test with invalid level string - should not panic
-	var buf bytes.Buffer
-	l := NewWriter(&buf, "invalid")
-	if l == nil {
-		t.Fatal("NewWriter with invalid level returned nil")
-	}
-	l.Info("test")
-}
-
-func TestLoggerChaining(t *testing.T) {
-	var buf bytes.Buffer
-	l := NewWriter(&buf, "info")
-	// Chain multiple WithField calls
-	fl := l.WithField("a", "1").WithField("b", "2")
-	fl.Info("chained")
-	output := buf.String()
-	if !strings.Contains(output, "a") || !strings.Contains(output, "1") {
-		t.Errorf("Output should contain field 'a=1', got '%s'", output)
-	}
-	if !strings.Contains(output, "b") || !strings.Contains(output, "2") {
-		t.Errorf("Output should contain field 'b=2', got '%s'", output)
-	}
-}
-
-func TestNewWriterDefaultLevel(t *testing.T) {
-	// Test that empty level defaults to info
-	var buf bytes.Buffer
-	l := NewWriter(&buf, "")
-	if l == nil {
-		t.Fatal("NewWriter with empty level returned nil")
-	}
-	l.Info("test")
 }

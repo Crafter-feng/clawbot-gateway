@@ -208,6 +208,7 @@ func main() {
 	addr := net.JoinHostPort(cfg.Server.Host, strconv.Itoa(cfg.Server.Port))
 	apiServer := api.NewAPIServer(cfg, db, r, af, cm, conn, clientRegistry)
 	apiServer.SetLogger(log)
+	apiServer.Pipeline = pipeline
 	if err := apiServer.Start(addr); err != nil {
 		log.Error("failed to start API server", "error", err)
 		os.Exit(1)

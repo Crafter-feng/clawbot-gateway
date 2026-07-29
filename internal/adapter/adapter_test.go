@@ -313,3 +313,64 @@ func TestAttachment(t *testing.T) {
 		t.Errorf("Data want 'hello', got '%s'", string(att.Data))
 	}
 }
+
+func TestIsConnectionAdapter(t *testing.T) {
+	tests := []struct {
+		adapterType string
+		want        bool
+	}{
+		{"echo", false},
+		{"openai_compatible", false},
+		{"ilink_proxy", true},
+		{"unknown", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.adapterType, func(t *testing.T) {
+			got := IsConnectionAdapter(tt.adapterType)
+			if got != tt.want {
+				t.Errorf("IsConnectionAdapter(%q) = %v, want %v", tt.adapterType, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNewAdapterFactoryDefault(t *testing.T) {
+	af := NewAdapterFactory()
+	if af == nil {
+		t.Fatal("NewAdapterFactory returned nil")
+	}
+	if af.List() == nil {
+		t.Error("List() should return non-nil slice")
+	}
+	if af.ListIDs() == nil {
+		t.Error("ListIDs() should return non-nil slice")
+	}
+}
+
+func TestAdapterFactoryHealthyListEmpty(t *testing.T) {
+	af := NewAdapterFactory()
+	healthy := af.List()
+	if len(healthy) != 0 {
+		t.Errorf("Healthy list of empty factory = %d, want 0", len(healthy))
+	}
+}
+
+func TestAdapterFactoryListIDs(t *testing.T) {
+	af := NewAdapterFactory()
+	af.Register(NewEchoAdapter("echo", "Echo Debug"))
+	af.Register(NewEchoAdapter("hermes", "Hermes AI"))
+
+	ids := af.ListIDs()
+	if len(ids) != 2 {
+		t.Fatalf("ListIDs count = %d, want 2", len(ids))
+	}
+	hasEcho, hasHermes := false, false
+	for _, id := range ids {
+		if id == "echo" { hasEcho = true }
+		if id == "hermes" { hasHermes = true }
+	}
+	if !hasEcho || !hasHermes {
+		t.Errorf("ListIDs = %v, missing echo or hermes", ids)
+	}
+}

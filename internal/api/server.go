@@ -36,6 +36,7 @@ type APIServer struct {
 	router       *route.Router
 	adapters     *adapter.AdapterFactory
 	ctxManager   *session.ContextManager
+	Pipeline     *MessagePipeline
 	connector    *bot.Connector
 	clientReg    *ilink.ClientRegistry
 
@@ -410,9 +411,21 @@ func (s *APIServer) handleHealth(c *gin.Context) {
 
 func (s *APIServer) handleStats(c *gin.Context) {
 	backends, _ := s.db.ListBackends()
+	accounts, _ := s.db.ListAccounts()
+	sessions := 0
+	msgCount := int64(0)
+	if s.ctxManager != nil {
+		sessions = s.ctxManager.SessionCount()
+	}
+	if s.Pipeline != nil {
+		msgCount = s.Pipeline.MessageCount()
+	}
 	c.JSON(200, gin.H{
-		"backends": len(backends),
-		"version":  version.Version,
+		"backends":          len(backends),
+		"accounts":          len(accounts),
+		"sessions":          sessions,
+		"messages_processed": msgCount,
+		"version":           version.Version,
 	})
 }
 

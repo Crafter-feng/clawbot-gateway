@@ -33,6 +33,13 @@ type MessagePipeline struct {
 	log      *log.Logger
 }
 
+// MessageCount 返回处理的消息总数
+func (p *MessagePipeline) MessageCount() int64 {
+	p.msgMu.Lock()
+	defer p.msgMu.Unlock()
+	return p.msgCount
+}
+
 func (p *MessagePipeline) SetLogger(l *log.Logger) {
 	p.log = l.WithComponent("pipeline")
 }
@@ -62,7 +69,8 @@ func (p *MessagePipeline) Start(ctx context.Context) {
 	processLoopFunc = func() {
 		defer func() {
 			if r := recover(); r != nil {
-				p.log.Error("processLoop panic", "panic", r, "stack", string(debug.Stack()))
+				stack := string(debug.Stack())
+				p.log.Error(fmt.Sprintf("processLoop panic: %v", r), "panic", r, "stack", stack)
 				time.Sleep(time.Second)
 				go processLoopFunc()
 			}
@@ -125,20 +133,15 @@ func (p *MessagePipeline) processMessage(ctx context.Context, msg bot.Normalized
 			parts := strings.Fields(forwardContent)
 
 			if strings.HasPrefix(forwardContent, "/help ") {
-				// /help hermes → 转发 /help 到后端
-				// /help hermes xxx → 转发 /help xxx 到后端
 				if len(parts) > 2 {
 					forwardContent = "/help " + strings.Join(parts[2:], " ")
 				} else {
 					forwardContent = "/help"
 				}
 			} else {
-				// /hermes → 显示后端状态
-				// /hermes xxx → 转发 xxx 到后端
 				if len(parts) > 1 {
 					forwardContent = strings.Join(parts[1:], " ")
 				} else {
-					// 无参数时显示后端状态
 					reply := p.commandProc.ShowBackendStatus(backendID)
 					creds := p.connector.GetAccountCredentials(msg.AccountID)
 					if creds != nil {
@@ -153,13 +156,29 @@ func (p *MessagePipeline) processMessage(ctx context.Context, msg bot.Normalized
 			p.forwardToBackend(ctx, msg, forwardContent, backendID, seq)
 			return
 		}
+
+		// 执行其他命令（/use, /backends, /help 等）
+		reply := p.commandProc.Execute(cmd, msg)
+		if reply != "" {
+			creds := p.connector.GetAccountCredentials(msg.AccountID)
+			if creds != nil {
+				contextToken := p.connector.GetContextToken(msg.AccountID, msg.FromUser)
+				p.log.Info("sending command reply", "seq", seq, "to", msg.FromUser, "reply_len", len(reply))
+				if err := p.connector.SendTextWithCreds(ctx, creds, msg.FromUser, reply, contextToken); err != nil {
+					p.log.Warn("command reply send error", "seq", seq, "error", err)
+				}
+			} else {
+				p.log.Warn("no credentials for command reply", "seq", seq, "account_id", msg.AccountID)
+			}
+		} else {
+			p.log.Warn("command returned empty reply", "seq", seq, "action", cmd.Action)
+		}
 		return
 	}
 
-	// 3. 检查用户是否已选中后端
-	backendID, hasOverride := p.router.GetUserBackend(msg.FromUser)
-	if !hasOverride {
-		// 未选中后端 → 提示用户先选后端
+	// 3. 路由决策（三层优先级：用户会话覆写 → 关键词规则 → 默认后端）
+	decision := p.router.Route(content, msg.FromUser, msg.FromUser, msg.ToUser, "")
+	if decision.BackendID == "" {
 		p.log.Info("no backend selected", "seq", seq, "from", msg.FromUser)
 		reply := "❌ 请先选择后端\n输入 /backends 查看可用后端\n输入 /use <后端ID> 切换"
 		creds := p.connector.GetAccountCredentials(msg.AccountID)
@@ -171,9 +190,8 @@ func (p *MessagePipeline) processMessage(ctx context.Context, msg bot.Normalized
 		}
 		return
 	}
-
-	// 4. 已选中后端 → 直接路由到该后端（不使用正则）
-	p.log.Info("routing to selected backend", "seq", seq, "from", msg.FromUser, "backend", backendID)
+	backendID := decision.BackendID
+	p.log.Info("routing to backend", "seq", seq, "from", msg.FromUser, "backend", backendID, "matched_by", decision.MatchedBy)
 
 	bak, ok := p.adapters.Get(backendID)
 	if !ok {
@@ -187,7 +205,7 @@ func (p *MessagePipeline) processMessage(ctx context.Context, msg bot.Normalized
 		return
 	}
 
-	// 5a. ilink_proxy 是连接适配器：消息入虚拟 Bot 队列，不调用 Handle()，不回复
+	// 4. ilink_proxy 是连接适配器：消息入虚拟 Bot 队列，不调用 Handle()，不回复
 	if adapter.IsConnectionAdapter(bak.Type()) {
 		if p.enqueueToVirtualBot(msg, backendID, seq) {
 			return
@@ -389,10 +407,11 @@ func (p *MessagePipeline) HandleDirectMessage(ctx context.Context, content, user
 	if backendID != "" {
 		backendIDs = []string{backendID}
 	} else {
-		decisions := p.router.RouteMulti(content, userID)
-		for _, d := range decisions {
-			backendIDs = append(backendIDs, d.BackendID)
+		decision := p.router.Route(content, userID, userID, "", "")
+		if decision.BackendID == "" {
+			return "", fmt.Errorf("no backend available")
 		}
+		backendIDs = []string{decision.BackendID}
 	}
 
 	var replies []string
@@ -407,7 +426,7 @@ func (p *MessagePipeline) HandleDirectMessage(ctx context.Context, content, user
 			Message:   content,
 			UserID:    userID,
 			BackendID: bid,
-		History:   convertChatHistory(ctxSession.GetHistory()),
+			History:   convertChatHistory(ctxSession.GetHistory()),
 		})
 		if err != nil {
 			replies = append(replies, fmt.Sprintf("[%s] 错误: %s", bid, err.Error()))

@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"reflect"
 	"sort"
 	"sync"
 	"time"
@@ -133,7 +134,8 @@ func (bg *BufferGroup) Entries(limit int, level string, component string, backen
 			return nil
 		}
 		all := b.Snap()
-		return filterEntries(all, limit, level, component, backend)
+		// 已从组件缓存获取，不再按 cmp 过滤（避免 entry 没有 cmp attr 时被过滤掉）
+		return filterEntries(all, limit, level, "", backend)
 	}
 
 	// 全部：合并所有组件的最新条目
@@ -343,15 +345,28 @@ func (l *Logger) WithComponent(name string) *Logger {
 // 预绑定属性会被存入 bufferHandler.preAttrs，在 Handle 时合并到 Entry.Attrs
 func (l *Logger) WithField(key string, value any) *Logger {
 	attr := slog.Any(key, value)
+	// 替换已有的同名属性，避免累积（如 cmp=main + cmp=api）
+	newPreAttrs := cloneAttrs(l.preAttrs)
+	replaced := false
+	for i, a := range newPreAttrs {
+		if a.Key == key {
+			newPreAttrs[i] = attr
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		newPreAttrs = append(newPreAttrs, attr)
+	}
 	newHandler := &bufferHandler{
 		handler:  l.Logger.Handler().WithAttrs([]slog.Attr{attr}),
 		buffers:  l.buffers,
-		preAttrs: append(cloneAttrs(l.preAttrs), attr),
+		preAttrs: newPreAttrs,
 	}
 	return &Logger{
 		Logger:    slog.New(newHandler),
 		buffers:   l.buffers,
-		preAttrs:  newHandler.preAttrs,
+		preAttrs:  newPreAttrs,
 	}
 }
 
@@ -474,7 +489,12 @@ func attrsEqual(a, b any) bool {
 		return false
 	}
 	for k, v := range am {
-		if bv, ok := bm[k]; !ok || v != bv {
+		bv, ok := bm[k]
+		if !ok {
+			return false
+		}
+		// 使用 reflect.DeepEqual 处理不可比较类型（如 []string）
+		if !reflect.DeepEqual(v, bv) {
 			return false
 		}
 	}
