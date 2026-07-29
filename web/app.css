@@ -1177,9 +1177,10 @@ textarea.input {
 }
 
 .app-main-mobile {
-  padding: var(--space-4);
-  padding-bottom: 80px;
-  min-height: 100vh;
+  padding: var(--space-3);
+  padding-bottom: 72px;
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
 }
 
 .app-mobile-nav {
@@ -1191,24 +1192,30 @@ textarea.input {
   border-top: 1px solid var(--border);
   display: flex;
   justify-content: space-around;
-  padding: var(--space-2) 0;
-  padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
+  padding: var(--space-1) 0;
+  padding-bottom: calc(var(--space-1) + env(safe-area-inset-bottom, 0px));
   z-index: 50;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .app-mobile-nav-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-2) var(--space-4);
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
   border: none;
   background: transparent;
   cursor: pointer;
   color: var(--text-muted);
   transition: color var(--duration-fast) var(--easing);
-  font-size: var(--text-xs);
+  font-size: 10px;
   font-weight: 400;
+  min-width: 48px;
+  min-height: 44px;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 .app-mobile-nav-item--active {
@@ -1222,6 +1229,15 @@ textarea.input {
   }
   .app-shell-mobile {
     display: block !important;
+  }
+  /* 防止页面弹性滚动导致底部留白 */
+  html {
+    height: -webkit-fill-available;
+  }
+  body {
+    min-height: 100dvh;
+    min-height: -webkit-fill-available;
+    overscroll-behavior: none;
   }
 }
 
@@ -1658,42 +1674,127 @@ textarea.input {
   text-align: center;
   color: var(--text-muted);
 }
-
-.log-empty-state-icon {
-  font-size: 24px;
-  margin-bottom: 8px;
-  opacity: 0.3;
-}
-
-.log-empty-state-text {
-  font-size: 13px;
-}
-
-.log-spinner-wrap {
-  padding: 32px;
-  text-align: center;
-  color: var(--text-muted);
-}
 /* --- Responsive --- */
 @media (max-width: 768px) {
   :root {
     --sidebar-width: 0px;
   }
 
+  .page-header {
+    margin-bottom: var(--space-3);
+  }
   .page-header h1 {
     font-size: var(--text-lg);
   }
+  .page-header p {
+    font-size: var(--text-sm);
+  }
 
   .card {
-    padding: var(--space-4);
-    border-radius: var(--radius-md);
+    padding: var(--space-3);
+    border-radius: var(--radius-sm);
+  }
+  .card-header {
+    margin-bottom: var(--space-2);
+  }
+  .card-title {
+    font-size: var(--text-md);
   }
 
+  /* 仪表盘：4 个指标卡 2x2 布局 */
+  .dashboard-metrics {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+  }
   .metric-card {
-    padding: var(--space-4);
+    padding: var(--space-2) var(--space-3);
+  }
+  .metric-card-value {
+    font-size: var(--text-lg);
+  }
+  .metric-card-label {
+    font-size: var(--text-xs);
+  }
+  .metric-card-icon svg {
+    width: 16px;
+    height: 16px;
   }
 
-  .metric-card-value {
-    font-size: var(--text-xl);
+  .form-grid-2,
+  .form-grid-3 {
+    grid-template-columns: 1fr;
+  }
+
+  .code-block {
+    font-size: 11px;
+    padding: var(--space-2);
+  }
+
+  /* 移动端底部导航 */
+  .app-mobile-nav {
+    padding: 0 0 calc(env(safe-area-inset-bottom, 0px));
+  }
+  .app-mobile-nav-item {
+    padding: var(--space-1) var(--space-2);
+    gap: 1px;
+    font-size: 9px;
+  }
+  .app-mobile-nav-item svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* 日志页面移动端重点优化 */
+  .log-filter-bar {
+    margin: 0 var(--space-2) var(--space-2) !important;
+  }
+  .log-filter-tab {
+    font-size: 10px !important;
+    padding: 6px 2px !important;
+  }
+  .log-filter-controls {
+    flex-wrap: wrap !important;
+    gap: var(--space-2) !important;
+    padding: var(--space-2) !important;
+  }
+  .log-filter-label {
+    font-size: 10px !important;
+  }
+  .log-filter-select {
+    font-size: 11px !important;
+    padding: 2px 6px !important;
+    min-width: 80px !important;
+  }
+  .log-filter-right {
+    flex-wrap: wrap !important;
+    gap: var(--space-2) !important;
+  }
+  /* 日志表格 */
+  .log-table-header-cell--time,
+  [style*="width: 72px"][style*="padding"] {
+    width: 54px !important;
+  }
+  .log-table-header-cell--level,
+  [style*="width: 52px"][style*="padding"] {
+    width: 42px !important;
+  }
+  .log-table-header-cell--component,
+  [style*="width: 160px"][style*="padding"] {
+    width: 80px !important;
+  }
+  .log-table-cell {
+    padding: 3px 8px !important;
+  }
+  .log-level-badge {
+    font-size: 9px !important;
+    padding: 0 4px !important;
+    line-height: 16px !important;
+  }
+  .log-empty-state {
+    padding: 24px 16px !important;
+  }
+  .log-filter-autorefresh {
+    font-size: 10px !important;
   }
 }
