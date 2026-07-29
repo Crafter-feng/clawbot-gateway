@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"sort"
 	"sync"
 	"time"
 
@@ -36,8 +37,8 @@ type Entry struct {
 
 // ── 日志缓冲区 ──
 
-// DefaultBufferCapacity 默认缓冲区容量
-const DefaultBufferCapacity = 500
+// DefaultBufferCapacity 每个组件默认缓冲容量
+const DefaultBufferCapacity = 200
 
 type Buffer struct {
 	mu       sync.RWMutex
@@ -63,7 +64,7 @@ func (b *Buffer) Append(e Entry) {
 		last := &b.entries[n-1]
 		if last.Message == e.Message && last.Level == e.Level && attrsEqual(last.Attrs, e.Attrs) {
 			last.Count++
-			last.Time = e.Time // 更新时间戳为最新
+			last.Time = e.Time
 			return
 		}
 	}
@@ -74,6 +75,151 @@ func (b *Buffer) Append(e Entry) {
 		e.Count = 1
 	}
 	b.entries = append(b.entries, e)
+}
+
+// Snap 返回当前所有条目的快照（按时间正序）
+func (b *Buffer) Snap() []Entry {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	if len(b.entries) == 0 {
+		return nil
+	}
+	result := make([]Entry, len(b.entries))
+	copy(result, b.entries)
+	return result
+}
+
+// ── 多组件缓冲区 ──
+// 每个组件独立缓存，互不挤占
+
+type BufferGroup struct {
+	mu       sync.RWMutex
+	buffers  map[string]*Buffer
+	capacity int
+}
+
+func NewBufferGroup(capacity int) *BufferGroup {
+	if capacity <= 0 {
+		capacity = DefaultBufferCapacity
+	}
+	return &BufferGroup{
+		buffers:  make(map[string]*Buffer),
+		capacity: capacity,
+	}
+}
+
+func (bg *BufferGroup) getOrCreate(cmp string) *Buffer {
+	bg.mu.Lock()
+	defer bg.mu.Unlock()
+	if b, ok := bg.buffers[cmp]; ok {
+		return b
+	}
+	b := NewBuffer(bg.capacity)
+	bg.buffers[cmp] = b
+	return b
+}
+
+func (bg *BufferGroup) Append(cmp string, e Entry) {
+	bg.getOrCreate(cmp).Append(e)
+}
+
+// Entries 返回过滤后的日志条目（按时间正序）
+func (bg *BufferGroup) Entries(limit int, level string, component string, backend string) []Entry {
+	if component != "" {
+		bg.mu.RLock()
+		b, ok := bg.buffers[component]
+		bg.mu.RUnlock()
+		if !ok {
+			return nil
+		}
+		all := b.Snap()
+		return filterEntries(all, limit, level, component, backend)
+	}
+
+	// 全部：合并所有组件的最新条目
+	bg.mu.RLock()
+	all := make([]Entry, 0)
+	for _, b := range bg.buffers {
+		all = append(all, b.Snap()...)
+	}
+	bg.mu.RUnlock()
+
+	// 按时间倒序
+	sort.Slice(all, func(i, j int) bool {
+		return all[i].Time > all[j].Time
+	})
+	// 截取最近的 limit 条
+	if limit > 0 && len(all) > limit {
+		all = all[:limit]
+	}
+	return filterEntries(all, 0, level, component, backend)
+}
+
+// GetComponents 返回日志中出现的所有组件名和后端名
+func (bg *BufferGroup) GetComponents() (components []string, backends []string) {
+	cmpSet := make(map[string]bool)
+	bkSet := make(map[string]bool)
+
+	bg.mu.RLock()
+	for cmp, b := range bg.buffers {
+		cmpSet[cmp] = true
+		for _, e := range b.Snap() {
+			attrs, ok := e.Attrs.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if bk, ok := attrs["backend"].(string); ok && bk != "" {
+				bkSet[bk] = true
+			}
+		}
+	}
+	bg.mu.RUnlock()
+
+	components = make([]string, 0, len(cmpSet))
+	for c := range cmpSet {
+		components = append(components, c)
+	}
+	backends = make([]string, 0, len(bkSet))
+	for bk := range bkSet {
+		backends = append(backends, bk)
+	}
+	return
+}
+
+// filterEntries 过滤并截取日志条目
+func filterEntries(entries []Entry, limit int, level string, component string, backend string) []Entry {
+	if len(entries) == 0 {
+		return nil
+	}
+	// 从后往前收集，最后反转为正序
+	filtered := make([]Entry, 0, len(entries))
+	for i := len(entries) - 1; i >= 0; i-- {
+		e := entries[i]
+		if level != "" && e.Level != level {
+			continue
+		}
+		attrs, _ := e.Attrs.(map[string]interface{})
+		if component != "" {
+			if cmp, _ := attrs["cmp"].(string); cmp != component {
+				continue
+			}
+		}
+		if backend != "" {
+			if bid, _ := attrs["backend"].(string); bid != backend {
+				continue
+			}
+		}
+		filtered = append(filtered, e)
+	}
+	// 反转为时间正序
+	for i, j := 0, len(filtered)-1; i < j; i, j = i+1, j-1 {
+		filtered[i], filtered[j] = filtered[j], filtered[i]
+	}
+	// 截取最近的 limit 条
+	if limit > 0 && len(filtered) > limit {
+		filtered = filtered[len(filtered)-limit:]
+	}
+	return filtered
 }
 
 // Entries 返回过滤后的日志条目（按时间正序）
@@ -121,44 +267,11 @@ func (b *Buffer) Entries(limit int, level string, component string, backend stri
 	return filtered
 }
 
-// GetComponents 返回日志中出现的所有组件名和后端名
-func (b *Buffer) GetComponents() (components []string, backends []string) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	cmpSet := make(map[string]bool)
-	bkSet := make(map[string]bool)
-	for _, e := range b.entries {
-		attrs, ok := e.Attrs.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		if c, ok := attrs["cmp"].(string); ok && c != "" {
-			cmpSet[c] = true
-		}
-		if bk, ok := attrs["backend"].(string); ok && bk != "" {
-			bkSet[bk] = true
-		}
-	}
-	components = make([]string, 0, len(cmpSet))
-	for c := range cmpSet {
-		components = append(components, c)
-	}
-	backends = make([]string, 0, len(bkSet))
-	for bk := range bkSet {
-		backends = append(backends, bk)
-	}
-	return
-}
 
 // ── Logger ──
-
 type Logger struct {
 	*slog.Logger
-	buffer *Buffer
-	// preAttrs 存储通过 WithAttrs 预绑定的属性
-	// slog 的 Record.Attrs() 只包含本次调用的属性，不含预绑定的
-	// bufferHandler 需要自己维护预绑定属性，才能在缓冲区中完整记录
+	buffers *BufferGroup
 	preAttrs []slog.Attr
 }
 
@@ -196,13 +309,13 @@ func NewWriter(w io.Writer, level string) *Logger {
 			return a
 		},
 	}
-	buf := NewBuffer(DefaultBufferCapacity)
+	bg := NewBufferGroup(DefaultBufferCapacity)
 	h := &bufferHandler{
 		handler:  slog.NewJSONHandler(w, opts),
-		buffer:   buf,
+		buffers:  bg,
 		preAttrs: nil,
 	}
-	return &Logger{slog.New(h), buf, nil}
+	return &Logger{slog.New(h), bg, nil}
 }
 
 func SetDefault(l *Logger) {
@@ -213,12 +326,11 @@ func SetDefault(l *Logger) {
 func Default() *Logger {
 	return defaultLogger
 }
-
-func GetBuffer() *Buffer {
+func GetBuffer() *BufferGroup {
 	if defaultLogger == nil {
 		return nil
 	}
-	return defaultLogger.buffer
+	return defaultLogger.buffers
 }
 
 // WithComponent 创建带组件标签的子 logger
@@ -233,12 +345,12 @@ func (l *Logger) WithField(key string, value any) *Logger {
 	attr := slog.Any(key, value)
 	newHandler := &bufferHandler{
 		handler:  l.Logger.Handler().WithAttrs([]slog.Attr{attr}),
-		buffer:   l.buffer,
+		buffers:  l.buffers,
 		preAttrs: append(cloneAttrs(l.preAttrs), attr),
 	}
 	return &Logger{
 		Logger:    slog.New(newHandler),
-		buffer:    l.buffer,
+		buffers:   l.buffers,
 		preAttrs:  newHandler.preAttrs,
 	}
 }
@@ -252,13 +364,10 @@ func cloneAttrs(attrs []slog.Attr) []slog.Attr {
 	copy(cp, attrs)
 	return cp
 }
-
-// ── bufferHandler ──
-
 type bufferHandler struct {
 	handler  slog.Handler
-	buffer   *Buffer
-	preAttrs []slog.Attr // 预绑定属性（通过 WithAttrs / WithField 添加）
+	buffers  *BufferGroup
+	preAttrs []slog.Attr
 }
 
 func (h *bufferHandler) Enabled(ctx context.Context, level slog.Level) bool {
@@ -283,11 +392,9 @@ func (h *bufferHandler) Handle(ctx context.Context, r slog.Record) error {
 
 	// 合并预绑定属性和本次调用的属性
 	attrs := make(map[string]interface{})
-	// 预绑定属性（cmp, backend 等）
 	for _, a := range h.preAttrs {
 		attrs[a.Key] = a.Value.Any()
 	}
-	// 本次调用的属性（覆盖同名预绑定属性）
 	r.Attrs(func(a slog.Attr) bool {
 		attrs[a.Key] = a.Value.Any()
 		return true
@@ -296,23 +403,23 @@ func (h *bufferHandler) Handle(ctx context.Context, r slog.Record) error {
 		entry.Attrs = attrs
 	}
 
-	h.buffer.Append(entry)
+	// 按组件路由到独立缓存
+	cmp, _ := attrs["cmp"].(string)
+	h.buffers.Append(cmp, entry)
 	return nil
 }
-
 func (h *bufferHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	return &bufferHandler{
 		handler:  h.handler.WithAttrs(attrs),
-		buffer:   h.buffer,
+		buffers:  h.buffers,
 		preAttrs: append(cloneAttrs(h.preAttrs), attrs...),
 	}
 }
-
 func (h *bufferHandler) WithGroup(name string) slog.Handler {
 	return &bufferHandler{
 		handler:  h.handler.WithGroup(name),
-		buffer:   h.buffer,
-		preAttrs: h.preAttrs, // group 不影响预绑定属性
+		buffers:  h.buffers,
+		preAttrs: h.preAttrs,
 	}
 }
 
