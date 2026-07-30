@@ -1,0 +1,276 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+env:
+  GO_VERSION: '1.22'
+  NODE_VERSION: '22'
+  RUST_VERSION: 'stable'
+
+jobs:
+  # ============================================
+  # 测试
+  # ============================================
+  test:
+    name: 测试
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: 运行 Go 测试
+        run: go test -v -race -count=1 ./...
+
+  # ============================================
+  # FPK 打包（飞牛 fnOS）
+  # ============================================
+  build-fpk:
+    name: 构建 FPK (${{ matrix.arch }})
+    needs: [test]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            goarch: amd64
+            fnpack_arch: amd64
+            fnplatform: X86
+          - arch: arm64
+            goarch: arm64
+            fnpack_arch: arm64
+            fnplatform: ARM
+    defaults:
+      run:
+        working-directory: .
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 确定版本号
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "版本号: $VERSION"
+
+      - name: 安装 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: 构建前端
+        run: |
+          cd web
+          npm ci
+          npm run build
+
+      - name: 构建 Go 后端 (linux/${{ matrix.goarch }})
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          GOOS=linux GOARCH=${{ matrix.goarch }} CGO_ENABLED=0 go build \
+            -ldflags="-X 'clawbot-gateway/internal/version.Version=${VERSION}' -X 'clawbot-gateway/internal/version.Commit=$(git rev-parse --short HEAD)' -X 'clawbot-gateway/internal/version.BuildTime=$(date -u '+%Y-%m-%dT%H:%M:%SZ')'" \
+            -o "fpk/app/server/clawbot-gateway" .
+
+      - name: 复制前端文件
+        run: |
+          rm -rf fpk/app/server/web
+          cp -r web/dist fpk/app/server/web/
+
+      - name: 更新 manifest
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          sed -i "s/^version.*/version = ${VERSION}/" fpk/manifest
+          sed -i "s/^platform.*/platform = ${{ matrix.fnplatform == 'ARM' && 'arm' || 'x86' }}/" fpk/manifest
+
+      - name: 修复脚本权限
+        run: |
+          for f in fpk/cmd/main fpk/cmd/install_init fpk/cmd/install_callback fpk/cmd/uninstall_init fpk/cmd/uninstall_callback fpk/cmd/upgrade_init fpk/cmd/upgrade_callback fpk/cmd/config_init fpk/cmd/config_callback; do
+            [ -f "$f" ] && chmod +x "$f"
+          done
+
+      - name: 下载 fnpack 并打包
+        run: |
+          curl -fsSL -o /tmp/fnpack "https://static2.fnnas.com/fnpack/fnpack-1.2.1-linux-${{ matrix.fnpack_arch }}"
+          chmod +x /tmp/fnpack
+          cd fpk
+          /tmp/fnpack build --directory .
+          mv clawbot-gateway.fpk "clawbot-gateway-${{ matrix.fnplatform }}.fpk"
+          echo "✅ FPK: $(ls -lh clawbot-gateway-${{ matrix.fnplatform }}.fpk)"
+
+      - name: 上传 FPK
+        uses: actions/upload-artifact@v4
+        with:
+          name: fpk-${{ matrix.arch }}
+          path: fpk/clawbot-gateway-*.fpk
+          retention-days: 30
+
+  # ============================================
+  # Tauri 桌面客户端打包
+  # ============================================
+  build-desktop:
+    name: 构建桌面端 (${{ matrix.os }})
+    needs: [test]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - os: macOS
+            runner: macos-latest
+            target: aarch64-apple-darwin
+            goos: darwin
+            goarch: arm64
+            binary_suffix: ''
+            tauri_target: ''
+          - os: macOS-Intel
+            runner: macos-latest
+            target: x86_64-apple-darwin
+            goos: darwin
+            goarch: amd64
+            binary_suffix: ''
+            tauri_target: ''
+          - os: Windows
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            goos: windows
+            goarch: amd64
+            binary_suffix: .exe
+            tauri_target: ''
+
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 确定版本号
+        id: version
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: 安装 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: 安装 Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: 安装系统依赖 (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install webkit2gtk 2>/dev/null || true
+
+      - name: 安装系统依赖 (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          choco install -y webkit2gtk 2>/dev/null || true
+
+      - name: 安装前端依赖
+        run: npm ci
+
+      - name: 构建 Go 侧车二进制
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          cd ..
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} CGO_ENABLED=0 go build \
+            -ldflags="-X 'clawbot-gateway/internal/version.Version=${VERSION}' -X 'clawbot-gateway/internal/version.Commit=$(git rev-parse --short HEAD)' -X 'clawbot-gateway/internal/version.BuildTime=$(date -u '+%Y-%m-%dT%H:%M:%SZ')'" \
+            -o "web/src-tauri/binaries/clawbot-gateway-${{ matrix.target }}${{ matrix.binary_suffix }}" .
+
+      - name: 构建前端
+        run: npm run build
+
+      - name: 构建 Tauri 桌面应用
+        run: |
+          npx tauri build --bundles dmg
+
+      - name: 上传桌面端构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.os }}
+          path: web/src-tauri/target/release/bundle/
+          retention-days: 30
+
+  # ============================================
+  # 发布 Release
+  # ============================================
+  release:
+    name: 发布 Release
+    needs: [build-fpk, build-desktop]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 下载所有构建产物
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts/
+
+      - name: 展开目录结构
+        run: |
+          find ./artifacts -type f | sort
+
+      - name: 确定版本号
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "build_time=$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M CST')" >> $GITHUB_OUTPUT
+
+      - name: 创建 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "ClawBot Gateway v${{ steps.version.outputs.version }}"
+          files: |
+            ./artifacts/**/*.fpk
+            ./artifacts/**/*.dmg
+            ./artifacts/**/*.msi
+            ./artifacts/**/*.exe
+            ./artifacts/**/*.AppImage
+            ./artifacts/**/*.deb
+          generate_release_notes: true
+          body: |
+            ## ClawBot Gateway v${{ steps.version.outputs.version }}
+
+            ### 📦 下载
+
+            | 文件 | 平台 |
+            |------|------|
+            | `clawbot-gateway-X86.fpk` | 飞牛 fnOS x86_64 |
+            | `clawbot-gateway-ARM.fpk` | 飞牛 fnOS arm64 |
+            | `*.dmg` | macOS (Apple Silicon / Intel) |
+            | `*.msi` / `*.exe` | Windows |
+            | `*.AppImage` / `*.deb` | Linux |
+
+            ---
+            构建时间：${{ steps.version.outputs.build_time }}
