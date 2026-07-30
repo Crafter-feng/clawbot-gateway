@@ -10,7 +10,13 @@
                 "type": "checkbox",
                 "field": "wizard_remove_data",
                 "label": "同时删除数据目录",
-                "initValue": false,
+                "initValue": "false",
+                "options": [
+                    {
+                        "label": "删除数据目录",
+                        "value": "true"
+                    }
+                ],
                 "helpText": "勾选后将删除所有数据，包括数据库、配置和微信账号信息，此操作不可恢复。"
             }
         ]
