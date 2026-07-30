@@ -1,0 +1,23 @@
+#!/bin/bash
+# ============================================================
+# ClawBot Gateway for fnOS - 升级前准备 (upgrade_init)
+# ============================================================
+# 执行时机：升级安装前
+# 用途：停止正在运行的服务
+# ============================================================
+
+# 停止正在运行的服务（如果有）
+if [ -f "${TRIM_PKGVAR}/clawbot.pid" ]; then
+    PID=$(cat "${TRIM_PKGVAR}/clawbot.pid")
+    if kill -0 "${PID}" 2>/dev/null; then
+        kill -TERM "${PID}" 2>/dev/null || true
+        sleep 2
+        # 如果进程还在，强制终止
+        if kill -0 "${PID}" 2>/dev/null; then
+            kill -KILL "${PID}" 2>/dev/null || true
+        fi
+    fi
+    rm -f "${TRIM_PKGVAR}/clawbot.pid"
+fi
+
+exit 0

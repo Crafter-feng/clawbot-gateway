@@ -1,0 +1,169 @@
+#!/bin/bash
+# ============================================================
+# ClawBot Gateway for fnOS - 主服务管理脚本
+# ============================================================
+# 飞牛系统通过此脚本控制应用的 启动(start) / 停止(stop) / 状态查询(status)
+#
+# TRIM 环境变量说明（飞牛系统自动注入）：
+#   TRIM_APPDEST    - 应用安装目录（app.tgz 解压后的目标路径）
+#   TRIM_PKGVAR     - 应用数据目录（持久化存储，升级不丢失）
+#   TRIM_PKGETC     - 应用配置目录（存放 config.json 等配置文件）
+#   TRIM_SERVICE_PORT - 用户在向导中配置的服务端口
+#   TRIM_USERNAME   - 应用运行用户名（由 config/privilege 定义）
+#   TRIM_GROUPNAME  - 应用运行用户组（由 config/privilege 定义）
+#   TRIM_TEMP_LOGFILE - 临时日志文件路径（错误信息写入此处供前端展示）
+# ============================================================
+
+# ---- 路径配置 ----
+APP_BIN="${TRIM_APPDEST}/server/clawbot-gateway"          # Go 二进制文件
+DATA_DIR="${TRIM_PKGVAR}"                                  # 数据目录（持久化，存 SQLite 数据库）
+LOG_FILE="${TRIM_PKGVAR}/clawbot.log"                      # 运行日志
+PID_FILE="${TRIM_PKGVAR}/clawbot.pid"                      # 进程 PID 文件
+CONFIG_DIR="${TRIM_PKGVAR}/config"                              # 配置目录
+CONFIG_FILE="${CONFIG_DIR}/wizard.json"                         # 向导配置
+DB_PATH="${DATA_DIR}/clawbot.db"                                 # 数据库文件路径
+
+# ---- 读取向导配置 ----
+SERVICE_PORT="${TRIM_SERVICE_PORT:-6798}"
+if [ -f "${CONFIG_FILE}" ]; then
+    _p=$(cat "${CONFIG_FILE}" 2>/dev/null | grep -o '"service_port"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"service_port"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+    [ -n "$_p" ] && SERVICE_PORT="$_p"
+fi
+
+# ============================================================
+# 初始化数据目录和配置
+# ============================================================
+ensure_dirs() {
+    mkdir -p "${DATA_DIR}"
+    mkdir -p "${CONFIG_DIR}"
+
+    # 如果数据库文件不存在，创建一个空文件（Go 二进制会自动初始化）
+    [ -f "${DB_PATH}" ] || touch "${DB_PATH}"
+
+    chown -R "${TRIM_USERNAME:-clawbot}:${TRIM_GROUPNAME:-clawbot}" "${DATA_DIR}" 2>/dev/null || true
+}
+
+# ============================================================
+# 启动服务
+# ============================================================
+start_process() {
+    # 已经在运行则跳过
+    if status; then
+        return 0
+    fi
+
+    ensure_dirs
+
+    # 前置检查：二进制文件是否存在且可执行
+    if [ ! -x "${APP_BIN}" ]; then
+        echo "ClawBot Gateway 二进制未找到: ${APP_BIN}" > "${TRIM_TEMP_LOGFILE}" 2>/dev/null
+        return 1
+    fi
+
+    # 切换到 server 目录（程序在此目录下寻找 web/dist/index.html）
+    cd "${TRIM_APPDEST}/server"
+
+    # 设置环境变量
+    export CLAWBOT_DB_PATH="${DB_PATH}"
+    export CLAWBOT_HOST="0.0.0.0"
+    export CLAWBOT_PORT="${SERVICE_PORT}"
+    export CLAWBOT_LOG_LEVEL="info"
+
+    # 启动进程
+    exec -a "clawbot-gateway" "${APP_BIN}" \
+        >> "${LOG_FILE}" 2>&1 &
+
+    # 记录进程 PID
+    printf "%s" "$!" > "${PID_FILE}"
+    return 0
+}
+
+# ============================================================
+# 停止服务
+# ============================================================
+stop_process() {
+    if [ -r "${PID_FILE}" ]; then
+        pid=$(head -n 1 "${PID_FILE}" | tr -d '[:space:]')
+
+        # 检查进程是否还存活
+        if ! check_process "${pid}"; then
+            rm -f "${PID_FILE}"
+            return
+        fi
+
+        # 先发送 SIGTERM（优雅退出）
+        kill -TERM "${pid}" >> "${LOG_FILE}" 2>&1
+
+        # 等待最多 10 秒让进程自行退出
+        local count=0
+        while check_process "${pid}" && [ $count -lt 10 ]; do
+            sleep 1
+            count=$((count + 1))
+        done
+
+        # 超时仍未退出，强制 SIGKILL
+        if check_process "${pid}"; then
+            kill -KILL "${pid}"
+            sleep 1
+        fi
+
+        rm -f "${PID_FILE}"
+    fi
+
+    # 兜底：通过进程名匹配清理残留进程
+    pkill -f "clawbot-gateway" 2>/dev/null || true
+
+    return 0
+}
+
+# ============================================================
+# 检查进程是否存活
+# ============================================================
+check_process() {
+    local pid=$1
+    if kill -0 "${pid}" 2>/dev/null; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# ============================================================
+# 查询服务状态（返回 0=运行中，3=已停止）
+# ============================================================
+status() {
+    if [ -f "${PID_FILE}" ]; then
+        pid=$(head -n 1 "${PID_FILE}" | tr -d '[:space:]')
+        if check_process "${pid}"; then
+            return 0
+        else
+            # PID 文件存在但进程已死，清理残留
+            rm -f "${PID_FILE}"
+        fi
+    fi
+    return 1
+}
+
+# ============================================================
+# 入口：飞牛系统通过 $1 参数调用 start/stop/status
+# ============================================================
+case $1 in
+start)
+    start_process
+    exit $?
+    ;;
+stop)
+    stop_process
+    exit $?
+    ;;
+status)
+    if status; then
+        exit 0    # 0 = 正在运行
+    else
+        exit 3    # 3 = 已停止
+    fi
+    ;;
+*)
+    exit 1
+    ;;
+esac

@@ -1,0 +1,18 @@
+#!/bin/bash
+# ============================================================
+# ClawBot Gateway for fnOS - 卸载前准备 (uninstall_init)
+# ============================================================
+# 执行时机：卸载前
+# 用途：停止服务、提示用户确认
+# ============================================================
+
+# 尝试停止服务（如果正在运行）
+if [ -f "${TRIM_PKGVAR}/clawbot.pid" ]; then
+    PID=$(cat "${TRIM_PKGVAR}/clawbot.pid")
+    if kill -0 "${PID}" 2>/dev/null; then
+        kill -TERM "${PID}" 2>/dev/null || true
+        sleep 2
+    fi
+fi
+
+exit 0

@@ -1,0 +1,42 @@
+[
+    {
+        "stepTitle": "欢迎安装 ClawBot Gateway",
+        "items": [
+            {
+                "type": "text",
+                "field": "wizard_port",
+                "label": "服务端口",
+                "initValue": "6798",
+                "rules": [
+                    {
+                        "required": true,
+                        "message": "请输入服务端口号"
+                    },
+                    {
+                        "pattern": "^[0-9]+$",
+                        "message": "端口号必须为数字"
+                    }
+                ]
+            },
+            {
+                "type": "password",
+                "field": "wizard_password",
+                "label": "登录密码",
+                "rules": [
+                    {
+                        "required": true,
+                        "message": "请输入登录密码"
+                    },
+                    {
+                        "min": 6,
+                        "message": "密码长度至少 6 位"
+                    }
+                ]
+            },
+            {
+                "type": "tips",
+                "helpText": "ClawBot Gateway 是一个微信 iLink 消息网关，支持多后端适配、智能路由和虚拟 Bot 代理。<br><br>默认端口 6798，Web 管理界面可通过 http://飞牛IP:端口 访问。<br>请设置登录密码，安装后可在配置页面修改。"
+            }
+        ]
+    }
+]

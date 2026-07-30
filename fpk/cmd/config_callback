@@ -1,0 +1,41 @@
+#!/bin/bash
+# ============================================================
+# ClawBot Gateway for fnOS - 配置变更后回调 (config_callback)
+# ============================================================
+# 执行时机：用户在飞牛应用中心修改配置并保存之后
+# 用途：根据向导输入更新端口和密码
+#
+# 向导传入的环境变量：
+#   wizard_port     - 用户配置的服务端口
+#   wizard_password - 用户配置的新密码（空则不修改）
+# ============================================================
+
+DATA_DIR="${TRIM_PKGVAR}"
+APP_BIN="${TRIM_APPDEST}/server/clawbot-gateway"
+DB_PATH="${DATA_DIR}/clawbot.db"
+CONFIG_DIR="${DATA_DIR}/config"
+
+mkdir -p "${CONFIG_DIR}"
+
+# ---- 更新端口配置 ----
+cat > "${CONFIG_DIR}/wizard.json" << EOF
+{
+    "service_port": "${wizard_port:-6798}"
+}
+EOF
+
+# ---- 如果提供了新密码，则更新 ----
+PASSWORD="${wizard_password}"
+if [ -n "${PASSWORD}" ]; then
+    if [ -f "${APP_BIN}" ]; then
+        chmod 755 "${APP_BIN}"
+        export CLAWBOT_DB_PATH="${DB_PATH}"
+        "${APP_BIN}" reset-password "${PASSWORD}" > /dev/null 2>&1
+        if [ $? -ne 0 ]; then
+            echo "更新登录密码失败" > "${TRIM_TEMP_LOGFILE}"
+            exit 1
+        fi
+    fi
+fi
+
+exit 0
