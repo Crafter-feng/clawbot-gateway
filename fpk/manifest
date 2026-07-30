@@ -24,12 +24,12 @@ platform = x86
 source                = thirdparty
 
 # 维护者信息
-maintainer            = ClawBot Team
-maintainer_url        = https://github.com/unique/clawbot-gateway
+maintainer            = Crafter-feng
+maintainer_url        = https://github.com/Crafter-feng/clawbot-gateway
 
 # 分发者信息
-distributor           = ClawBot
-distributor_url       = https://github.com/unique/clawbot-gateway
+distributor           = Crafter-feng
+distributor_url       = https://github.com/Crafter-feng/clawbot-gateway
 
 # 最低支持的飞牛系统版本
 os_min_version        = 0.9.0
