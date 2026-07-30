@@ -23,7 +23,11 @@ func TestGenerateSecret(t *testing.T) {
 }
 
 func TestLoadFromDB(t *testing.T) {
-	// Create test database
+	// 确保环境变量不干扰测试
+	origPort := os.Getenv("CLAWBOT_PORT")
+	os.Unsetenv("CLAWBOT_PORT")
+	defer os.Setenv("CLAWBOT_PORT", origPort)
+
 	dbPath := t.TempDir() + "/test.db"
 	db, err := database.New(dbPath)
 	if err != nil {
@@ -31,15 +35,13 @@ func TestLoadFromDB(t *testing.T) {
 	}
 	defer db.Close()
 
-	// Load config
 	cfg := LoadFromDB(db)
 
-	// Check defaults
 	if cfg.Server.Host != "0.0.0.0" {
 		t.Errorf("Server.Host want '0.0.0.0', got '%s'", cfg.Server.Host)
 	}
-	if cfg.Server.Port != 8080 {
-		t.Errorf("Server.Port want 8080, got %d", cfg.Server.Port)
+	if cfg.Server.Port != 6798 {
+		t.Errorf("Server.Port want 6798, got %d", cfg.Server.Port)
 	}
 	if cfg.ClawBot.BaseURL != "https://ilinkai.weixin.qq.com" {
 		t.Errorf("ClawBot.BaseURL want 'https://ilinkai.weixin.qq.com', got '%s'", cfg.ClawBot.BaseURL)

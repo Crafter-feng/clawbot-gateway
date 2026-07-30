@@ -1,6 +1,6 @@
 // 在 Tauri 生产模式下使用绝对 URL，开发模式使用相对路径（Vite proxy）
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
-const BASE_URL = isTauri ? 'http://localhost:8080' : ''
+const BASE_URL = isTauri ? 'http://localhost:6798' : ''
 
 let token: string | null = null
 let onUnauthorized: (() => void) | null = null

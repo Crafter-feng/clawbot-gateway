@@ -50,7 +50,7 @@ func LoadFromDB(db *database.DB) *Config {
 
 	// 服务器配置
 	cfg.Server.Host = envOrDefault("CLAWBOT_HOST", db.GetSetting("server.host"))
-	cfg.Server.Port = intEnvOrDefault("CLAWBOT_PORT", db.GetSetting("server.port"), 8080)
+	cfg.Server.Port = intEnvOrDefault("CLAWBOT_PORT", db.GetSetting("server.port"), 6798)
 
 	// iLink 配置
 	cfg.ClawBot.BaseURL = envOrDefault("WEIXIN_BASE_URL", db.GetSetting("clawbot.base_url"))
@@ -84,7 +84,7 @@ func LoadFromDB(db *database.DB) *Config {
 	cfg.API.JWTExpiryHours = intEnvOrDefault("CLAWBOT_JWT_EXPIRY_HOURS", db.GetSetting("api.jwt_expiry_hours"), 24)
 	originStr := envOrDefault("CLAWBOT_ALLOWED_ORIGINS", db.GetSetting("api.allowed_origins"))
 	if originStr == "" {
-		cfg.API.AllowedOrigins = []string{"http://localhost:5173", "http://localhost:8080"}
+		cfg.API.AllowedOrigins = []string{"http://localhost:5173", "http://localhost:6798"}
 	} else if originStr == "*" {
 		cfg.API.AllowedOrigins = []string{"*"}
 	} else {

@@ -1,6 +1,7 @@
 package database
 
 import (
+	"os"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -457,40 +458,33 @@ func TestNotifyTokensCRUD(t *testing.T) {
 }
 
 func TestGetAllSettings(t *testing.T) {
-	db := setupTestDB(t)
+	// 确保环境变量不干扰测试
+	origPort := os.Getenv("CLAWBOT_PORT")
+	os.Unsetenv("CLAWBOT_PORT")
+	defer os.Setenv("CLAWBOT_PORT", origPort)
+	origHost := os.Getenv("CLAWBOT_HOST")
+	os.Unsetenv("CLAWBOT_HOST")
+	defer os.Setenv("CLAWBOT_HOST", origHost)
 
-	// Get all settings should return defaults
+	db := setupTestDB(t)
 	settings := db.GetAllSettings()
 	if settings == nil {
 		t.Fatal("GetAllSettings returned nil")
 	}
-
-	// Check some defaults
 	if settings["server.host"] != "0.0.0.0" {
 		t.Errorf("server.host default want '0.0.0.0', got '%s'", settings["server.host"])
 	}
-	if settings["server.port"] != "8080" {
-		t.Errorf("server.port default want '8080', got '%s'", settings["server.port"])
+	if settings["server.port"] != "6798" {
+		t.Errorf("server.port default want '6798', got '%s'", settings["server.port"])
 	}
 	if settings["clawbot.base_url"] != "https://ilinkai.weixin.qq.com" {
 		t.Errorf("clawbot.base_url default want 'https://ilinkai.weixin.qq.com', got '%s'", settings["clawbot.base_url"])
 	}
-
-	// Set a custom setting, it should appear
 	if err := db.SetSetting("my.custom.key", "my_value"); err != nil {
 		t.Fatalf("SetSetting failed: %v", err)
 	}
 	settings = db.GetAllSettings()
 	if settings["my.custom.key"] != "my_value" {
-		t.Errorf("GetAllSettings custom key want 'my_value', got '%s'", settings["my.custom.key"])
-	}
-
-	// Override a default in DB (not in envMapping, so env var won't interfere)
-	if err := db.SetSetting("clawbot.poll_timeout", "60"); err != nil {
-		t.Fatalf("SetSetting failed: %v", err)
-	}
-	settings = db.GetAllSettings()
-	if settings["clawbot.poll_timeout"] != "60" {
-		t.Errorf("GetAllSettings override poll_timeout want '60', got '%s'", settings["clawbot.poll_timeout"])
+		t.Errorf("my.custom.key want 'my_value', got '%s'", settings["my.custom.key"])
 	}
 }

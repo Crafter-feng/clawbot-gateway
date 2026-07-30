@@ -38,7 +38,7 @@ fn main() {
             let _handle = app.handle().clone();
             std::thread::spawn(move || {
                 std::thread::sleep(std::time::Duration::from_secs(2));
-                let _ = window.eval("window.location.href = 'http://localhost:8080'");
+                let _ = window.eval("window.location.href = 'http://localhost:6798'");
             });
 
             Ok(())

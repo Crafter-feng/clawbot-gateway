@@ -8,7 +8,7 @@ import (
 // 默认配置值
 var defaults = map[string]string{
 	"server.host":           "0.0.0.0",
-	"server.port":           "8080",
+	"server.port":           "6798",
 	"clawbot.base_url":      "https://ilinkai.weixin.qq.com",
 	"clawbot.poll_timeout":  "35",
 	"clawbot.bot_type":      "3",

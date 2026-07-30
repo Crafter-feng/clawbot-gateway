@@ -26,11 +26,11 @@ COPY --from=backend-builder /clawbot-gateway .
 COPY --from=frontend-builder /build/web/dist/ web/dist/
 
 VOLUME ["/app/data"]
-EXPOSE 8080
+EXPOSE 6798
 
 ENV CLAWBOT_DB_PATH=data/clawbot.db
 ENV CLAWBOT_HOST=0.0.0.0
-ENV CLAWBOT_PORT=8080
+ENV CLAWBOT_PORT=6798
 ENV CLAWBOT_LOG_LEVEL=info
 
 CMD ["./clawbot-gateway"]
