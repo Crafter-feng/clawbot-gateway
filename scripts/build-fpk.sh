@@ -93,7 +93,7 @@ echo "✅ Go 后端构建完成: $(du -h fpk/app/server/clawbot-gateway | cut -f
 echo ""
 echo "📂 复制前端文件..."
 rm -rf fpk/app/server/web
-cp -r web/dist fpk/app/server/web/
+mkdir -p fpk/app/server/web && cp -r web/dist fpk/app/server/web/
 echo "✅ 前端文件已复制"
 
 # 复制前端配置到 app/ui/
