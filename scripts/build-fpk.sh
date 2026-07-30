@@ -96,13 +96,11 @@ rm -rf fpk/app/server/web
 mkdir -p fpk/app/server/web && cp -r web/dist fpk/app/server/web/
 echo "✅ 前端文件已复制"
 
-# 复制前端配置到 app/ui/
+# 复制桌面图标（fnOS 要求 icon-{size}.png 格式）
 rm -rf fpk/app/ui/images
 mkdir -p fpk/app/ui/images
-# 从构建好的前端复制图标
-if [ -f fpk/app/server/web/assets/favicon*.svg ]; then
-    cp fpk/app/server/web/assets/favicon*.svg fpk/app/ui/images/icon-256.svg 2>/dev/null || true
-fi
+cp fpk/ICON.PNG fpk/app/ui/images/icon-64.png
+cp fpk/ICON_256.PNG fpk/app/ui/images/icon-256.png
 echo "✅ 前端资源已复制"
 
 # ---- 4. 更新 manifest 版本号和平台 ----
