@@ -13,6 +13,12 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    if (!authenticated) {
+      navigate('/login', { replace: true })
+    }
+  }, [authenticated, navigate])
+
+  useEffect(() => {
     api.setOnUnauthorized(() => {
       logout()
       navigate('/login', { replace: true })
