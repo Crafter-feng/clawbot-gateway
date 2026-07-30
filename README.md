@@ -64,7 +64,101 @@ cp .env.example .env
 go run main.go
 
 # 3. 打开管理面板
-# 浏览器访问 http://localhost:8080
+# 浏览器访问 http://localhost:6798
+```
+
+## Docker 部署
+
+使用 GitHub Container Registry 上的预构建镜像，无需本地编译。
+
+### 方式一：命令行部署
+
+```bash
+# 拉取镜像
+docker pull ghcr.io/crafter-feng/clawbot-gateway:latest
+
+# 创建数据目录
+mkdir -p data
+
+# 启动容器
+docker run -d \
+  --name clawbot-gateway \
+  --restart unless-stopped \
+  -p 6798:6798 \
+  -v $(pwd)/data:/app/data \
+  -e CLAWBOT_LOGIN_PASSWORD=your_password \
+  ghcr.io/crafter-feng/clawbot-gateway:latest
+```
+
+首次启动后，打开 `http://localhost:6798` 使用设置的密码登录管理面板。
+
+### 方式二：docker-compose 部署
+
+创建 `docker-compose.yml`：
+
+```yaml
+services:
+  clawbot-gateway:
+    image: ghcr.io/crafter-feng/clawbot-gateway:latest
+    container_name: clawbot-gateway
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    ports:
+      - "6798:6798"
+    environment:
+      - TZ=Asia/Shanghai
+      - CLAWBOT_DB_PATH=data/clawbot.db
+      - CLAWBOT_HOST=0.0.0.0
+      - CLAWBOT_PORT=6798
+      - CLAWBOT_LOG_LEVEL=info
+      # 首次启动会自动生成密码（日志中会显示）
+      # 如需固定密码，取消注释下面一行：
+      # - CLAWBOT_LOGIN_PASSWORD=your_password
+    volumes:
+      - ./data:/app/data
+```
+
+```bash
+# 启动
+docker compose up -d
+
+# 查看日志（首次启动时查看自动生成的密码）
+docker compose logs -f
+
+# 停止
+docker compose down
+```
+
+### 环境变量说明
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `CLAWBOT_DB_PATH` | `data/clawbot.db` | 数据库文件路径 |
+| `CLAWBOT_HOST` | `0.0.0.0` | 监听地址 |
+| `CLAWBOT_PORT` | `6798` | 监听端口 |
+| `CLAWBOT_LOGIN_PASSWORD` | 自动生成 | 登录密码（不设置则自动生成并打印到日志） |
+| `CLAWBOT_JWT_SECRET` | 自动生成 | JWT 签名密钥 |
+| `CLAWBOT_LOG_LEVEL` | `info` | 日志级别 |
+| `WEIXIN_TOKEN` | — | 微信 Bot Token |
+| `WEIXIN_ACCOUNT_ID` | — | 微信账号 ID |
+
+### 管理命令
+
+```bash
+# 重置密码
+docker exec clawbot-gateway ./clawbot-gateway reset-password
+docker exec clawbot-gateway ./clawbot-gateway reset-password myNewPass
+
+# 查看版本
+docker exec clawbot-gateway ./clawbot-gateway version
+
+# 查看日志
+docker logs clawbot-gateway
 ```
 
 ## CLI 命令
