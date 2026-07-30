@@ -99,15 +99,15 @@ echo "✅ 前端文件已复制"
 # 复制桌面图标（fnOS 要求 icon-{size}.png 格式）
 rm -rf fpk/app/ui/images
 mkdir -p fpk/app/ui/images
-cp fpk/ICON.PNG fpk/app/ui/images/icon-64.png
-cp fpk/ICON_256.PNG fpk/app/ui/images/icon-256.png
+cp fpk/ICON.PNG fpk/app/ui/images/icon_64.png
+cp fpk/ICON_256.PNG fpk/app/ui/images/icon_256.png
 echo "✅ 前端资源已复制"
 
 # ---- 4. 更新 manifest 版本号和平台 ----
 echo ""
 echo "📝 更新 manifest..."
-sed -i '' "s/^version.*/version = ${VERSION}/" fpk/manifest
-sed -i '' "s/^platform.*/platform = ${FNPLATFORM}/" fpk/manifest
+sed -i "s/^version.*/version = ${VERSION}/" fpk/manifest
+sed -i "s/^platform.*/platform = ${FNPLATFORM}/" fpk/manifest
 echo "✅ manifest 已更新"
 
 # ---- 5. 修复脚本权限 ----

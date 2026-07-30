@@ -2,7 +2,7 @@
     ".url": {
         "clawbot-gateway.Application": {
             "title": "ClawBot Gateway",
-            "icon": "images/icon-{0}.png",
+            "icon": "images/icon_{0}.png",
             "type": "url",
             "protocol": "http",
             "port": "6798",
