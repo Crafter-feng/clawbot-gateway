@@ -44,8 +44,6 @@ export default function LogPage() {
   const [category, setCategory] = useState('')
   const [subCmp, setSubCmp] = useState('')
   const [limit, setLimit] = useState('100')
-  const [autoRefresh, setAutoRefresh] = useState(true)
-  const timerRef = useRef<ReturnType<typeof setInterval>>(undefined)
   const listRef = useRef<HTMLDivElement>(null)
 
   // 当前选中分类对应的 component 筛选值
@@ -67,14 +65,6 @@ export default function LogPage() {
   }, [activeComponent, limit])
 
   useEffect(() => { fetchLogs() }, [fetchLogs])
-  useEffect(() => {
-    if (autoRefresh) {
-      timerRef.current = setInterval(fetchLogs, 5000)
-      return () => clearInterval(timerRef.current)
-    }
-    clearInterval(timerRef.current)
-    timerRef.current = undefined
-  }, [autoRefresh, fetchLogs])
 
   const handleCategory = (key: string) => {
     setCategory(key)
@@ -179,7 +169,7 @@ export default function LogPage() {
           {/* Spacer */}
           <div style={{ flex: 1 }} />
 
-          {/* Right: count + auto-refresh + refresh */}
+          {/* Right: count + refresh */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <label style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>条数</label>
@@ -201,34 +191,6 @@ export default function LogPage() {
                 ))}
               </select>
             </div>
-
-            <label style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '5px',
-              fontSize: '12px',
-              color: 'var(--text-muted)',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}>
-              <input
-                type="checkbox"
-                checked={autoRefresh}
-                onChange={e => setAutoRefresh(e.target.checked)}
-                style={{ accentColor: 'var(--accent)' }}
-              />
-              {autoRefresh ? '自动刷新中' : '自动刷新'}
-              {autoRefresh && (
-                <span style={{
-                  display: 'inline-block',
-                  width: 6,
-                  height: 6,
-                  borderRadius: '50%',
-                  background: '#22c55e',
-                  animation: 'pulse 2s ease-in-out infinite',
-                }} />
-              )}
-            </label>
 
             <Button
               onClick={() => { setLoading(true); fetchLogs() }}
@@ -384,7 +346,6 @@ export default function LogPage() {
       {/* Keyframes injection */}
       <style>{`
         @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
         @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
     </div>

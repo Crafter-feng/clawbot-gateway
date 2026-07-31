@@ -43,6 +43,7 @@ func TestParseUse(t *testing.T) {
 		{"/use  echo", "/use  echo", "switch_backend", false},
 		{"/use unknown", "/use unknown", "switch_backend", false},
 		{"/use ", "/use ", "show_status", false},
+		{"/use main", "/use main", "switch_backend", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -194,6 +195,7 @@ func TestExecuteAllActions(t *testing.T) {
 		wantSubstr string
 	}{
 		{"switch_backend valid", "switch_backend", []string{"echo"}, "已切换至"},
+		{"switch_backend main", "switch_backend", []string{"main"}, "已切换至主命令模式"},
 		{"switch_backend no args", "switch_backend", []string{}, "请指定后端"},
 		{"switch_backend nonexistent", "switch_backend", []string{"nonexistent"}, "不存在"},
 		{"list_backends", "list_backends", nil, "可用后端"},
@@ -238,6 +240,32 @@ func TestExecuteSwitchBackend(t *testing.T) {
 	}
 }
 
+func TestExecuteSwitchBackendMain(t *testing.T) {
+	r := route.NewRouter()
+	r.SetDefaultBackend("default")
+	af := adapter.NewAdapterFactory()
+	af.Register(adapter.NewEchoAdapter("echo", "Echo Debug"))
+	cp := NewCommandProcessor(r, af, nil, nil)
+	msg := bot.NormalizedMessage{FromUser: "user1", Content: "test"}
+
+	// 先切换到 echo
+	cp.Execute(&CommandMatch{Action: "switch_backend", Args: []string{"echo"}}, msg)
+	backendID, ok := r.GetUserBackend("user1")
+	if !ok || backendID != "echo" {
+		t.Fatalf("after switch, GetUserBackend = %s, %v, want echo, true", backendID, ok)
+	}
+
+	// /use main 清除后端选择
+	reply := cp.Execute(&CommandMatch{Action: "switch_backend", Args: []string{"main"}}, msg)
+	if !strings.Contains(reply, "已切换至主命令模式") {
+		t.Errorf("switch_backend main reply = %q, want containing '已切换至主命令模式'", reply)
+	}
+	_, ok = r.GetUserBackend("user1")
+	if ok {
+		t.Errorf("after /use main, GetUserBackend should return ok=false")
+	}
+}
+
 func TestExecuteListBackends(t *testing.T) {
 	af := adapter.NewAdapterFactory()
 	af.Register(adapter.NewEchoAdapter("echo", "Echo Debug"))
@@ -271,6 +299,9 @@ func TestExecuteShowHelp(t *testing.T) {
 	reply := cp.Execute(&CommandMatch{Action: "show_help"}, msg)
 	if !strings.Contains(reply, "帮助") {
 		t.Errorf("show_help reply = %q, want containing '帮助'", reply)
+	}
+	if !strings.Contains(reply, "/use main") {
+		t.Errorf("show_help reply = %q, want containing '/use main'", reply)
 	}
 	if !strings.Contains(reply, "/echo") {
 		t.Errorf("show_help reply = %q, want containing '/echo'", reply)

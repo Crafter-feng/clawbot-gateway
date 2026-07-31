@@ -9,7 +9,7 @@
 appname               = clawbot-gateway
 
 # 应用版本号
-version = 1.0.0
+version = 0.0.3
 
 # 应用中心显示名称
 display_name          = ClawBot Gateway
@@ -46,5 +46,3 @@ service_port          = 6798
 # 是否检查端口冲突
 checkport             = true
 
-# 更新日志（支持 HTML，展示在应用中心更新页面）
-changelog             = <b>v1.0.0</b><ul><li>初始版本发布</li><li>支持微信多账号管理</li><li>支持智能消息路由</li><li>支持多后端适配器</li><li>支持虚拟 Bot 代理</li><li>内置可视化 Web 管理面板</li></ul>

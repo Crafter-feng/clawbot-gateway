@@ -153,7 +153,8 @@ NormalizedMessage (标准化)
 │  解析以 / 开头的命令                                        │
 │                                                            │
 │  内部命令（Gateway 处理，不转发）：                         │
-│    /use            → 显示状态 / 切换后端                    │
+│    /use            → 显示状态 / 切换后端
+    /use main       → 回到主命令模式                    │
 │    /backends       → 列出所有后端                            │
 │    /help           → 显示 Gateway 帮助                      │
 │                                                            │
@@ -922,6 +923,7 @@ func generateID() string {
 |------|------|
 | `/use` | 显示当前状态（后端、会话数） |
 | `/use <后端ID>` | 持久切换到指定后端 |
+| `/use main` | 回到主命令模式（清除后端选择） |
 | `/backends` | 列出所有可用后端（含健康状态） |
 | `/help` | 显示 Gateway 帮助信息 |
 

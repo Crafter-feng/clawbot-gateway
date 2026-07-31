@@ -533,6 +533,13 @@ func (cp *CommandProcessor) Execute(cmd *CommandMatch, msg bot.NormalizedMessage
 			return "❌ 请指定后端 ID，例如: /use openclaw\n输入 /backends 查看可用后端"
 		}
 		backendID := cmd.Args[0]
+
+		// /use main — 清除后端选择，回到无后端状态
+		if backendID == "main" {
+			cp.router.ClearUserBackend(msg.FromUser)
+			return "✅ 已切换至主命令模式，后续消息将按路由规则处理"
+		}
+
 		bak, ok := cp.adapters.Get(backendID)
 		if !ok {
 			available := cp.adapters.List()
@@ -576,7 +583,7 @@ func (cp *CommandProcessor) Execute(cmd *CommandMatch, msg bot.NormalizedMessage
 			}
 		}
 		currentBackend, hasOverride := cp.router.GetUserBackend(msg.FromUser)
-		current := "未选择"
+		current := "主命令模式（未选择）"
 		if hasOverride {
 			current = currentBackend
 		}
@@ -591,6 +598,7 @@ func (cp *CommandProcessor) Execute(cmd *CommandMatch, msg bot.NormalizedMessage
 		lines := []string{"📖 **帮助**"}
 		lines = append(lines, "/use              — 查看当前状态")
 		lines = append(lines, "/use <后端ID>     — 切换后端（持久）")
+		lines = append(lines, "/use main         — 回到主命令模式（清除后端选择）")
 		lines = append(lines, "/backends         — 列出所有后端")
 		lines = append(lines, "/help             — 显示此帮助")
 		if len(backends) > 0 {

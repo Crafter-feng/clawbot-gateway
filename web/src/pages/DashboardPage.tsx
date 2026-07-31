@@ -191,7 +191,7 @@ export default function DashboardPage() {
 
         {/* 版本信息 */}
         <div style={{ textAlign: 'center', padding: 'var(--space-4)', color: 'var(--text-muted)', fontSize: 'var(--font-size-sm)' }}>
-          ClawBot Gateway {stats.version || 'dev'} · Built with Go + React
+          ClawBot Gateway {stats.version || 'dev'}
         </div>
       </div>
     </div>

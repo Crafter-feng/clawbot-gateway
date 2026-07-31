@@ -41,7 +41,7 @@
 | **iLink 客户端** | 连接腾讯 iLink API，多账号管理，QR 扫码登录 |
 | **iLink 服务端** | 透明代理，供虚拟 Bot 连接 |
 | **虚拟 Bot** | 基于一个真实微信账号，虚拟出多个独立 Bot 实例 |
-| **命令切换** | `/use hermes` 切换后端，`/hermes` 一次性转发 |
+| **命令切换** | `/use hermes` 切换后端，`/use main` 回到主命令模式，`/hermes` 一次性转发 |
 | **OpenAI 兼容** | 支持 Claude、DeepSeek、GPT 等所有 OpenAI 兼容 API |
 | **Notify 通知** | 允许外部系统向微信用户发送消息 |
 | **Web 管理** | React SPA，支持后端管理、路由配置、账号管理 |
@@ -211,6 +211,7 @@ CLAWBOT_LOG_LEVEL=info
 |------|------|
 | `/use` | 显示当前状态 |
 | `/use <backend>` | 切换到指定后端（持久） |
+| `/use main` | 回到主命令模式（清除后端选择） |
 | `/backends` | 列出所有可用后端 |
 | `/help` | 显示帮助 |
 | `/<backend>` | **一次性转发**到该后端（不切换） |
@@ -218,6 +219,7 @@ CLAWBOT_LOG_LEVEL=info
 **示例：**
 ```
 /use hermes          → 切换到 Hermes（后续消息都走 Hermes）
+/use main            → 回到主命令模式（清除后端选择）
 /hermes              → 本次消息转发到 Hermes（不切换）
 /openclaw            → 一次性转发到 OpenClaw
 /backends            → 查看所有后端
@@ -246,6 +248,8 @@ POST /ilink/bot/sendmessage     发送消息（透明代理）
 POST /ilink/bot/sendtyping      输入状态（透明代理）
 POST /ilink/bot/getconfig       获取配置（透明代理）
 POST /ilink/bot/getuploadurl    获取上传 URL（透明代理）
+```
+
 ### 管理 API（需鉴权）
 ```
 GET    /api/v1/backends             列出后端
@@ -317,4 +321,4 @@ clawbot-gateway/
 
 ## License
 
-MIT
+MIT — 详见 [LICENSE](LICENSE)
