@@ -149,6 +149,7 @@ jobs:
       - name: 复制前端文件
         run: |
           rm -rf fpk/app/server/web
+          mkdir -p fpk/app/server/web
           cp -r web/dist fpk/app/server/web/
 
       - name: 更新 manifest
@@ -287,9 +288,6 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           path: ./artifacts/
-          pattern: |
-            fpk-*
-            desktop-*
 
       - name: 展开目录结构
         run: |
