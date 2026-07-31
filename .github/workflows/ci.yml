@@ -83,7 +83,7 @@ jobs:
     name: 构建 FPK (${{ matrix.arch }})
     needs: [test]
     if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
         include:
@@ -91,10 +91,12 @@ jobs:
             goarch: amd64
             fnpack_arch: amd64
             fnplatform: X86
+            runner: ubuntu-latest
           - arch: arm64
             goarch: arm64
             fnpack_arch: arm64
             fnplatform: ARM
+            runner: ubuntu-24.04-arm
     defaults:
       run:
         working-directory: .
@@ -186,12 +188,6 @@ jobs:
             target: aarch64-apple-darwin
             goos: darwin
             goarch: arm64
-            binary_suffix: ''
-          - os: macOS-Intel
-            runner: macos-latest
-            target: x86_64-apple-darwin
-            goos: darwin
-            goarch: amd64
             binary_suffix: ''
           - os: Windows
             runner: windows-latest
