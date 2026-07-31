@@ -29,7 +29,10 @@ func (s *APIServer) handleGetQRCode(c *gin.Context) {
 		}
 	}
 
-	// 调用真实 iLink API 获取二维码
+	// 调用真实 iLink API 获取二维码（使用 creds 中的 baseURL）
+	if creds != nil && creds.BaseURL != "" {
+		s.connector.SetBaseURL(creds.BaseURL)
+	}
 	qrData, err := s.connector.GetQRCode(c.Request.Context())
 	if err != nil {
 		s.log.Error("get QR code failed", "error", err)
@@ -46,8 +49,8 @@ func (s *APIServer) handleGetQRCode(c *gin.Context) {
 		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
-	// 轮询 goroutine 在 CreateScan 内创建自己的派生 context 并管理生命周期，此处可安全取消
-	scanCancel()
+	// 轮询 goroutine 在 CreateScan 内创建自己的派生 context 并管理生命周期，不取消父 context
+	_ = scanCancel
 
 	c.JSON(200, gin.H{
 		"success": true,
