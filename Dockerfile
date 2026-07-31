@@ -1,4 +1,4 @@
-FROM node:22-alpine AS frontend-builder
+FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend-builder
 
 WORKDIR /build/web
 COPY web/package.json web/package-lock.json ./
@@ -6,13 +6,15 @@ RUN npm ci
 COPY web/ .
 RUN npm run build
 
-FROM golang:1.22-alpine AS backend-builder
+FROM --platform=$BUILDPLATFORM golang:1.22-alpine AS backend-builder
+
+ARG TARGETARCH
 
 WORKDIR /build
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o /clawbot-gateway .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /clawbot-gateway .
 
 FROM alpine:3.19
 
