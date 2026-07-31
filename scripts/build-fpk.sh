@@ -17,8 +17,9 @@ cd "${SCRIPT_DIR}"
 # ---- 解析参数 ----
 VERSION=""
 ARCH="x86_64"
+GOARCH="amd64"
+FNPACK_ARCH="amd64"
 FNPLATFORM="x86"
-NODE_ARCH="x64"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -31,12 +32,14 @@ while [[ $# -gt 0 ]]; do
                 x86_64|x86|amd64)
                     ARCH="x86_64"
                     FNPLATFORM="x86"
-                    NODE_ARCH="x64"
+                    GOARCH="amd64"
+                    FNPACK_ARCH="amd64"
                     ;;
                 arm64|arm|aarch64)
                     ARCH="arm64"
                     FNPLATFORM="arm"
-                    NODE_ARCH="arm64"
+                    GOARCH="arm64"
+                    FNPACK_ARCH="arm64"
                     ;;
                 *)
                     echo "不支持的架构: $2 (可选: x86_64, arm64)"
@@ -76,7 +79,7 @@ echo "============================================"
 echo ""
 echo "📦 构建前端..."
 cd web
-npm install --silent 2>/dev/null
+npm install --include=dev --silent 2>/dev/null
 npm run build
 cd "${SCRIPT_DIR}"
 echo "✅ 前端构建完成"
@@ -84,7 +87,7 @@ echo "✅ 前端构建完成"
 # ---- 2. 构建 Go 后端 ----
 echo ""
 echo "🔨 构建 Go 后端 (linux/amd64)..."
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build \
+GOOS=linux GOARCH=${GOARCH} CGO_ENABLED=0 go build \
     -ldflags="-X 'clawbot-gateway/internal/version.Version=${VERSION}' -X 'clawbot-gateway/internal/version.Commit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)' -X 'clawbot-gateway/internal/version.BuildTime=$(date -u '+%Y-%m-%dT%H:%M:%SZ')'" \
     -o "fpk/app/server/clawbot-gateway" .
 echo "✅ Go 后端构建完成: $(du -h fpk/app/server/clawbot-gateway | cut -f1)"
@@ -123,7 +126,7 @@ echo ""
 echo "📦 下载 fnpack..."
 FNPACK="/tmp/fnpack"
 if [ ! -f "${FNPACK}" ]; then
-    curl -fsSL -o "${FNPACK}" "https://static2.fnnas.com/fnpack/fnpack-1.2.1-linux-${NODE_ARCH}"
+    curl -fsSL -o "${FNPACK}" "https://static2.fnnas.com/fnpack/fnpack-1.2.1-linux-${FNPACK_ARCH}"
     chmod +x "${FNPACK}"
 fi
 echo "✅ fnpack 就绪"
