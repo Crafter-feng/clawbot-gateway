@@ -32,6 +32,17 @@ jobs:
       - name: 运行 Go 测试
         run: go test -v -race -count=1 ./...
 
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: 验证前端构建
+        run: |
+          cd web
+          npm ci
+          npm run build
+
   # ============================================
   # Docker 镜像构建
   # ============================================
