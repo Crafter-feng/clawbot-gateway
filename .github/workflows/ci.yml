@@ -173,14 +173,15 @@ jobs:
           chmod +x /tmp/fnpack
           cd fpk
           /tmp/fnpack build --directory .
-          mv clawbot-gateway.fpk "clawbot-gateway-${{ matrix.fnplatform }}.fpk"
-          echo "✅ FPK: $(ls -lh clawbot-gateway-${{ matrix.fnplatform }}.fpk)"
+          mv clawbot-gateway.fpk "clawbot-gateway-v${{ steps.version.outputs.version }}-${{ matrix.fnplatform }}.fpk"
+          echo "✅ FPK: $(ls -lh clawbot-gateway-v${{ steps.version.outputs.version }}-${{ matrix.fnplatform }}.fpk)"
 
       - name: 上传 FPK
         uses: actions/upload-artifact@v7
         with:
-          name: fpk-${{ matrix.arch }}
+          name: fpk-${{ matrix.arch }}-v${{ steps.version.outputs.version }}
           path: fpk/clawbot-gateway-*.fpk
+          compression-level: 0
           retention-days: 30
 
   # ============================================
@@ -264,8 +265,9 @@ jobs:
       - name: 上传桌面端构建产物
         uses: actions/upload-artifact@v7
         with:
-          name: desktop-${{ matrix.os }}
+          name: desktop-${{ matrix.os }}-v${{ steps.version.outputs.version }}
           path: web/src-tauri/target/release/bundle/
+          compression-level: 0
           retention-days: 30
 
   # ============================================
@@ -286,8 +288,8 @@ jobs:
         with:
           path: ./artifacts/
           pattern: |
-            fpk-*
-            desktop-*
+            fpk-*-v${{ github.ref_name }}
+            desktop-*-v${{ github.ref_name }}
 
       - name: 展开目录结构
         run: |
