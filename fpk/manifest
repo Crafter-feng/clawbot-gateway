@@ -17,8 +17,8 @@ display_name          = ClawBot Gateway
 # 应用描述（支持 HTML 标签，展示在应用中心详情页）
 desc                  = 微信 iLink 消息网关，支持多后端适配、智能路由和虚拟 Bot 代理。<br><br><b>功能特性：</b><ul><li>微信多账号管理，扫码登录即可接入</li><li>智能消息路由：按规则分发到不同后端</li><li>后端适配器：OpenAI、Echo 调试等</li><li>虚拟 Bot 代理：提供标准 iLink 服务端 API</li><li>文件中转与通知通道</li><li>可视化 Web 管理面板 (PWA)</li></ul>
 
-# 目标平台（x86 或 arm，由 CI 构建时自动设置）
-platform = x86
+# 目标平台（x86 / arm / all）
+platform = all
 
 # 应用来源标识
 source                = thirdparty

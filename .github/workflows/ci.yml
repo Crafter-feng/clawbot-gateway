@@ -144,7 +144,6 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           sed -i "s/^version.*/version = ${VERSION}/" fpk/manifest
-          sed -i "s/^platform.*/platform = ${{ matrix.fnplatform == 'ARM' && 'arm' || 'x86' }}/" fpk/manifest
 
       - name: 修复脚本权限
         run: |
