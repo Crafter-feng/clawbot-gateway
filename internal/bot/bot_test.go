@@ -171,6 +171,18 @@ func TestConnectorContextToken(t *testing.T) {
 	}
 }
 
+func TestConnectorSetBaseURL(t *testing.T) {
+	cfg := ConnectorConfig{BaseURL: "https://original.weixin.qq.com"}
+	conn := NewConnector(cfg)
+	if conn.baseURL != "https://original.weixin.qq.com" {
+		t.Errorf("baseURL want 'https://original.weixin.qq.com', got '%s'", conn.baseURL)
+	}
+	conn.SetBaseURL("https://new.weixin.qq.com")
+	if conn.baseURL != "https://new.weixin.qq.com" {
+		t.Errorf("After SetBaseURL, baseURL want 'https://new.weixin.qq.com', got '%s'", conn.baseURL)
+	}
+}
+
 func TestConnectorSyncBufStore(t *testing.T) {
 	cfg := ConnectorConfig{BaseURL: "https://ilinkai.weixin.qq.com"}
 	conn := NewConnector(cfg)
