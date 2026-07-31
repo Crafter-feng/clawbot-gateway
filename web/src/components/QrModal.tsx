@@ -24,13 +24,10 @@ export default function QrModal({ visible, onClose }: Props) {
   const generateQR = useCallback(async (text: string) => {
     try {
       const QRCode = (await import('qrcode')).default
-      const style = getComputedStyle(document.documentElement)
-      const darkColor = style.getPropertyValue('--n-900').trim() || ''
-      const lightColor = style.getPropertyValue('--n-100').trim() || ''
       const dataUrl = await QRCode.toDataURL(text, {
         width: 320,
         margin: 2,
-        color: { dark: darkColor, light: lightColor },
+        color: { dark: '#111827', light: '#ffffff' },
       })
       setQrDataUrl(dataUrl)
     } catch {
