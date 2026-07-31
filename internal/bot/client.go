@@ -93,11 +93,7 @@ func (c *Connector) GetCredentials() *Credentials {
 	return nil
 }
 
-func (c *Connector) SetBaseURL(url string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.baseURL = url
-}
+
 
 // GetAccountTokenByVirtualID 根据虚拟 Bot ID 获取真实账号的 token
 func (c *Connector) GetAccountTokenByVirtualID(virtualAccountID string) string {

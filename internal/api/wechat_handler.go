@@ -29,10 +29,7 @@ func (s *APIServer) handleGetQRCode(c *gin.Context) {
 		}
 	}
 
-	// 调用真实 iLink API 获取二维码（使用 creds 中的 baseURL）
-	if creds != nil && creds.BaseURL != "" {
-		s.connector.SetBaseURL(creds.BaseURL)
-	}
+	// 调用真实 iLink API 获取二维码
 	qrData, err := s.connector.GetQRCode(c.Request.Context())
 	if err != nil {
 		s.log.Error("get QR code failed", "error", err)
