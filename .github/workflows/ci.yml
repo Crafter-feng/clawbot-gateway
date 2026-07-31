@@ -288,8 +288,8 @@ jobs:
         with:
           path: ./artifacts/
           pattern: |
-            fpk-*-v${{ github.ref_name }}
-            desktop-*-v${{ github.ref_name }}
+            fpk-*
+            desktop-*
 
       - name: 展开目录结构
         run: |
