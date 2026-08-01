@@ -19,8 +19,9 @@ type VirtualBot struct {
 	UserID     string        // 用户 ID（如 gw_hermes@im.wechat）
 	BaseURL    string         // iLink API 地址（用于回复类端点透明转发）
 	Token      string         // 随机生成的认证 token（持久化到数据库）
-	LastActive time.Time      // 最后活跃时间
-	CreatedAt  time.Time      // 创建时间
+	LastAccountID string        // 最后入队的消息来源真实账号 ID
+	LastActive    time.Time      // 最后活跃时间
+	CreatedAt     time.Time      // 创建时间
 
 	// 消息队列：Pipeline 路由到此后入队，外部服务 getupdates 消费
 	queueMu sync.Mutex

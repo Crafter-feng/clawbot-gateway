@@ -332,9 +332,8 @@ func (p *MessagePipeline) forwardToBackend(ctx context.Context, msg bot.Normaliz
 // 如果外部服务未传 account_id，则回退到 gw_ 前缀匹配或第一个可用账号
 func (p *MessagePipeline) SendOutgoingMessage(ctx context.Context, accountID string, body []byte) error {
 	var reqBody struct {
-		AccountID string `json:"account_id,omitempty"`
-		ToUserID  string `json:"to_user_id"`
-		Msg       struct {
+		ToUserID string `json:"to_user_id"`
+		Msg      struct {
 			ItemList []struct {
 				Type     int `json:"type"`
 				TextItem *struct {
@@ -359,13 +358,8 @@ func (p *MessagePipeline) SendOutgoingMessage(ctx context.Context, accountID str
 	if text == "" {
 		return fmt.Errorf("no text content in message")
 	}
-	// 如果外部服务传了 account_id，优先使用
-	acctID := accountID
-	if reqBody.AccountID != "" {
-		acctID = reqBody.AccountID
-	}
-	// 查找真实账号凭证
-	creds := p.findAccountCredentials(acctID)
+	// 查找真实账号凭证（Pipeline 内部维护虚拟Bot→真实账号映射）
+	creds := p.findAccountCredentials(accountID)
 	if creds == nil {
 		return fmt.Errorf("no available account for virtual bot: %s", accountID)
 	}
@@ -375,6 +369,15 @@ func (p *MessagePipeline) SendOutgoingMessage(ctx context.Context, accountID str
 // findAccountCredentials 查找虚拟 Bot 对应的真实账号凭证
 // 优先级：gw_ 前缀匹配 → 第一个可用账号
 func (p *MessagePipeline) findAccountCredentials(accountID string) *bot.Credentials {
+	// 1. 优先查找虚拟 Bot 记录的 LastAccountID（精确匹配）
+	if vbot := p.clientReg.Get(accountID); vbot != nil && vbot.LastAccountID != "" {
+		for _, a := range p.connector.GetAccounts() {
+			if a.Credentials != nil && a.Credentials.AccountID == vbot.LastAccountID {
+				return a.Credentials
+			}
+		}
+	}
+	// 2. gw_ 前缀匹配
 	token := p.connector.GetAccountTokenByVirtualID(accountID)
 	for _, a := range p.connector.GetAccounts() {
 		if a.Credentials != nil {
@@ -383,7 +386,7 @@ func (p *MessagePipeline) findAccountCredentials(accountID string) *bot.Credenti
 			}
 		}
 	}
-	// 回退：第一个可用账号
+	// 3. 回退：第一个可用账号
 	if accts := p.connector.GetAccounts(); len(accts) > 0 && accts[0].Credentials != nil {
 		return accts[0].Credentials
 	}
@@ -418,6 +421,7 @@ func (p *MessagePipeline) enqueueToVirtualBot(msg bot.NormalizedMessage, backend
 			ContextToken: msg.ContextToken,
 		}
 	}
+	vbot.LastAccountID = msg.AccountID
 	vbot.Enqueue(*rawMsg)
 	p.log.Info("enqueued to virtual bot queue", "seq", seq, "backend", backendID, "queue_len", vbot.QueueLength())
 	return true
