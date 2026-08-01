@@ -326,6 +326,62 @@ func (p *MessagePipeline) forwardToBackend(ctx context.Context, msg bot.Normaliz
 	p.log.Info("message processed", "seq", seq, "backend", backendID, "reply_chars", len(replyText))
 }
 
+// SendOutgoingMessage 由 ForwardFunc 调用，处理虚拟 Bot 的回复消息
+// 所有消息统一经过 Pipeline，Pipeline 决定如何分发
+func (p *MessagePipeline) SendOutgoingMessage(ctx context.Context, accountID string, body []byte) error {
+	var reqBody struct {
+		ToUserID string `json:"to_user_id"`
+		Msg      struct {
+			ItemList []struct {
+				Type     int `json:"type"`
+				TextItem *struct {
+					Text string `json:"text"`
+				} `json:"text_item,omitempty"`
+			} `json:"item_list"`
+		} `json:"msg"`
+	}
+	if err := json.Unmarshal(body, &reqBody); err != nil {
+		return fmt.Errorf("invalid request body: %w", err)
+	}
+	if reqBody.ToUserID == "" {
+		return fmt.Errorf("missing to_user_id")
+	}
+	text := ""
+	for _, item := range reqBody.Msg.ItemList {
+		if item.TextItem != nil {
+			text = item.TextItem.Text
+			break
+		}
+	}
+	if text == "" {
+		return fmt.Errorf("no text content in message")
+	}
+	// 查找真实账号凭证
+	creds := p.findAccountCredentials(accountID)
+	if creds == nil {
+		return fmt.Errorf("no available account for virtual bot: %s", accountID)
+	}
+	return p.connector.SendTextWithCreds(ctx, creds, reqBody.ToUserID, text, "")
+}
+
+// findAccountCredentials 查找虚拟 Bot 对应的真实账号凭证
+// 优先级：gw_ 前缀匹配 → 第一个可用账号
+func (p *MessagePipeline) findAccountCredentials(accountID string) *bot.Credentials {
+	token := p.connector.GetAccountTokenByVirtualID(accountID)
+	for _, a := range p.connector.GetAccounts() {
+		if a.Credentials != nil {
+			if token != "" && a.Credentials.Token == token {
+				return a.Credentials
+			}
+		}
+	}
+	// 回退：第一个可用账号
+	if accts := p.connector.GetAccounts(); len(accts) > 0 && accts[0].Credentials != nil {
+		return accts[0].Credentials
+	}
+	return nil
+}
+
 // enqueueToVirtualBot 将消息入队到 ilink_proxy 后端对应的虚拟 Bot 队列
 // 返回 true 表示成功，false 表示虚拟 Bot 未注册
 func (p *MessagePipeline) enqueueToVirtualBot(msg bot.NormalizedMessage, backendID string, seq int64) bool {

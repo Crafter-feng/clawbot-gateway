@@ -93,59 +93,8 @@ func (s *APIServer) Start(addr string) error {
 	// iLink API
 	ilinkServer := ilink.NewServer(s.connector, s.clientReg)
 ilinkServer.SetForwardFunc(func(ctx context.Context, accountID, endpoint string, body []byte) ([]byte, int, error) {
-		vbot := s.clientReg.Get(accountID)
-		if vbot == nil {
-			return nil, 500, fmt.Errorf("virtual bot not found: %s", accountID)
-		}
-		// 解析请求体，提取 to_user_id 和消息文本
-		var reqBody struct {
-			ToUserID string `json:"to_user_id"`
-			Msg      struct {
-				ItemList []struct {
-					Type     int `json:"type"`
-					TextItem *struct {
-						Text string `json:"text"`
-					} `json:"text_item,omitempty"`
-				} `json:"item_list"`
-			} `json:"msg"`
-		}
-		if err := json.Unmarshal(body, &reqBody); err != nil {
-			return nil, 400, fmt.Errorf("invalid request body: %w", err)
-		}
-		if reqBody.ToUserID == "" {
-			return nil, 400, fmt.Errorf("missing to_user_id")
-		}
-		// 提取文本内容
-		text := ""
-		for _, item := range reqBody.Msg.ItemList {
-			if item.TextItem != nil {
-				text = item.TextItem.Text
-				break
-			}
-		}
-		if text == "" {
-			return nil, 400, fmt.Errorf("no text content in message")
-		}
-		// 查找真实账号凭证：优先按 to_user_id 匹配，回退到第一个可用账号
-		creds := s.connector.GetAccountTokenByVirtualID(accountID)
-		var credsObj *bot.Credentials
-		for _, a := range s.connector.GetAccounts() {
-			if a.Credentials != nil {
-				if creds != "" && a.Credentials.Token == creds {
-					credsObj = a.Credentials
-					break
-				}
-				if credsObj == nil {
-					credsObj = a.Credentials
-				}
-			}
-		}
-		if credsObj == nil {
-			return nil, 500, fmt.Errorf("no real bot token for virtual account: %s", accountID)
-		}
-		// 通过 Connector 发送消息（不走直接 HTTP）
-		if err := s.connector.SendTextWithCreds(ctx, credsObj, reqBody.ToUserID, text, ""); err != nil {
-			return nil, 502, fmt.Errorf("send failed: %w", err)
+		if err := s.Pipeline.SendOutgoingMessage(ctx, accountID, body); err != nil {
+			return nil, 500, fmt.Errorf("send failed: %w", err)
 		}
 		return []byte(`{"ret":0}`), 200, nil
 	})
