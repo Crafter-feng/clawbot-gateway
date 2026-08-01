@@ -481,7 +481,7 @@ func TestEnqueueToVirtualBotNoClientReg(t *testing.T) {
 	p := NewMessagePipeline(nil, route.NewRouter(), af, session.NewContextManager(10, 0), nil)
 	p.SetLogger(log.Default().WithComponent("test"))
 	msg := createTestMessage("hello", "user1")
-	ok := p.enqueueToVirtualBot(msg, "echo", 1)
+	ok := p.enqueueToVirtualBot(msg, msg.Content, "echo", 1)
 	if ok {
 		t.Error("enqueueToVirtualBot with nil clientReg should return false")
 	}
@@ -494,7 +494,7 @@ func TestEnqueueToVirtualBotNoVirtualBot(t *testing.T) {
 	p := NewMessagePipeline(nil, route.NewRouter(), af, session.NewContextManager(10, 0), clientReg)
 	p.SetLogger(log.Default().WithComponent("test"))
 	msg := createTestMessage("hello", "user1")
-	ok := p.enqueueToVirtualBot(msg, "echo", 1)
+	ok := p.enqueueToVirtualBot(msg, msg.Content, "echo", 1)
 	if ok {
 		t.Error("enqueueToVirtualBot with unregistered virtual bot should return false")
 	}

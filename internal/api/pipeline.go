@@ -207,7 +207,7 @@ func (p *MessagePipeline) processMessage(ctx context.Context, msg bot.Normalized
 
 	// 4. ilink_proxy 是连接适配器：消息入虚拟 Bot 队列，不调用 Handle()，不回复
 	if adapter.IsConnectionAdapter(bak.Type()) {
-		if p.enqueueToVirtualBot(msg, backendID, seq) {
+		if p.enqueueToVirtualBot(msg, content, backendID, seq) {
 			return
 		}
 		reply := fmt.Sprintf("❌ 后端 [%s] 虚拟 Bot 未注册", backendID)
@@ -274,7 +274,7 @@ func (p *MessagePipeline) forwardToBackend(ctx context.Context, msg bot.Normaliz
 	// ilink_proxy 是连接适配器：消息入虚拟 Bot 队列，不调用 Handle()，不回复
 	// 外部服务通过 getupdates 消费队列后处理并回复
 	if adapter.IsConnectionAdapter(bak.Type()) {
-		if p.enqueueToVirtualBot(msg, backendID, seq) {
+		if p.enqueueToVirtualBot(msg, content, backendID, seq) {
 			return
 		}
 		// 找不到虚拟 Bot：回复错误
@@ -388,7 +388,7 @@ func (p *MessagePipeline) findAccountCredentials(accountID string) *bot.Credenti
 
 // enqueueToVirtualBot 将消息入队到 ilink_proxy 后端对应的虚拟 Bot 队列
 // 返回 true 表示成功，false 表示虚拟 Bot 未注册
-func (p *MessagePipeline) enqueueToVirtualBot(msg bot.NormalizedMessage, backendID string, seq int64) bool {
+func (p *MessagePipeline) enqueueToVirtualBot(msg bot.NormalizedMessage, content, backendID string, seq int64) bool {
 	if p.clientReg == nil {
 		p.log.Warn("clientReg not set, cannot enqueue", "seq", seq, "backend", backendID)
 		return false
@@ -408,7 +408,7 @@ func (p *MessagePipeline) enqueueToVirtualBot(msg bot.NormalizedMessage, backend
 			MsgType:    msg.Type,
 			ItemList: []bot.RawMessageItem_Item{{
 				Type:     1,
-				TextItem: &bot.RawMessageItem_TextItem{Text: msg.Content},
+				TextItem: &bot.RawMessageItem_TextItem{Text: content},
 			}},
 			Timestamp:    msg.Timestamp,
 			ContextToken: msg.ContextToken,
