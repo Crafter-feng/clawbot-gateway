@@ -48,16 +48,6 @@ func TestConnectorMessages(t *testing.T) {
 	}
 }
 
-func TestConnectorGetAccountTokenByVirtualID(t *testing.T) {
-	cfg := ConnectorConfig{BaseURL: "https://ilinkai.weixin.qq.com"}
-	conn := NewConnector(cfg)
-	// No accounts added, so should return empty
-	token := conn.GetAccountTokenByVirtualID("gw_test")
-	if token != "" {
-		t.Errorf("GetAccountTokenByVirtualID want empty, got '%s'", token)
-	}
-}
-
 func TestConnectorQRManager(t *testing.T) {
 	cfg := ConnectorConfig{BaseURL: "https://ilinkai.weixin.qq.com"}
 	conn := NewConnector(cfg)

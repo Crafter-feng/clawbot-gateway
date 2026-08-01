@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -94,30 +93,6 @@ func (c *Connector) GetCredentials() *Credentials {
 }
 
 
-
-// GetAccountTokenByVirtualID 根据虚拟 Bot ID 获取真实账号的 token
-func (c *Connector) GetAccountTokenByVirtualID(virtualAccountID string) string {
-	c.accountMu.RLock()
-	defer c.accountMu.RUnlock()
-
-	// 去掉 "gw_" 前缀后匹配真实 accountID（格式约定）
-	// 例如：虚拟 Bot ID 为 "gw_user1_device1"，映射到真实账号 "user1"
-	realID := virtualAccountID
-	if len(virtualAccountID) > 3 && virtualAccountID[:3] == "gw_" {
-		parts := strings.SplitN(virtualAccountID, "_", 3)
-		if len(parts) >= 2 {
-			realID = parts[1]
-		}
-	}
-	for _, a := range c.accounts {
-		if a.Credentials != nil && a.Credentials.Token != "" {
-			if a.Credentials.AccountID == realID || a.Credentials.UserID == realID {
-				return a.Credentials.Token
-			}
-		}
-	}
-	return ""
-}
 
 // ── context_token 缓存 ──
 
