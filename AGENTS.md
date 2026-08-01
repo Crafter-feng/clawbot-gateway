@@ -14,7 +14,7 @@
 - 在 iLink 服务端代码中通过 `http.NewRequest`、`http.Post`、`forwardToILink` 等任何方式向腾讯 iLink API 发起 `getupdates` 调用
 - 在 iLink 客户端代码中处理外部服务请求
 
-**说明**：iLink 服务端的 `sendmessage`/`sendtyping`/`getconfig`/`getuploadurl` 可以透明转发到腾讯 iLink API（这些是回复/配置类端点，不涉及消息获取）。但 `getupdates` 必须从 Pipeline 维护的虚拟 Bot 消息队列消费，**绝不许直接转发到腾讯**。
+**说明**：iLink 服务端的 `sendmessage`/`sendtyping`/`getuploadurl` 通过 `ForwardFunc` 回调经 Connector 处理，不直接连接腾讯。`getconfig` 从虚拟 Bot 注册表返回自身配置，不依赖真实账号。`getupdates` 必须从 Pipeline 维护的虚拟 Bot 消息队列消费，**绝不许直接转发到腾讯**。
 
 ### 2. Pipeline 是消息统一入口
 
@@ -26,7 +26,7 @@
 | 虚拟 Bot 代理 | 路由到 ConnectionAdapter（如 ilink_proxy），消息入虚拟 Bot 队列，外部服务通过 getupdates 消费 | 是（NormalizedMessage → RawMessageItem 入队） |
 | 文件中转 | 路由到 RelayMgr 转发文件 | 是（NormalizedMessage → FileMessage） |
 
-**iLink 服务端不参与消息解析和路由**。iLink 服务端只和 Pipeline 交互：从队列拿消息（getupdates），回复透明转发到腾讯（sendmessage 等）。
+**iLink 服务端不参与消息解析和路由**。iLink 服务端只和 Pipeline 交互：从队列拿消息（getupdates），回复通过 ForwardFunc 回调经 Connector 处理（sendmessage 等）。
 
 ### 3. 虚拟 Bot 不需要 QR 扫码
 
@@ -106,8 +106,8 @@ internal/database → (无外部依赖)
 **禁止**：
 - `internal/bot` 依赖 `internal/ilink`（会导致循环依赖）
 - `internal/ilink` 依赖 `internal/api`
-- 任何 PR 不许新增 `ilink/handler.go` 中 `handleGetUpdates` 对 `forwardToILink`/腾讯 iLink API 的调用（违反架构规则 1）
-- code review 必须检查 `internal/ilink/handler.go` 的 `handleGetUpdates` 实现：确认它从虚拟 Bot 队列消费，而非 `forwardToILink` 转发
+- 任何 PR 不许在 `ilink/handler.go` 中直接调用腾讯 iLink API（违反架构规则 1）
+- code review 必须检查 `internal/ilink/handler.go` 的实现：确认所有端点不直接连接腾讯 iLink API
 
 ### 9. 错误处理
 
