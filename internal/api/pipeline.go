@@ -369,26 +369,13 @@ func (p *MessagePipeline) SendOutgoingMessage(ctx context.Context, accountID str
 // findAccountCredentials 查找虚拟 Bot 对应的真实账号凭证
 // 优先级：gw_ 前缀匹配 → 第一个可用账号
 func (p *MessagePipeline) findAccountCredentials(accountID string) *bot.Credentials {
-	// 1. 优先查找虚拟 Bot 记录的 LastAccountID（精确匹配）
+	// 查找虚拟 Bot 记录的 LastAccountID（由 enqueueToVirtualBot 在入队时设置）
 	if vbot := p.clientReg.Get(accountID); vbot != nil && vbot.LastAccountID != "" {
 		for _, a := range p.connector.GetAccounts() {
 			if a.Credentials != nil && a.Credentials.AccountID == vbot.LastAccountID {
 				return a.Credentials
 			}
 		}
-	}
-	// 2. gw_ 前缀匹配
-	token := p.connector.GetAccountTokenByVirtualID(accountID)
-	for _, a := range p.connector.GetAccounts() {
-		if a.Credentials != nil {
-			if token != "" && a.Credentials.Token == token {
-				return a.Credentials
-			}
-		}
-	}
-	// 3. 回退：第一个可用账号
-	if accts := p.connector.GetAccounts(); len(accts) > 0 && accts[0].Credentials != nil {
-		return accts[0].Credentials
 	}
 	return nil
 }
