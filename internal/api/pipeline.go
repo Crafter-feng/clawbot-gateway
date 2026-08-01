@@ -331,8 +331,8 @@ func (p *MessagePipeline) forwardToBackend(ctx context.Context, msg bot.Normaliz
 // 请求体中的 account_id 由外部服务从 getupdates 响应中获取并传回，用于精确匹配真实账号
 func (p *MessagePipeline) SendOutgoingMessage(ctx context.Context, accountID string, body []byte) error {
 	var reqBody struct {
-		ToUserID string `json:"to_user_id"`
-		Msg      struct {
+		Msg struct {
+			ToUserID     string `json:"to_user_id"`
 			ContextToken string `json:"context_token,omitempty"`
 			ItemList []struct {
 				Type     int `json:"type"`
@@ -345,7 +345,7 @@ func (p *MessagePipeline) SendOutgoingMessage(ctx context.Context, accountID str
 	if err := json.Unmarshal(body, &reqBody); err != nil {
 		return fmt.Errorf("invalid request body: %w", err)
 	}
-	if reqBody.ToUserID == "" {
+	if reqBody.Msg.ToUserID == "" {
 		return fmt.Errorf("missing to_user_id")
 	}
 	text := ""
@@ -367,9 +367,9 @@ func (p *MessagePipeline) SendOutgoingMessage(ctx context.Context, accountID str
 	// 如果 Hermes 未回传，则从 Connector 本地缓存中查找（由原始消息轮询时存储）
 	contextToken := reqBody.Msg.ContextToken
 	if contextToken == "" {
-		contextToken = p.connector.GetContextToken(creds.AccountID, reqBody.ToUserID)
+		contextToken = p.connector.GetContextToken(creds.AccountID, reqBody.Msg.ToUserID)
 	}
-	return p.connector.SendTextWithCreds(ctx, creds, reqBody.ToUserID, text, contextToken)
+	return p.connector.SendTextWithCreds(ctx, creds, reqBody.Msg.ToUserID, text, contextToken)
 }
 
 // findAccountCredentials 查找虚拟 Bot 对应的真实账号凭证
