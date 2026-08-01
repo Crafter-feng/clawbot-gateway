@@ -33,10 +33,12 @@ func (s *Server) handleGetUpdates(c *gin.Context) {
 		Ret           int                   `json:"ret"`
 		Errmsg        string                `json:"errmsg,omitempty"`
 		Msgs          []bot.RawMessageItem `json:"msgs"`
+		AccountID     string                `json:"account_id,omitempty"`
 		GetUpdatesBuf string                `json:"get_updates_buf"`
 	}{
 		Ret:           0,
 		Msgs:          msgs,
+		AccountID:     accountID,
 		GetUpdatesBuf: "",
 	}
 	resultBytes, _ := json.Marshal(result)

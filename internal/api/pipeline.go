@@ -328,10 +328,13 @@ func (p *MessagePipeline) forwardToBackend(ctx context.Context, msg bot.Normaliz
 
 // SendOutgoingMessage 由 ForwardFunc 调用，处理虚拟 Bot 的回复消息
 // 所有消息统一经过 Pipeline，Pipeline 决定如何分发
+// 请求体中的 account_id 由外部服务从 getupdates 响应中获取并传回，用于精确匹配真实账号
+// 如果外部服务未传 account_id，则回退到 gw_ 前缀匹配或第一个可用账号
 func (p *MessagePipeline) SendOutgoingMessage(ctx context.Context, accountID string, body []byte) error {
 	var reqBody struct {
-		ToUserID string `json:"to_user_id"`
-		Msg      struct {
+		AccountID string `json:"account_id,omitempty"`
+		ToUserID  string `json:"to_user_id"`
+		Msg       struct {
 			ItemList []struct {
 				Type     int `json:"type"`
 				TextItem *struct {
@@ -356,8 +359,13 @@ func (p *MessagePipeline) SendOutgoingMessage(ctx context.Context, accountID str
 	if text == "" {
 		return fmt.Errorf("no text content in message")
 	}
+	// 如果外部服务传了 account_id，优先使用
+	acctID := accountID
+	if reqBody.AccountID != "" {
+		acctID = reqBody.AccountID
+	}
 	// 查找真实账号凭证
-	creds := p.findAccountCredentials(accountID)
+	creds := p.findAccountCredentials(acctID)
 	if creds == nil {
 		return fmt.Errorf("no available account for virtual bot: %s", accountID)
 	}
