@@ -373,7 +373,7 @@ func (p *MessagePipeline) SendOutgoingMessage(ctx context.Context, accountID str
 }
 
 // findAccountCredentials 查找虚拟 Bot 对应的真实账号凭证
-// 优先级：gw_ 前缀匹配 → 第一个可用账号
+// 使用虚拟 Bot 入队时记录的 LastAccountID 精确匹配
 func (p *MessagePipeline) findAccountCredentials(accountID string) *bot.Credentials {
 	// 查找虚拟 Bot 记录的 LastAccountID（由 enqueueToVirtualBot 在入队时设置）
 	if vbot := p.clientReg.Get(accountID); vbot != nil && vbot.LastAccountID != "" {
