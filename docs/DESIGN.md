@@ -96,7 +96,7 @@ flowchart TD
     ExtService -->|getupdates| ILinkServer
     ExtService -->|sendmessage/sendtyping| ILinkServer
     ILinkServer -->|ForwardFunc 回调| ForwardFunc
-    ForwardFunc -->|Connector.Send()| Connector
+    ForwardFunc -->|Connector.Send| Connector
     Connector -->|回复消息| Tencent
 ```
 
@@ -585,7 +585,7 @@ flowchart LR
 
     Ext -->|POST /ilink/bot/sendmessage| ILink
     ILink -->|ForwardFunc| API
-    API -->|Connector.Send()| Conn
+    API -->|Connector.Send| Conn
     Conn -->|转发到腾讯| Tencent
     Tencent -->|回复| User
 ```
