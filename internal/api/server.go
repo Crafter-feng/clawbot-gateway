@@ -2,9 +2,7 @@ package api
 
 import (
 	"encoding/json"
-	"bytes"
 	"context"
-	"io"
 	"crypto/subtle"
 	"fmt"
 	"net/http"
@@ -99,47 +97,57 @@ ilinkServer.SetForwardFunc(func(ctx context.Context, accountID, endpoint string,
 		if vbot == nil {
 			return nil, 500, fmt.Errorf("virtual bot not found: %s", accountID)
 		}
-		// 从请求体中提取 to_user_id，在已绑定的真实账号中查找匹配
+		// 解析请求体，提取 to_user_id 和消息文本
 		var reqBody struct {
 			ToUserID string `json:"to_user_id"`
+			Msg      struct {
+				ItemList []struct {
+					Type     int `json:"type"`
+					TextItem *struct {
+						Text string `json:"text"`
+					} `json:"text_item,omitempty"`
+				} `json:"item_list"`
+			} `json:"msg"`
 		}
-		token := ""
-		if err := json.Unmarshal(body, &reqBody); err == nil && reqBody.ToUserID != "" {
-			for _, a := range s.connector.GetAccounts() {
-				if a.Credentials != nil && (a.Credentials.AccountID == reqBody.ToUserID || a.Credentials.UserID == reqBody.ToUserID) {
-					token = a.Credentials.Token
+		if err := json.Unmarshal(body, &reqBody); err != nil {
+			return nil, 400, fmt.Errorf("invalid request body: %w", err)
+		}
+		if reqBody.ToUserID == "" {
+			return nil, 400, fmt.Errorf("missing to_user_id")
+		}
+		// 提取文本内容
+		text := ""
+		for _, item := range reqBody.Msg.ItemList {
+			if item.TextItem != nil {
+				text = item.TextItem.Text
+				break
+			}
+		}
+		if text == "" {
+			return nil, 400, fmt.Errorf("no text content in message")
+		}
+		// 查找真实账号凭证：优先按 to_user_id 匹配，回退到第一个可用账号
+		creds := s.connector.GetAccountTokenByVirtualID(accountID)
+		var credsObj *bot.Credentials
+		for _, a := range s.connector.GetAccounts() {
+			if a.Credentials != nil {
+				if creds != "" && a.Credentials.Token == creds {
+					credsObj = a.Credentials
 					break
+				}
+				if credsObj == nil {
+					credsObj = a.Credentials
 				}
 			}
 		}
-		if token == "" {
-			token = s.connector.GetAccountTokenByVirtualID(accountID)
-		}
-		if token == "" {
-			if accts := s.connector.GetAccounts(); len(accts) > 0 && accts[0].Credentials != nil {
-				token = accts[0].Credentials.Token
-			}
-		}
-		if token == "" {
+		if credsObj == nil {
 			return nil, 500, fmt.Errorf("no real bot token for virtual account: %s", accountID)
 		}
-		url := strings.TrimRight(vbot.BaseURL, "/") + endpoint
-		req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
-		if err != nil {
-			return nil, 500, err
+		// 通过 Connector 发送消息（不走直接 HTTP）
+		if err := s.connector.SendTextWithCreds(ctx, credsObj, reqBody.ToUserID, text, ""); err != nil {
+			return nil, 502, fmt.Errorf("send failed: %w", err)
 		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+token)
-		req.Header.Set("AuthorizationType", "ilink_bot_token")
-		req.Header.Set("iLink-App-Id", "bot")
-		req.Header.Set("iLink-App-ClientVersion", "131584")
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			return nil, 502, err
-		}
-		defer resp.Body.Close()
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-		return respBody, resp.StatusCode, nil
+		return []byte(`{"ret":0}`), 200, nil
 	})
 	ilinkServer.RegisterRoutes(rest)
 
