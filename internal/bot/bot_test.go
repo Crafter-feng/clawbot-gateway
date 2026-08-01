@@ -105,8 +105,8 @@ func TestSplitMessageJoin(t *testing.T) {
 
 func TestBuildBaseInfo(t *testing.T) {
 	info := BuildBaseInfo()
-	if info.ChannelVersion != "1.0.2" {
-		t.Errorf("ChannelVersion want '1.0.2', got '%s'", info.ChannelVersion)
+	if info.ChannelVersion != "2.2.0" {
+		t.Errorf("ChannelVersion want '2.2.0', got '%s'", info.ChannelVersion)
 	}
 }
 

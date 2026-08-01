@@ -220,9 +220,7 @@ func (c *Connector) saveSyncBuf(accountID, buf string) {
 func (c *Connector) getUpdatesWithCreds(ctx context.Context, creds *Credentials, buf string) (*GetUpdatesResp, error) {
 	body := GetUpdatesReq{
 		GetUpdatesBuf: buf,
-		BaseInfo: BaseInfo{
-			ChannelVersion: "1.0.2",
-		},
+		BaseInfo: BuildBaseInfo(),
 	}
 	bodyBytes, _ := json.Marshal(body)
 

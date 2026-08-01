@@ -112,7 +112,7 @@ type BaseInfo struct {
 
 func BuildBaseInfo() BaseInfo {
 	return BaseInfo{
-		ChannelVersion: "1.0.2",
+		ChannelVersion: "2.2.0",
 	}
 }
 

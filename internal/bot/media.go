@@ -55,9 +55,7 @@ func (c *Connector) SendMediaMessage(ctx context.Context, toUser, fileKey string
 			Text string `json:"text"`
 		}{Text: fileKey},
 	}}
-	payload.BaseInfo = BaseInfo{
-		ChannelVersion: "1.0.2",
-	}
+	payload.BaseInfo = BuildBaseInfo()
 
 	return c.sendMessage(ctx, creds, &payload)
 }

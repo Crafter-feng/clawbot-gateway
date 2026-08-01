@@ -158,9 +158,7 @@ func (c *Connector) SendTextWithCreds(ctx context.Context, creds *Credentials, t
 	if contextToken != "" {
 		payload.Msg.ContextToken = contextToken
 	}
-	payload.BaseInfo = BaseInfo{
-		ChannelVersion: "1.0.2",
-	}
+	payload.BaseInfo = BuildBaseInfo()
 
 	return c.sendMessage(ctx, creds, &payload)
 }
@@ -235,9 +233,7 @@ func (c *Connector) SendTypingWithCreds(ctx context.Context, creds *Credentials,
 		IlinkUserID:  toUser,
 		TypingTicket: "",
 		Status:       1,
-		BaseInfo: BaseInfo{
-			ChannelVersion: "1.0.2",
-		},
+		BaseInfo: BuildBaseInfo(),
 	}
 
 	bodyJSON, err := json.Marshal(payload)
