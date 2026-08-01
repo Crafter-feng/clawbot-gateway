@@ -94,15 +94,34 @@ func (s *APIServer) Start(addr string) error {
 
 	// iLink API
 	ilinkServer := ilink.NewServer(s.connector, s.clientReg)
-	ilinkServer.SetForwardFunc(func(ctx context.Context, accountID, endpoint string, body []byte) ([]byte, int, error) {
-		// 通过 Connector 获取真实账号凭证并转发
-		token := s.connector.GetAccountTokenByVirtualID(accountID)
-		if token == "" {
-			return nil, 500, fmt.Errorf("no real bot token for virtual account: %s", accountID)
-		}
+ilinkServer.SetForwardFunc(func(ctx context.Context, accountID, endpoint string, body []byte) ([]byte, int, error) {
 		vbot := s.clientReg.Get(accountID)
 		if vbot == nil {
 			return nil, 500, fmt.Errorf("virtual bot not found: %s", accountID)
+		}
+		// 从请求体中提取 to_user_id，在已绑定的真实账号中查找匹配
+		var reqBody struct {
+			ToUserID string `json:"to_user_id"`
+		}
+		token := ""
+		if err := json.Unmarshal(body, &reqBody); err == nil && reqBody.ToUserID != "" {
+			for _, a := range s.connector.GetAccounts() {
+				if a.Credentials != nil && (a.Credentials.AccountID == reqBody.ToUserID || a.Credentials.UserID == reqBody.ToUserID) {
+					token = a.Credentials.Token
+					break
+				}
+			}
+		}
+		if token == "" {
+			token = s.connector.GetAccountTokenByVirtualID(accountID)
+		}
+		if token == "" {
+			if accts := s.connector.GetAccounts(); len(accts) > 0 && accts[0].Credentials != nil {
+				token = accts[0].Credentials.Token
+			}
+		}
+		if token == "" {
+			return nil, 500, fmt.Errorf("no real bot token for virtual account: %s", accountID)
 		}
 		url := strings.TrimRight(vbot.BaseURL, "/") + endpoint
 		req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
