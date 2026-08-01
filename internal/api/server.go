@@ -2,7 +2,9 @@ package api
 
 import (
 	"encoding/json"
+	"bytes"
 	"context"
+	"io"
 	"crypto/subtle"
 	"fmt"
 	"net/http"
@@ -92,6 +94,34 @@ func (s *APIServer) Start(addr string) error {
 
 	// iLink API
 	ilinkServer := ilink.NewServer(s.connector, s.clientReg)
+	ilinkServer.SetForwardFunc(func(ctx context.Context, accountID, endpoint string, body []byte) ([]byte, int, error) {
+		// 通过 Connector 获取真实账号凭证并转发
+		token := s.connector.GetAccountTokenByVirtualID(accountID)
+		if token == "" {
+			return nil, 500, fmt.Errorf("no real bot token for virtual account: %s", accountID)
+		}
+		vbot := s.clientReg.Get(accountID)
+		if vbot == nil {
+			return nil, 500, fmt.Errorf("virtual bot not found: %s", accountID)
+		}
+		url := strings.TrimRight(vbot.BaseURL, "/") + endpoint
+		req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
+		if err != nil {
+			return nil, 500, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("AuthorizationType", "ilink_bot_token")
+		req.Header.Set("iLink-App-Id", "bot")
+		req.Header.Set("iLink-App-ClientVersion", "131584")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return nil, 502, err
+		}
+		defer resp.Body.Close()
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		return respBody, resp.StatusCode, nil
+	})
 	ilinkServer.RegisterRoutes(rest)
 
 	// 通知 API
@@ -184,6 +214,7 @@ func (s *APIServer) Start(addr string) error {
 		})
 	} else {
 		dist := "./web/dist"
+		rest.Use(cacheControlMiddleware())
 		rest.Static("/assets", dist+"/assets")
 		rest.StaticFile("/manifest.webmanifest", dist+"/manifest.webmanifest")
 		rest.GET("/", func(c *gin.Context) {
@@ -320,6 +351,24 @@ func (s *APIServer) validateAPIToken(token string) bool {
 	}
 	expected := s.db.GetSetting("api.token")
 	return expected != "" && subtle.ConstantTimeCompare([]byte(token), []byte(expected)) == 1
+}
+
+// cacheControlMiddleware sets Cache-Control headers for static files
+func cacheControlMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		p := c.Request.URL.Path
+		// HTML files: never cache (so new builds take effect immediately)
+		if p == "/" || p == "" {
+			c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+		} else if strings.HasPrefix(p, "/assets/") {
+			// Hashed assets: cache forever (content hash changes on rebuild)
+			c.Header("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			// Other static files (sw.js, manifest, etc.): short cache
+			c.Header("Cache-Control", "no-cache")
+		}
+		c.Next()
+	}
 }
 
 // maxBodySizeMiddleware limits request body size to prevent DoS

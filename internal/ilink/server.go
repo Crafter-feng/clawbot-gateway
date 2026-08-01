@@ -1,8 +1,8 @@
 package ilink
 
 import (
+	"context"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -10,14 +10,17 @@ import (
 	"clawbot-gateway/internal/log"
 )
 
+// ForwardFunc 处理虚拟 Bot 的请求转发（由 api 包设置，通过 Connector 处理）
+type ForwardFunc func(ctx context.Context, accountID, endpoint string, body []byte) ([]byte, int, error)
+
 // Server iLink API 服务器
-// 透明代理模式：转发外部服务的请求到真实 iLink API
+// 不直接连接腾讯 iLink API，所有消息经 Pipeline 路由到 Connector
 type Server struct {
-	bot        *bot.Connector
-	registry   *ClientRegistry
-	limiter    *RateLimiter
-	log        *log.Logger
-	httpClient *http.Client
+	bot         *bot.Connector
+	registry    *ClientRegistry
+	limiter     *RateLimiter
+	log         *log.Logger
+	forwardFunc ForwardFunc
 }
 
 // NewServer 创建 iLink API 服务器
@@ -25,17 +28,14 @@ func NewServer(bot *bot.Connector, registry *ClientRegistry) *Server {
 	return &Server{
 		bot:      bot,
 		registry: registry,
-		limiter:  NewRateLimiter(10, 20), // 每秒 10 个请求，突发 20 个
+		limiter:  NewRateLimiter(10, 20),
 		log:      log.Default().WithComponent("ilink"),
-		httpClient: &http.Client{
-			Timeout: 60 * time.Second,
-			Transport: &http.Transport{
-				MaxIdleConns:        20,
-				IdleConnTimeout:     90 * time.Second,
-				DisableCompression:  false,
-			},
-		},
 	}
+}
+
+// SetForwardFunc 设置请求转发函数（由 api 包调用，通过 Connector 转发）
+func (s *Server) SetForwardFunc(fn ForwardFunc) {
+	s.forwardFunc = fn
 }
 
 // GetRegistry 获取客户端注册表
@@ -64,9 +64,7 @@ func (s *Server) validateToken(c *gin.Context) string {
 func (s *Server) RegisterRoutes(r *gin.Engine) {
 	ilink := r.Group("/ilink/bot")
 	{
-		// 应用速率限制中间件
 		ilink.Use(s.rateLimitMiddleware())
-		// 应用请求体大小限制
 		ilink.Use(maxBodySizeMiddleware(MaxRequestBodySize))
 
 		ilink.POST("/getupdates", s.handleGetUpdates)
