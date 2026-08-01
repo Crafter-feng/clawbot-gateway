@@ -64,87 +64,40 @@ Gateway 同时扮演两个角色，必须清晰区分：
 iLink 客户端和 iLink 服务端之间通过**管道**交互，不是各自直连腾讯服务器。
 
 ```
-                    ┌──────────────────────────────────────────┐
-                    │          微信用户                         │
-                    └───────────────┬──────────────────────────┘
-                                    │
-                    ┌───────────────▼──────────────────────────┐
-                    │     iLink API (腾讯)                      │
-                    │  ilinkai.weixin.qq.com                   │
-                    └───────────────┬──────────────────────────┘
-                                    │
-                                    │  唯一轮询者（独占）
-                    ┌───────────────▼──────────────────────────┐
-                    │      Connector (轮询)                     │
-                    │  accountPollLoop()                       │
-                    └───────────────┬──────────────────────────┘
-                                    │
-                          NormalizedMessage
-                                    │
-                    ┌───────────────▼──────────────────────────┐
-                    │      MessagePipeline                      │
-                    │  ┌─────────────────────────────────────┐  │
-                    │  │ Command Processor (命令解析)        │  │
-                    │  │  /use → 切换后端                     │  │
-                    │  │  /backends → 列出后端                │  │
-                    │  │  /help → 显示帮助                    │  │
-                    │  │  /<id> → 一次性转发到后端            │  │
-                    │  │  /help <id> [args] → 代理后端命令    │  │
-                    │  └─────────────────────────────────────┘  │
-                    │                    │                       │
-                    │  ┌─────────────────▼───────────────────┐  │
-                    │  │ Router (路由决策)                    │  │
-                    │  │  1. 用户会话级覆写 (/use)            │  │
-                    │  │  2. 关键词规则匹配                   │  │
-                    │  │  3. 默认后端兜底                     │  │
-                    │  └─────────────────┬───────────────────┘  │
-                    │                    │                       │
-                    │         ┌──────────┼──────────┐            │
-                    │         ▼                     ▼          │
-                    │  ┌──────────────┐    ┌──────────────────┐  │
-                    │  │ BackendAdapter│    │ ConnectionAdapter│  │
-                    │  │ (echo/openai) │    │ (ilink_proxy)    │  │
-                    │  │ → Handle()    │    │ → 消息入队        │  │
-                    │  │ → AI API     │    │ → 外部服务消费    │  │
-                    │  └──────┬───────┘    └────────┬─────────┘  │
-                    └─────────┼─────────────────────┼────────────┘
-                              │                     │
-                              ▼                     ▼
-                    ┌─────────────────┐  ┌─────────────────────┐
-                    │  AI API 响应      │  │  iLink 服务端队列     │
-                    └────────┬────────┘  └─────────┬───────────┘
-                             │                     │
-                             │      ┌──────────────┘
-                             │      │ 外部服务 getupdates
-                             │      ▼
-                             │  ┌──────────────────────┐
-                             │  │ 外部服务              │
-                             │  │ (Hermes Agent 等)     │
-                             │  └──────┬───────────────┘
-                             │         │ sendmessage / sendtyping / getuploadurl
-                             │         ▼
-                             │  ┌──────────────────────────────────────┐
-                             │  │ iLink 服务端                          │
-                             │  │ (验证 token → 调用 ForwardFunc)      │
-                             │  │ getconfig: 从注册表返回自身配置       │
-                             │  └──────────────────┬───────────────────┘
-                             │                     │ ForwardFunc 回调
-                             │                     ▼
-                             │  ┌──────────────────────────────────────┐
-                             │  │ api 包 ForwardFunc                   │
-                             │  │ (通过 Connector 转发，不直接连腾讯)   │
-                             │  └──────────────────┬───────────────────┘
-                             │                     │
-                             └──────────┬──────────┘
-                                        │
-                    ┌───────────────────▼──────────────────────────────┐
-                    │  Connector.Send() / Connector 方法                │
-                    │  唯一连接腾讯 iLink API 的组件                    │
-                    └───────────────────┬──────────────────────────────┘
-                                        │
-                    ┌───────────────────▼──────────────────────────────┐
-                    │    微信用户                                       │
-                    └──────────────────────────────────────────────────┘
+                    ```mermaid
+flowchart TD
+    subgraph WeChat["微信生态"]
+        User["微信用户"]
+        Tencent["腾讯 iLink API<br/>ilinkai.weixin.qq.com"]
+    end
+
+    subgraph Gateway["ClawBot Gateway"]
+        Connector["Connector (iLink 客户端)<br/>独占轮询 accountPollLoop()"]
+        Pipeline["Pipeline<br/>命令解析 → 路由决策 → 后端处理 → 回复"]
+        Router["Router<br/>1. 用户会话级覆写 (/use)<br/>2. 关键词规则匹配<br/>3. 默认后端兜底"]
+        BackendAdapter["BackendAdapter<br/>(echo/openai)<br/>→ Handle() → AI API"]
+        VirtualBot["ConnectionAdapter<br/>(ilink_proxy)<br/>→ 消息入队 → 外部服务消费"]
+        ILinkServer["iLink 服务端<br/>验证 token → ForwardFunc"]
+        ForwardFunc["api 包 ForwardFunc<br/>通过 Connector 转发<br/>不直接连腾讯"]
+    end
+
+    subgraph External["外部服务"]
+        ExtService["外部服务<br/>(Hermes Agent 等)"]
+    end
+
+    User -->|收发消息| Tencent
+    Tencent -->|唯一轮询| Connector
+    Connector -->|NormalizedMessage| Pipeline
+    Pipeline --> Router
+    Router --> BackendAdapter
+    Router --> VirtualBot
+    BackendAdapter -->|AI API 响应| Connector
+    VirtualBot -->|消息入队| ILinkServer
+    ExtService -->|getupdates| ILinkServer
+    ExtService -->|sendmessage/sendtyping| ILinkServer
+    ILinkServer -->|ForwardFunc 回调| ForwardFunc
+    ForwardFunc -->|Connector.Send()| Connector
+    Connector -->|回复消息| Tencent
 ```
 
 #### Pipeline 消息处理流程
@@ -568,7 +521,9 @@ curl -X POST http://localhost:8080/api/v1/notify/send \
 
 ### iLink 客户端端点（Connector）
 
-Connector 使用的真实 iLink API 端点（腾讯服务器）：
+Connector 作为 **iLink 客户端**，连接的是 **腾讯 iLink 服务器**（`https://ilinkai.weixin.qq.com`），不是 Gateway 自身。
+
+下表为 Connector 向腾讯服务器发起的请求路径：
 
 | 端点 | 方法 | 说明 | 代码位置 | 用途 |
 |------|------|------|----------|------|
@@ -583,7 +538,9 @@ Connector 使用的真实 iLink API 端点（腾讯服务器）：
 
 ### iLink 服务端端点（Server）
 
-Gateway 对外提供的 iLink 兼容 API，供虚拟 Bot 连接。
+Gateway 自身作为 **iLink 服务端**，对外提供 iLink 兼容 API，供虚拟 Bot（外部服务）连接。
+
+端点路径与腾讯 iLink API 一致（`/ilink/bot/*`），但 **实现方式完全不同**——消息从 Pipeline 维护的队列消费，回复经 ForwardFunc 回调到 Connector，不直接连接腾讯。
 
 | 端点 | 方法 | 说明 | 实现方式 |
 |------|------|------|----------|
@@ -594,13 +551,43 @@ Gateway 对外提供的 iLink 兼容 API，供虚拟 Bot 连接。
 | `/ilink/bot/getuploadurl` | POST | 获取上传 URL | **Pipeline 路由**：经 Pipeline 路由到 Connector |
 
 **getupdates 设计（队列消费）**：
-```
-外部服务 → Gateway iLink 服务端 → 验证虚拟 Bot token → 从虚拟 Bot 消息队列取出消息（长轮询）→ 返回消息列表
+```mermaid
+flowchart LR
+    subgraph External["外部"]
+        Ext["外部服务"]
+    end
+    subgraph Gateway["Gateway"]
+        ILink["iLink 服务端<br/>验证 token"]
+        Queue["虚拟 Bot 消息队列"]
+    end
+
+    Ext -->|POST /ilink/bot/getupdates| ILink
+    ILink -->|Dequeue 长轮询 35s| Queue
+    Queue -->|返回消息| ILink
+    ILink -->|消息列表| Ext
 ```
 
 **sendmessage 设计（Pipeline 路由）**：
-```
-外部服务 → Gateway iLink 服务端 → 验证虚拟 Bot token → Pipeline 路由 → Connector.Send() → 真实 iLink API → 微信用户收到回复
+```mermaid
+flowchart LR
+    subgraph External["外部"]
+        Ext["外部服务"]
+    end
+    subgraph Gateway["Gateway"]
+        ILink["iLink 服务端<br/>验证 token"]
+        API["api 包 ForwardFunc"]
+        Conn["Connector"]
+    end
+    subgraph WeChat["微信"]
+        Tencent["腾讯 iLink API"]
+        User["微信用户"]
+    end
+
+    Ext -->|POST /ilink/bot/sendmessage| ILink
+    ILink -->|ForwardFunc| API
+    API -->|Connector.Send()| Conn
+    Conn -->|转发到腾讯| Tencent
+    Tencent -->|回复| User
 ```
 
 **注意**：
