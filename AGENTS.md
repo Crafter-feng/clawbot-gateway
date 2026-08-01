@@ -147,6 +147,31 @@ internal/database → (无外部依赖)
 - 虚拟 Bot 使用 Gateway 生成的 token
 - 通知 Token 支持创建和删除，创建后仅显示一次
 
+## 版本管理
+
+### 18. 版本统一管理
+
+版本号的**唯一权威来源**是项目根目录的 `VISION.txt`，其他所有位置的版本号通过构建工具自动注入，不得手动修改。
+
+| 位置 | 版本来源 | 说明 |
+|------|---------|------|
+| `VISION.txt` | 手动维护 | **唯一权威来源**，修改版本号时只需改此处 |
+| `internal/version/version.go` | `-ldflags` 注入 | 构建时由 `build-fpk.sh` 从 manifest 读取后写入 |
+| `fpk/manifest` | 构建脚本自动更新 | 构建时 `sed` 替换 |
+| `web/package.json` | 手动同步 | 前端版本号，独立于构建版本 |
+| Git tag | `v${VERSION}` | 发布时打 tag 与 VISION.txt 一致 |
+
+**发布流程**：
+1. 更新 `VISION.txt` 中的 `VERSION`
+2. 同步 `web/package.json` 的 `version` 字段
+3. 提交并打 tag：`git tag vX.Y.Z && git push origin vX.Y.Z`
+4. CI 自动构建 FPK 和 Docker 镜像
+
+**禁止**：
+- 直接修改 `internal/version/version.go` 中的版本号
+- 直接修改 `fpk/manifest` 中的 `version` 字段
+- 发布时忘记更新 `VISION.txt`
+
 ## 测试规则
 
 ### 14. 测试覆盖
