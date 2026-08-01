@@ -37,8 +37,10 @@ Gateway 同时扮演两个角色，必须清晰区分：
 │  │  方向：外部服务 → Gateway:8080/ilink/bot/*                     │  │
 │  │  功能：                                                       │  │
 │  │    - getupdates：从 Pipeline 维护的虚拟 Bot 队列消费已路由消息  │  │
-│  │    - sendmessage：透明转发到真实 iLink API（回复用户）         │  │
-│  │    - sendtyping/getconfig/getuploadurl：透明转发到真实 API    │  │
+│  │    - sendmessage：透明转发（不解析内容）到 Connector 发送  │  │
+│  │    - sendtyping：透明转发（不解析内容）到 Connector          │  │
+│  │    - getconfig：从虚拟 Bot 注册表返回自身配置                  │  │
+│  │    - getuploadurl：透明转发（不解析内容）到 Connector         │  │
 │  │    - 管理虚拟 Bot 的消息队列（按后端隔离）                     │  │
 │  │  代码：internal/ilink/                                        │  │
 │  └──────────────────────────────────────────────────────────────┘  │
@@ -51,7 +53,7 @@ Gateway 同时扮演两个角色，必须清晰区分：
 | 代码位置 | `internal/bot/` | `internal/ilink/` |
 | 核心结构 | `Connector` | `Server` |
 | 连接目标 | 腾讯 iLink API | 外部服务（Hermes、OpenClaw） |
-| 主要端点 | `getupdates`, `sendmessage` | `/ilink/bot/*` |
+| 主要端点 | `getupdates`, `sendmessage` | `/ilink/bot/getupdates`, `sendmessage`, `sendtyping`, `getconfig`, `getuploadurl` |
 | 认证方式 | `bot_token`（真实微信凭证） | `Bearer <虚拟token>` |
 | 消息流向 | 微信 → Gateway | Gateway 队列 → 外部服务 → Gateway → 微信 |
 | 消息来源 | 腾讯 iLink API（独占轮询） | Pipeline 维护的虚拟 Bot 消息队列 |
@@ -325,32 +327,26 @@ curl -X POST http://localhost:8080/api/v1/notify/send \
 
 #### 核心概念
 
-虚拟 Bot 是 Gateway 的核心能力之一。它基于一个**真实微信账号**，通过代理机制**虚拟出多个独立的 Bot 实例**，供不同的外部服务使用。
+虚拟 Bot 是 Gateway 的 iLink 服务端核心能力。iLink 服务端是一个**完整的虚拟多 Bot 服务**，通过 **Pipeline + 虚拟 Bot ID** 与真实 Bot 客户端（Connector）连接。每个虚拟 Bot 是独立的实例，消息统一经过 Pipeline 路由，sendmessage 透明转发（不解析内容）到 Connector 发送到真实微信。
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        真实微信账号                                   │
-│                    (通过 QR 扫码登录)                                 │
-└─────────────────────────────────────────────────────────────────────┘
-                              │
-                              │ Gateway 代理
-                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                        虚拟 Bot 实例                                 │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │
-│  │  Hermes Bot   │  │  OpenClaw Bot │  │  OpenCode Bot │  ...       │
-│  │  gw_a1b2c3d4  │  │  gw_e5f6g7h8  │  │  gw_i9j0k1l2  │              │
-│  └──────────────┘  └──────────────┘  └──────────────┘              │
-│                                                                      │
-│  每个虚拟 Bot：                                                       │
-│  - 独立的 account_id (gw_xxxxx)                                      │
-│  - 独立的消息队列                                                     │
-│  - 独立的认证凭证                                                     │
-│  - 可被不同的外部服务独立使用                                          │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+│       iLink 服务端（虚拟多 Bot 服务）                              │
+│    ┌──────────────────────────────────────────┐                  │
+│    │           ClientRegistry                   │                  │
+│    │  ┌──────────────┐  ┌──────────────┐       │                  │
+│    │  │  Hermes Bot   │  │  OpenClaw Bot │ ...  │                  │
+│    │  │  gw_hermes    │  │  gw_openclaw  │       │                  │
+│    │  └──────────────┘  └──────────────┘       │                  │
+│    │  每个虚拟 Bot：独立 account_id/队列/凭证   │                  │
+│    └──────────────────────────────────────────┘                  │
+│                              │                                       │
+│               Pipeline（消息路由）                                 │
+│                              │                                       │
+│    ┌──────────────────────────────────────────┐                  │
+│    │  Connector（真实 Bot 客户端）              │                  │
+│    │  连接腾讯 iLink API，独占轮询               │                  │
+│    └──────────────────────────────────────────┘                  │
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -363,11 +359,11 @@ curl -X POST http://localhost:8080/api/v1/notify/send \
 │                                                                      │
 └─────────────────────────────────────────────────────────────────────┘
 ```
-1. **一个真实账号**：用户通过 QR 扫码登录一个真实的微信账号（仅主客户端需要）
-2. **独占轮询**：Gateway 作为 iLink 客户端唯一轮询真实微信，接收所有消息
+1. **iLink 服务端**：独立的虚拟多 Bot 服务，与真实 Bot 客户端通过 Pipeline + ID 连接
+2. **独占轮询**：Connector（真实 Bot 客户端）唯一轮询腾讯 iLink API，接收所有消息
 3. **管道分发**：所有消息统一经过 Pipeline（命令→路由→后端），路由到 ilink_proxy 后端的消息进入虚拟 Bot 消息队列
-4. **独立使用**：每个外部服务通过独立的虚拟 Bot token 认证，互不干扰
-5. **统一发送**：外部服务发送的消息通过 Gateway 代理转发到真实微信
+4. **独立使用**：每个虚拟 Bot 有独立凭证，外部服务通过 token 认证，互不干扰
+5. **透明转发**：外部服务 sendmessage 透明转发（不解析内容）到 Connector，由 Connector 发送到真实微信
 
 #### 优势
 
@@ -400,7 +396,7 @@ curl -X POST http://localhost:8080/api/v1/notify/send \
 │  │  │  SendTextWithCreds 发送消息到微信                       │  │  │
 │  │  └────────────────────────────────────────────────────────┘  │  │
 │  │                                                               │  │
-│  │  │  ClientRegistry    虚拟 Bot 注册管理（透明代理）              │  │  │
+│  │  │  ClientRegistry    虚拟 Bot 注册管理（透明转发到 Connector）  │  │  │
 │  │                                                               │  │
 │  │  ┌─── 消息处理 ──────────────────────────────────────────┐  │  │
 │  │  │  MessagePipeline   消息处理管道（命令→路由→后端→回复）   │  │  │
@@ -583,27 +579,28 @@ Gateway 对外提供的 iLink 兼容 API，供虚拟 Bot 连接。
 
 | 端点 | 方法 | 说明 | 实现方式 |
 |------|------|------|----------|
-| `/ilink/bot/getupdates` | POST | 长轮询获取消息 | **队列消费**：从 Pipeline 维护的虚拟 Bot 队列获取已路由消息，不直接转发到腾讯 |
-| `/ilink/bot/sendmessage` | POST | 发送消息 | 透明转发到真实 iLink API（回复用户） |
-| `/ilink/bot/sendtyping` | POST | 输入状态 | 透明转发到真实 iLink API |
-| `/ilink/bot/getconfig` | POST | 获取配置 | 透明转发到真实 iLink API |
-| `/ilink/bot/getuploadurl` | POST | 获取上传 URL | 透明转发到真实 iLink API |
+| `/ilink/bot/getupdates` | POST | 长轮询获取消息 | **队列消费**：从 Pipeline 维护的虚拟 Bot 队列获取已路由消息 |
+| `/ilink/bot/sendmessage` | POST | 发送消息 | **透明转发**：不解析内容，按 ID 转发到 Connector 发送 |
+| `/ilink/bot/sendtyping` | POST | 输入状态 | **透明转发**：不解析内容，按 ID 转发到 Connector |
+| `/ilink/bot/getconfig` | POST | 获取配置 | **虚拟 Bot 自身配置**：从注册表返回，不依赖真实账号 |
+| `/ilink/bot/getuploadurl` | POST | 获取上传 URL | **透明转发**：不解析内容，按 ID 转发到 Connector |
 
 **getupdates 设计（队列消费）**：
 ```
 外部服务 → Gateway iLink 服务端 → 验证虚拟 Bot token → 从虚拟 Bot 消息队列取出消息（长轮询）→ 返回消息列表
 ```
 
-**sendmessage 设计（透明转发）**：
+**sendmessage 设计（透明转发到 Connector）**：
 ```
-外部服务 → Gateway iLink 服务端 → 验证虚拟 Bot token → 透明转发到腾讯 iLink API → 微信用户收到回复
+外部服务 → Gateway iLink 服务端 → 验证虚拟 Bot token → 透明转发（不解析内容）→ Connector.Send() → 真实 iLink API → 微信用户收到回复
 ```
 
 **注意**：
 - 虚拟 Bot 不需要 QR 扫码登录，Gateway 直接生成连接配置
 - `/get_bot_qrcode` 和 `/get_qrcode_status` 端点不在服务端提供
-- `getupdates` 不直接转发到腾讯，而是从 Pipeline 管理的虚拟 Bot 消息队列消费
-- `sendmessage`/`sendtyping`/`getconfig`/`getuploadurl` 透明转发到腾讯 iLink API
+- `getupdates` 从 Pipeline 维护的虚拟 Bot 消息队列消费
+- `sendmessage`/`sendtyping`/`getuploadurl` 透明转发（不解析内容）到 Connector
+- `getconfig` 从虚拟 Bot 注册表返回自身配置，不依赖真实账号
 
 ### iLink 服务端实现细节
 
@@ -626,7 +623,7 @@ func (s *Server) RegisterRoutes(r *gin.Engine) {
 
 // handler.go
 // handleGetUpdates: 从虚拟 Bot 消息队列消费消息（不转发到腾讯）
-// handleProxy (sendmessage等): 透明转发到腾讯 iLink API
+// handleProxy (sendmessage等): 透明转发（不解析内容）到 Connector
 ```
 
 #### 架构特点
