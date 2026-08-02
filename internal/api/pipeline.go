@@ -181,6 +181,16 @@ func (p *MessagePipeline) processMessage(ctx context.Context, msg bot.Normalized
 			return
 		}
 
+		// 未知命令：检查用户是否切换了后端，有则转发
+		if cmd.Action == "unknown_command" {
+			backendID, hasOverride := p.router.GetUserBackend(msg.FromUser)
+			if hasOverride && backendID != "" {
+				p.log.Info("forwarding unknown cmd to selected backend", "seq", seq, "backend", backendID, "cmd", content)
+				p.forwardToBackend(ctx, msg, content, backendID, seq)
+				return
+			}
+		}
+
 		// 执行其他命令（/use, /backends, /help 等）
 		reply := p.commandProc.Execute(cmd, msg)
 		if reply != "" {
@@ -573,7 +583,7 @@ func (cp *CommandProcessor) Parse(text string) *CommandMatch {
 				return &CommandMatch{Action: "forward_to", Args: []string{backendID}}
 			}
 		}
-		// 未知命令 → 返回错误提示，不转发到后端
+		// 未知命令 → 返回 unknown_command，由 processMessage 决定转发还是报错
 		return &CommandMatch{Action: "unknown_command", Args: []string{text}}
 	}
 	return nil
