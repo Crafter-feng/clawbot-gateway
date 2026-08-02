@@ -90,101 +90,9 @@ jobs:
 
   # ============================================
   # FPK 打包（飞牛 fnOS）
+  # 已迁移至 https://github.com/EzFavorites/FnDepot
+  # 请在该仓库的 CI 中构建 FPK
   # ============================================
-  build-fpk:
-    name: 构建 FPK (${{ matrix.arch }})
-    needs: [test]
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      matrix:
-        include:
-          - arch: x86_64
-            goarch: amd64
-            fnpack_arch: amd64
-            fnplatform: X86
-            runner: ubuntu-latest
-          - arch: arm64
-            goarch: arm64
-            fnpack_arch: arm64
-            fnplatform: ARM
-            runner: ubuntu-24.04-arm
-    defaults:
-      run:
-        working-directory: .
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: 确定版本号
-        id: version
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "版本号: $VERSION"
-
-      - name: 安装 Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: 安装 Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: 构建前端
-        run: |
-          cd web
-          npm ci
-          npm run build
-
-      - name: 构建 Go 后端 (linux/${{ matrix.goarch }})
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          GOOS=linux GOARCH=${{ matrix.goarch }} CGO_ENABLED=0 go build \
-            -ldflags="-X 'clawbot-gateway/internal/version.Version=${VERSION}' -X 'clawbot-gateway/internal/version.Commit=$(git rev-parse --short HEAD)' -X 'clawbot-gateway/internal/version.BuildTime=$(date -u '+%Y-%m-%dT%H:%M:%SZ')'" \
-            -o "fpk/app/server/clawbot-gateway" .
-
-      - name: 复制前端文件
-        run: |
-          rm -rf fpk/app/server/web
-          mkdir -p fpk/app/server/web
-          cp -r web/dist fpk/app/server/web/
-
-      - name: 更新 manifest
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          sed -i "s/^version.*/version = ${VERSION}/" fpk/manifest
-
-      - name: 修复脚本权限
-        run: |
-          for f in fpk/cmd/main fpk/cmd/install_init fpk/cmd/install_callback fpk/cmd/uninstall_init fpk/cmd/uninstall_callback fpk/cmd/upgrade_init fpk/cmd/upgrade_callback fpk/cmd/config_init fpk/cmd/config_callback; do
-            [ -f "$f" ] && chmod +x "$f"
-          done
-
-      - name: 下载 fnpack 并打包
-        run: |
-          # 重试3次，处理 CDN 瞬时不稳
-          for i in 1 2 3; do
-            curl -fsSL -o /tmp/fnpack "https://static2.fnnas.com/fnpack/fnpack-1.2.1-linux-${{ matrix.fnpack_arch }}" && break
-            echo "下载失败，第${i}次重试..."
-            sleep 2
-          done
-          [ -f /tmp/fnpack ] || { echo "::error::fnpack 下载失败"; exit 1; }
-          chmod +x /tmp/fnpack
-          cd fpk
-          /tmp/fnpack build --directory . || { echo "::error::FPK 打包失败"; exit 1; }
-          mv clawbot-gateway.fpk "clawbot-gateway-v${{ steps.version.outputs.version }}-${{ matrix.fnplatform }}.fpk"
-          echo "✅ FPK: $(ls -lh clawbot-gateway-v${{ steps.version.outputs.version }}-${{ matrix.fnplatform }}.fpk)"
-
-      - name: 上传 FPK
-        uses: actions/upload-artifact@v7
-        with:
-          name: fpk-${{ matrix.arch }}-v${{ steps.version.outputs.version }}
-          path: fpk/clawbot-gateway-*.fpk
-          compression-level: 0
-          retention-days: 30
 
   # ============================================
   # Tauri 桌面客户端打包
@@ -277,7 +185,7 @@ jobs:
   # ============================================
   release:
     name: 发布 Release
-    needs: [build-fpk, build-desktop]
+    needs: [build-desktop]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -316,7 +224,6 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: "ClawBot Gateway v${{ steps.version.outputs.version }}"
           files: |
-            artifacts/*/*.fpk
             artifacts/*/*.dmg
             artifacts/*/*.msi
             artifacts/*/*.exe
@@ -333,11 +240,13 @@ jobs:
 
             | 文件 | 平台 |
             |------|------|
-            | `clawbot-gateway-X86.fpk` | 飞牛 fnOS x86_64 |
-            | `clawbot-gateway-ARM.fpk` | 飞牛 fnOS arm64 |
             | `*.dmg` | macOS (Apple Silicon / Intel) |
             | `*.msi` / `*.exe` | Windows |
             | `*.AppImage` / `*.deb` | Linux |
+
+            ### 📦 FPK (飞牛 fnOS)
+
+            FPK 包已迁移至 [EzFavorites/FnDepot](https://github.com/EzFavorites/FnDepot) 仓库，请在该仓库的 Release 中下载。
 
             ### 🐳 Docker
 

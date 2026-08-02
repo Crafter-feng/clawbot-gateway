@@ -3,10 +3,15 @@
 # ClawBot Gateway FPK 构建脚本
 # ============================================================
 # 构建 clawbot-gateway 的飞牛 fnOS 应用包 (.fpk)
+#
+# FPK 脚手架已迁移至 https://github.com/EzFavorites/FnDepot
+# 此脚本构建二进制产物后，将其打包到 FnDepot 仓库的 scaffold 中。
+#
 # 使用方法：
-#   ./scripts/build-fpk.sh              # 构建当前版本
-#   ./scripts/build-fpk.sh --version 1.0.0  # 指定版本
-#   ./scripts/build-fpk.sh --arch arm       # 构建 ARM 版本
+#   ./scripts/build-fpk.sh --fndepot ../FnDepot   # 指定 FnDepot 仓库路径并打包
+#   ./scripts/build-fpk.sh                          # 仅构建产物到 build/ 目录
+#   ./scripts/build-fpk.sh --version 1.0.0          # 指定版本
+#   ./scripts/build-fpk.sh --arch arm               # 构建 ARM 版本
 # ============================================================
 
 set -euo pipefail
@@ -20,6 +25,7 @@ ARCH="x86_64"
 GOARCH="amd64"
 FNPACK_ARCH="amd64"
 FNPLATFORM="x86"
+FNDEPOT_DIR=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -48,8 +54,12 @@ while [[ $# -gt 0 ]]; do
             esac
             shift 2
             ;;
+        --fndepot)
+            FNDEPOT_DIR="$2"
+            shift 2
+            ;;
         --help)
-            echo "用法: $0 [--version VERSION] [--arch x86_64|arm64]"
+            echo "用法: $0 [--version VERSION] [--arch x86_64|arm64] [--fndepot PATH]"
             exit 0
             ;;
         *)
@@ -61,7 +71,6 @@ done
 
 # ---- 确认版本号 ----
 if [ -z "${VERSION}" ]; then
-    # 从 version.go 读取
     VERSION=$(grep 'Version\s*=' internal/version/version.go | sed 's/.*"\(.*\)".*/\1/')
     if [ "${VERSION}" = "dev" ]; then
         VERSION="1.0.0"
@@ -75,6 +84,16 @@ echo "  版本: ${VERSION}"
 echo "  架构: ${ARCH}"
 echo "============================================"
 
+# ---- 确认 FnDepot 仓库 ----
+if [ -n "${FNDEPOT_DIR}" ]; then
+    FNDEPOT_DIR="$(cd "${FNDEPOT_DIR}" && pwd)"
+    if [ ! -d "${FNDEPOT_DIR}/clawbot-gateway" ]; then
+        echo "❌ FnDepot 仓库路径无效: ${FNDEPOT_DIR}/clawbot-gateway 不存在"
+        exit 1
+    fi
+    echo "📁 FnDepot 仓库: ${FNDEPOT_DIR}"
+fi
+
 # ---- 1. 构建前端 ----
 echo ""
 echo "📦 构建前端..."
@@ -86,66 +105,86 @@ echo "✅ 前端构建完成"
 
 # ---- 2. 构建 Go 后端 ----
 echo ""
-echo "🔨 构建 Go 后端 (linux/amd64)..."
+echo "🔨 构建 Go 后端 (linux/${GOARCH})..."
+BUILD_DIR="${SCRIPT_DIR}/build"
+mkdir -p "${BUILD_DIR}/server"
 GOOS=linux GOARCH=${GOARCH} CGO_ENABLED=0 go build \
     -ldflags="-X 'clawbot-gateway/internal/version.Version=${VERSION}' -X 'clawbot-gateway/internal/version.Commit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)' -X 'clawbot-gateway/internal/version.BuildTime=$(date -u '+%Y-%m-%dT%H:%M:%SZ')'" \
-    -o "fpk/app/server/clawbot-gateway" .
-echo "✅ Go 后端构建完成: $(du -h fpk/app/server/clawbot-gateway | cut -f1)"
+    -o "${BUILD_DIR}/server/clawbot-gateway" .
+echo "✅ Go 后端构建完成: $(du -h "${BUILD_DIR}/server/clawbot-gateway" | cut -f1)"
 
 # ---- 3. 复制前端文件 ----
 echo ""
 echo "📂 复制前端文件..."
-rm -rf fpk/app/server/web
-mkdir -p fpk/app/server/web && cp -r web/dist fpk/app/server/web/
+mkdir -p "${BUILD_DIR}/server/web"
+cp -r web/dist "${BUILD_DIR}/server/web/"
 echo "✅ 前端文件已复制"
 
-# 复制桌面图标（fnOS 要求 icon-{size}.png 格式）
-rm -rf fpk/app/ui/images
-mkdir -p fpk/app/ui/images
-cp fpk/ICON.PNG fpk/app/ui/images/icon_64.png
-cp fpk/ICON_256.PNG fpk/app/ui/images/icon_256.png
-echo "✅ 前端资源已复制"
+# ---- 如果指定了 FnDepot 路径，打包 FPK ----
+if [ -n "${FNDEPOT_DIR}" ]; then
+    APP_DIR="${FNDEPOT_DIR}/clawbot-gateway"
 
-# ---- 4. 更新 manifest 版本号和平台 ----
-echo ""
-echo "📝 更新 manifest..."
-sed -i "s/^version.*/version = ${VERSION}/" fpk/manifest
-sed -i "s/^platform.*/platform = ${FNPLATFORM}/" fpk/manifest
-echo "✅ manifest 已更新"
+    echo ""
+    echo "📦 打包到 FnDepot 仓库..."
 
-# ---- 5. 修复脚本权限 ----
-echo ""
-echo "🔧 修复脚本权限..."
-for f in fpk/cmd/main fpk/cmd/install_init fpk/cmd/install_callback fpk/cmd/uninstall_init fpk/cmd/uninstall_callback fpk/cmd/upgrade_init fpk/cmd/upgrade_callback fpk/cmd/config_init fpk/cmd/config_callback; do
-    [ -f "$f" ] && chmod +x "$f"
-done
-echo "✅ 脚本权限已修复"
+    # 复制二进制和前端
+    cp "${BUILD_DIR}/server/clawbot-gateway" "${APP_DIR}/app/server/clawbot-gateway"
+    chmod +x "${APP_DIR}/app/server/clawbot-gateway"
+    rm -rf "${APP_DIR}/app/server/web"
+    cp -r "${BUILD_DIR}/server/web" "${APP_DIR}/app/server/web"
 
-# ---- 6. 下载 fnpack 并打包 ----
-echo ""
-echo "📦 下载 fnpack..."
-FNPACK="/tmp/fnpack"
-if [ ! -f "${FNPACK}" ]; then
-    curl -fsSL -o "${FNPACK}" "https://static2.fnnas.com/fnpack/fnpack-1.2.1-linux-${FNPACK_ARCH}"
-    chmod +x "${FNPACK}"
-fi
-echo "✅ fnpack 就绪"
+    # 复制桌面图标
+    mkdir -p "${APP_DIR}/app/ui/images"
+    cp "${APP_DIR}/ICON.PNG" "${APP_DIR}/app/ui/images/icon_64.png"
+    cp "${APP_DIR}/ICON_256.PNG" "${APP_DIR}/app/ui/images/icon_256.png"
 
-echo ""
-echo "🏗️  打包 FPK..."
-cd fpk
-"${FNPACK}" build --directory .
-if [ -f clawbot-gateway.fpk ]; then
-    mv clawbot-gateway.fpk "clawbot-gateway-${FNPLATFORM}.fpk"
-    echo "✅ FPK 构建完成: $(ls -lh clawbot-gateway-${FNPLATFORM}.fpk)"
+    # 更新 manifest 版本号和平台
+    sed -i "s/^version.*/version = ${VERSION}/" "${APP_DIR}/manifest"
+    sed -i "s/^platform.*/platform = ${FNPLATFORM}/" "${APP_DIR}/manifest"
+
+    # 修复脚本权限
+    for f in main install_init install_callback uninstall_init uninstall_callback upgrade_init upgrade_callback config_init config_callback; do
+        [ -f "${APP_DIR}/cmd/$f" ] && chmod +x "${APP_DIR}/cmd/$f"
+    done
+
+    # 下载 fnpack 并打包
+    echo ""
+    echo "📦 下载 fnpack..."
+    FNPACK="/tmp/fnpack"
+    if [ ! -f "${FNPACK}" ]; then
+        curl -fsSL -o "${FNPACK}" "https://static2.fnnas.com/fnpack/fnpack-1.2.1-linux-${FNPACK_ARCH}"
+        chmod +x "${FNPACK}"
+    fi
+    echo "✅ fnpack 就绪"
+
+    echo ""
+    echo "🏗️  打包 FPK..."
+    cd "${APP_DIR}"
+    "${FNPACK}" build --directory .
+    if [ -f clawbot-gateway.fpk ]; then
+        mv clawbot-gateway.fpk "clawbot-gateway-${FNPLATFORM}.fpk"
+        echo "✅ FPK 构建完成: $(ls -lh clawbot-gateway-${FNPLATFORM}.fpk)"
+    else
+        echo "❌ FPK 构建失败"
+        ls -la
+        exit 1
+    fi
+
+    # 清理产物（保留 FPK）
+    rm -f "${APP_DIR}/app/server/clawbot-gateway"
+    rm -rf "${APP_DIR}/app/server/web"
+    rm -rf "${APP_DIR}/app/ui/images"
+
+    echo ""
+    echo "============================================"
+    echo "  构建完成！"
+    echo "  输出文件: ${APP_DIR}/clawbot-gateway-${FNPLATFORM}.fpk"
+    echo "============================================"
 else
-    echo "❌ FPK 构建失败"
-    ls -la
-    exit 1
+    echo ""
+    echo "============================================"
+    echo "  构建完成！"
+    echo "  产物目录: ${BUILD_DIR}/"
+    echo "  用法: ./scripts/build-fpk.sh --fndepot ../FnDepot 打包 FPK"
+    echo "============================================"
 fi
-
-echo ""
-echo "============================================"
-echo "  构建完成！"
-echo "  输出文件: fpk/clawbot-gateway-${FNPLATFORM}.fpk"
-echo "============================================"

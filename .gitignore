@@ -50,9 +50,8 @@ web/src-tauri/binaries/*-darwin
 web/src-tauri/binaries/*-linux-gnu
 web/src-tauri/gen/
 
-# ── FPK 构建 ──
-fpk/app/server/clawbot-gateway
-fpk/app/server/web/
-fpk/app/ui/images/icon-*.svg
-fpk/app/ui/images/icon-*.png
+# ── FPK 构建（已迁移至 EzFavorites/FnDepot）──
 *.fpk
+
+# ── 本地构建产物 ──
+build/
