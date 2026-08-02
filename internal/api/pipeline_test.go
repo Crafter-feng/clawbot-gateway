@@ -596,6 +596,34 @@ func TestHandleGetLogCategories(t *testing.T) {
 	}
 }
 
+func TestHandleLogStreamAuth(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name   string
+		token  string
+		want   int
+		jwtKey string
+	}{
+		{name: "no token", token: "", want: 401, jwtKey: ""},
+		{name: "invalid token", token: "badtoken", want: 401, jwtKey: "test-secret"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := createTestAPIServer()
+			s.config.API.JWTSecret = tt.jwtKey
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest("GET", "/api/v1/logs/stream?token="+tt.token, nil)
+			s.handleLogStream(c)
+			if w.Code != tt.want {
+				t.Errorf("handleLogStream(%q) status = %d, want %d", tt.name, w.Code, tt.want)
+			}
+		})
+	}
+}
+
 func createTestAPIServer() *APIServer {
 	db, err := database.New(":memory:")
 	if err != nil {
