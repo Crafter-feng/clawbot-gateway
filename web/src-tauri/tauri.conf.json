@@ -1,6 +1,6 @@
 {
   "productName": "ClawBot Gateway",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "identifier": "com.clawbot.gateway",
   "build": {
     "frontendDist": "../dist",
@@ -21,7 +21,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://localhost:6798; style-src 'self' 'unsafe-inline'"
+      "csp": "default-src 'self'; connect-src 'self' http://localhost:6798; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
     },
     "trayIcon": {
       "iconPath": "icons/icon.png",
