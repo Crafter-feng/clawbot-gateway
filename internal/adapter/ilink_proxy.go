@@ -91,7 +91,7 @@ func (a *ILinkProxyBackendAdapter) Handle(ctx context.Context, req *ChatRequest)
 		return nil, fmt.Errorf("ilink_proxy: enqueue failed for backend %s", a.id)
 	}
 	// 空 Text 表示异步后端，Pipeline 会跳过直接回复
-	return &ChatResponse{Text: "", Backend: a.id}, nil
+	return &ChatResponse{Text: "", Backend: a.id, Async: true}, nil
 }
 
 func (a *ILinkProxyBackendAdapter) HandleStream(ctx context.Context, req *ChatRequest, ch chan<- string) error {

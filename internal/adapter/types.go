@@ -31,6 +31,7 @@ type ChatResponse struct {
 	Text    string `json:"text"`
 	Backend string `json:"backend"`
 	Stream  bool   `json:"stream,omitempty"`
+	Async   bool   // 异步后端（ilink_proxy），回复通过 SendOutgoingMessage 回传
 }
 
 // Attachment 附件

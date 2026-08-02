@@ -259,8 +259,8 @@ func (p *MessagePipeline) forwardToBackend(ctx context.Context, msg bot.Normaliz
 		return
 	}
 
-	// 空回复表示异步后端（ilink_proxy），回复通过 SendOutgoingMessage 异步返回
-	if resp.Text == "" {
+	// Async=true 表示异步后端（ilink_proxy），回复通过 SendOutgoingMessage 异步返回
+	if resp.Async {
 		p.log.Debug("async backend", "seq", seq, "backend", backendID, "user", msg.FromUser)
 		return
 	}
