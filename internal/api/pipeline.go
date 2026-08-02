@@ -217,68 +217,9 @@ func (p *MessagePipeline) processMessage(ctx context.Context, msg bot.Normalized
 	backendID := decision.BackendID
 	p.log.Info("routing to backend", "seq", seq, "from", msg.FromUser, "backend", backendID, "matched_by", decision.MatchedBy)
 
-	bak, ok := p.adapters.Get(backendID)
-	if !ok {
-		p.log.Warn("selected backend not found", "seq", seq, "backend", backendID)
-		reply := fmt.Sprintf("❌ 后端 [%s] 不可用，请输入 /backends 查看可用后端", backendID)
-		creds := p.connector.GetAccountCredentials(msg.AccountID)
-		if creds != nil {
-			contextToken := p.connector.GetContextToken(msg.AccountID, msg.FromUser)
-			_ = p.connector.SendTextWithCreds(ctx, creds, msg.FromUser, reply, contextToken)
-		}
-		return
-	}
-
-	// 4. ilink_proxy 是连接适配器：消息入虚拟 Bot 队列，不调用 Handle()，不回复
-	if adapter.IsConnectionAdapter(bak.Type()) {
-		if p.enqueueToVirtualBot(msg, content, backendID, seq) {
-			return
-		}
-		reply := fmt.Sprintf("❌ 后端 [%s] 虚拟 Bot 未注册", backendID)
-		creds := p.connector.GetAccountCredentials(msg.AccountID)
-		if creds != nil {
-			contextToken := p.connector.GetContextToken(msg.AccountID, msg.FromUser)
-			_ = p.connector.SendTextWithCreds(context.WithoutCancel(ctx), creds, msg.FromUser, reply, contextToken)
-		}
-		return
-	}
-
-	// 5. 处理消息
-	ctxSession := p.ctxManager.GetContext(msg.FromUser, backendID)
-	backendCtx, cancel := context.WithTimeout(ctx, 120*time.Second)
-	defer cancel()
-
-	resp, err := bak.Handle(backendCtx, &adapter.ChatRequest{
-		Message:   content,
-		UserID:    msg.FromUser,
-		BackendID: backendID,
-		History:   convertChatHistory(ctxSession.GetHistory()),
-	})
-	if err != nil {
-		p.log.Error("backend error", "seq", seq, "backend", backendID, "error", err)
-		reply := fmt.Sprintf("⚠️ [%s] 处理出错，请稍后重试", backendID)
-		creds := p.connector.GetAccountCredentials(msg.AccountID)
-		if creds != nil {
-			contextToken := p.connector.GetContextToken(msg.AccountID, msg.FromUser)
-			_ = p.connector.SendTextWithCreds(context.WithoutCancel(ctx), creds, msg.FromUser, reply, contextToken)
-		}
-		return
-	}
-
-	ctxSession.AddTurn(content, resp.Text)
-
-	// 6. 发送回复
-	creds := p.connector.GetAccountCredentials(msg.AccountID)
-	if creds != nil {
-		contextToken := p.connector.GetContextToken(msg.AccountID, msg.FromUser)
-		if err := p.connector.SendTextWithCreds(ctx, creds, msg.FromUser, resp.Text, contextToken); err != nil {
-			p.log.Warn("send reply error", "seq", seq, "error", err)
-		}
-	} else {
-		p.log.Warn("no credentials for reply", "seq", seq, "account_id", msg.AccountID)
-	}
-
-	p.log.Info("message processed", "seq", seq, "backend", backendID, "reply_chars", len(resp.Text))
+	// 4. 统一转发到后端（forwardToBackend 内部处理异步/同步回复）
+	p.forwardToBackend(ctx, msg, content, backendID, seq)
+	p.forwardToBackend(ctx, msg, content, backendID, seq)
 }
 
 // forwardToBackend 转发消息到指定后端（一次性，不切换）
