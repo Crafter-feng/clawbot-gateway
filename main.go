@@ -32,8 +32,19 @@ func main() {
 	if logLevel == "" {
 		logLevel = "info"
 	}
-	log.SetDefault(log.New(logLevel))
+	logFormat := os.Getenv("CLAWBOT_LOG_FORMAT")
+	if logFormat == "" {
+		logFormat = "auto"
+	}
+	log.SetDefault(log.NewWriter(os.Stderr, logLevel, logFormat))
 	log := log.Default().WithComponent("main")
+
+	log.Info("starting ClawBot Gateway",
+		"level", logLevel,
+		"format", logFormat,
+		"version", version.Version,
+		"commit", version.Commit,
+	)
 
 	// 数据库路径
 	dbPath := os.Getenv("CLAWBOT_DB_PATH")
@@ -72,7 +83,7 @@ func main() {
 
 	// 2. 加载配置
 	cfg := config.LoadFromDB(db)
-	log.Info("config loaded")
+	log.Info("config loaded", "host", cfg.Server.Host, "port", cfg.Server.Port, "jwt_expiry_hours", cfg.API.JWTExpiryHours)
 
 	// 打印登录密码（仅首次生成时）
 	if os.Getenv("CLAWBOT_LOGIN_PASSWORD") == "" && cfg.API.LoginPassword != "" {
@@ -111,7 +122,7 @@ func main() {
 			r.SetUserRouteMode(s.UserID, s.RouteMode)
 		}
 	}
-	log.Info("router initialized")
+	log.Info("router initialized", "routes", len(routeRules), "sessions", len(sessions), "default_backend", r.GetDefaultBackend())
 
 	// 4. 初始化适配器工厂
 	af := adapter.NewAdapterFactory()
@@ -171,7 +182,7 @@ func main() {
 		BotType:     cfg.ClawBot.BotType,
 		Log:         log,
 	})
-	log.Info("ClawBot connector initialized")
+	log.Info("ClawBot connector initialized", "base_url", cfg.ClawBot.BaseURL, "poll_timeout", cfg.ClawBot.PollTimeout, "bot_type", cfg.ClawBot.BotType)
 
 	// 8. 初始化 ClientRegistry（虚拟 Bot 管理）
 	clientRegistry := ilink.NewClientRegistry()

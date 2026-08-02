@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -64,7 +63,7 @@ func (s *APIServer) handleQRStatus(c *gin.Context) {
 		QRCode string `json:"qrcode"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Printf("bad request: %v", err)
+		s.log.Warn("bad request: QR status", "error", err)
 		c.JSON(400, gin.H{"error": "请求参数错误"})
 		return
 	}
@@ -81,6 +80,7 @@ func (s *APIServer) handleQRStatus(c *gin.Context) {
 
 	// 如果已确认，保存账号
 	if state.Status == "confirmed" && state.Creds != nil {
+		s.log.Info("QR login success", "account_id", state.Creds.AccountID, "user_id", state.Creds.UserID)
 		acct := database.Account{
 			AccountID: state.Creds.AccountID,
 			UserID:    state.Creds.UserID,
@@ -107,7 +107,7 @@ func (s *APIServer) handleQRStatus(c *gin.Context) {
 func (s *APIServer) handleDisconnectAccount(c *gin.Context) {
 	id := c.Param("id")
 	if err := s.db.DeleteAccount(id); err != nil {
-		log.Printf("ERROR: failed to delete account %s: %v", id, err)
+		s.log.Error("failed to delete account", "id", id, "error", err)
 		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
@@ -119,7 +119,7 @@ func (s *APIServer) handleDisconnectAccount(c *gin.Context) {
 func (s *APIServer) handleListWechatAccounts(c *gin.Context) {
 	accounts, err := s.db.ListAccounts()
 	if err != nil {
-		log.Printf("ERROR: failed to list wechat accounts: %v", err)
+		s.log.Error("failed to list wechat accounts", "error", err)
 		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
@@ -154,7 +154,7 @@ func (s *APIServer) handleSaveWechatAccount(c *gin.Context) {
 		AccountName string `json:"account_name"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Printf("bad request: %v", err)
+		s.log.Warn("bad request: save wechat account", "error", err)
 		c.JSON(400, gin.H{"error": "请求参数错误"})
 		return
 	}
@@ -167,7 +167,7 @@ func (s *APIServer) handleSaveWechatAccount(c *gin.Context) {
 		AccountName: req.AccountName,
 	}
 	if err := s.db.SaveAccount(acct); err != nil {
-		log.Printf("ERROR: failed to save wechat account: %v", err)
+		s.log.Error("failed to save wechat account", "account_id", req.AccountID, "error", err)
 		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}

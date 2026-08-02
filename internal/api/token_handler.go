@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
-	"log"
 	"sync"
 	"time"
 
@@ -31,7 +30,7 @@ func (s *APIServer) handleGetAPIToken(c *gin.Context) {
 	if token == "" {
 		b := make([]byte, 32)
 		if _, err := rand.Read(b); err != nil {
-			log.Printf("ERROR: failed to generate random token: %v", err)
+			s.log.Error("failed to generate random token", "error", err)
 			c.JSON(500, gin.H{"error": "internal server error"})
 			return
 		}
@@ -44,7 +43,7 @@ func (s *APIServer) handleGetAPIToken(c *gin.Context) {
 func (s *APIServer) handleRegenAPIToken(c *gin.Context) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
-		log.Printf("ERROR: failed to generate random token: %v", err)
+		s.log.Error("failed to generate random token", "error", err)
 		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
@@ -76,7 +75,7 @@ func (s *APIServer) handleLogin(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		attempt.mu.Unlock()
-		log.Printf("bad request: %v", err)
+		s.log.Warn("bad request: login", "error", err)
 		c.JSON(400, gin.H{"error": "请求参数错误"})
 		return
 	}
@@ -100,7 +99,7 @@ func (s *APIServer) handleLogin(c *gin.Context) {
 
 	token, err := GenerateJWT(s.config.API.JWTSecret, s.config.API.JWTExpiryHours)
 	if err != nil {
-		log.Printf("ERROR: failed to generate JWT: %v", err)
+		s.log.Error("failed to generate JWT", "error", err)
 		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}

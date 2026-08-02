@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"log"
 
 	"github.com/gin-gonic/gin"
 
@@ -18,7 +17,7 @@ var sensitiveBackendKeys = map[string]bool{
 func (s *APIServer) handleListBackends(c *gin.Context) {
 	backends, err := s.db.ListBackends()
 	if err != nil {
-		log.Printf("ERROR: failed to list backends: %v", err)
+		s.log.Error("failed to list backends", "error", err)
 		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
@@ -70,7 +69,7 @@ func (s *APIServer) handleRegisterBackend(c *gin.Context) {
 		Enabled *bool                  `json:"enabled"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Printf("bad request: %v", err)
+		s.log.Warn("bad request: register backend", "error", err)
 		c.JSON(400, gin.H{"error": "请求参数错误"})
 		return
 	}
@@ -131,7 +130,7 @@ func (s *APIServer) handleUpdateBackend(c *gin.Context) {
 		Enabled *bool                  `json:"enabled"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Printf("bad request: %v", err)
+		s.log.Warn("bad request: update backend", "id", id, "error", err)
 		c.JSON(400, gin.H{"error": "请求参数错误"})
 		return
 	}
@@ -167,13 +166,13 @@ func (s *APIServer) handleUpdateBackend(c *gin.Context) {
 func (s *APIServer) handleRemoveBackend(c *gin.Context) {
 	id := c.Param("id")
 	if err := s.db.DeleteBackend(id); err != nil {
-		log.Printf("ERROR: failed to delete backend %s: %v", id, err)
+		s.log.Error("failed to delete backend", "id", id, "error", err)
 		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
 	s.clientReg.Unregister("gw_" + id)
 	if err := s.db.DeleteVirtualBot(id); err != nil {
-		log.Printf("ERROR: failed to delete virtual bot %s: %v", id, err)
+		s.log.Error("failed to delete virtual bot", "id", id, "error", err)
 		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
@@ -211,8 +210,8 @@ func (s *APIServer) handleTestBackend(c *gin.Context) {
 		})
 		if err != nil {
 			result["error"] = err.Error()
-		} else if m, ok := resp.Msg.(string); ok {
-			result["reply"] = m
+		} else if resp.Msg != nil {
+			result["reply"] = extractMsgText(resp.Msg)
 		}
 	}
 	c.JSON(200, result)
@@ -223,7 +222,7 @@ func (s *APIServer) handleSetDefaultBackend(c *gin.Context) {
 		BackendID string `json:"backend_id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Printf("bad request: %v", err)
+		s.log.Warn("bad request: set default backend", "error", err)
 		c.JSON(400, gin.H{"error": "请求参数错误"})
 		return
 	}

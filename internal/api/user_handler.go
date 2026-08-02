@@ -1,8 +1,6 @@
 package api
 
 import (
-	"log"
-
 	"github.com/gin-gonic/gin"
 
 	"clawbot-gateway/internal/database"
@@ -10,7 +8,7 @@ import (
 func (s *APIServer) handleListUsers(c *gin.Context) {
 	sessions, err := s.db.GetAllUserSessions()
 	if err != nil {
-		log.Printf("ERROR: failed to list users: %v", err)
+		s.log.Error("failed to list users", "error", err)
 		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
@@ -33,7 +31,7 @@ func (s *APIServer) handleSwitchUserBackend(c *gin.Context) {
 		BackendID string `json:"backend_id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Printf("bad request: %v", err)
+		s.log.Warn("bad request: switch backend", "user", userID, "error", err)
 		c.JSON(400, gin.H{"error": "请求参数错误"})
 		return
 	}
@@ -74,7 +72,7 @@ func (s *APIServer) handleSetUserRouteMode(c *gin.Context) {
 		RouteMode string `json:"route_mode"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Printf("bad request: %v", err)
+		s.log.Warn("bad request: set route mode", "user", userID, "error", err)
 		c.JSON(400, gin.H{"error": "请求参数错误"})
 		return
 	}

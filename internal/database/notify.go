@@ -1,6 +1,6 @@
 package database
 
-import "log"
+import "clawbot-gateway/internal/log"
 
 type NotifyToken struct {
 	ID        string `json:"id"`
@@ -23,7 +23,7 @@ func (db *DB) ListNotifyTokens() ([]NotifyToken, error) {
 		var t NotifyToken
 		var enabled int
 		if err := rows.Scan(&t.ID, &t.ToUser, &t.Name, &t.Token, &enabled, &t.CreatedAt); err != nil {
-			log.Printf("scan error: %v", err)
+			log.Default().WithComponent("database").Warn("scan error: notify_tokens", "error", err)
 			continue
 		}
 		t.Enabled = enabled == 1

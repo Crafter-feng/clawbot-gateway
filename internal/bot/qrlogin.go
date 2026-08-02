@@ -60,8 +60,7 @@ func (qm *QRCodeManager) CreateScan(ctx context.Context, qrcode string) error {
 	qm.mu.Unlock()
 
 	go func() {
-		log.Default().Info("QR polling goroutine started", "qrcode", qrcode)
-		log.Default().Info("QR polling baseURL", "baseURL", qm.connector.baseURL)
+		qm.log().Info("QR polling goroutine started", "qrcode", qrcode)
 		defer func() {
 			qm.mu.Lock()
 			// confirmed 状态保留在 active 中，前端需要通过 CheckStatus 读取凭证
@@ -79,7 +78,7 @@ func (qm *QRCodeManager) CreateScan(ctx context.Context, qrcode string) error {
 		for {
 			select {
 			case <-ctx.Done():
-				log.Default().Info("QR polling context cancelled", "qrcode", qrcode)
+				qm.log().Info("QR polling context cancelled", "qrcode", qrcode)
 				return
 			default:
 			}
@@ -94,7 +93,7 @@ func (qm *QRCodeManager) CreateScan(ctx context.Context, qrcode string) error {
 			}
 
 			url := fmt.Sprintf("%s/ilink/bot/get_qrcode_status?qrcode=%s", currentBaseURL, url.QueryEscape(qrcode))
-			log.Default().Info("QR polling making request", "url", url)
+			qm.log().Debug("QR polling making request", "url", url)
 			req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 			if err != nil {
 				qm.mu.Lock()

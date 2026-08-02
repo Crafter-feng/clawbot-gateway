@@ -1,6 +1,6 @@
 package database
 
-import "log"
+import "clawbot-gateway/internal/log"
 
 type Account struct {
 	AccountID   string `json:"account_id"`
@@ -22,7 +22,7 @@ func (db *DB) ListAccounts() ([]Account, error) {
 	for rows.Next() {
 		var a Account
 		if err := rows.Scan(&a.AccountID, &a.UserID, &a.Token, &a.BaseURL, &a.AccountName, &a.LoginAt); err != nil {
-			log.Printf("scan error: %v", err)
+			log.Default().WithComponent("database").Warn("scan error: accounts", "error", err)
 			continue
 		}
 		result = append(result, a)

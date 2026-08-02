@@ -1,7 +1,6 @@
 package api
 
 import (
-	"log"
 	"strings"
 	"github.com/gin-gonic/gin"
 )
@@ -38,7 +37,7 @@ func (s *APIServer) handleGetAllConfig(c *gin.Context) {
 func (s *APIServer) handleUpdateConfig(c *gin.Context) {
 	var req map[string]string
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Printf("bad request: %v", err)
+		s.log.Warn("bad request: update config", "error", err)
 		c.JSON(400, gin.H{"error": "请求参数错误"})
 		return
 	}
@@ -84,7 +83,7 @@ func (s *APIServer) handleSetConfig(c *gin.Context) {
 		Value string `json:"value"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Printf("bad request: %v", err)
+		s.log.Warn("bad request: set config", "key", key, "error", err)
 		c.JSON(400, gin.H{"error": "请求参数错误"})
 		return
 	}

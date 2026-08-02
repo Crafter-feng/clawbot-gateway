@@ -81,7 +81,7 @@ func (s *APIServer) Start(addr string) error {
 	rest.Use(gin.Recovery())
 	rest.Use(s.corsMiddleware())
 	if s.log != nil {
-		rest.Use(log.GinMiddleware(s.log))
+		rest.Use(GinMiddleware(s.log))
 	}
 	rest.Use(maxBodySizeMiddleware(1 << 20)) // 1MB request body limit
 	rest.Use(securityHeadersMiddleware())
@@ -171,6 +171,7 @@ ilinkServer.SetForwardFunc(func(ctx context.Context, accountID, endpoint string,
 	logs := api.Group("/logs")
 	logs.GET("", s.handleGetLogs)
 	logs.GET("/categories", s.handleGetLogCategories)
+	logs.GET("/stream", s.handleLogStream)
 
 	// 消息 API
 	msg := api.Group("/message")

@@ -276,7 +276,7 @@ func (p *MessagePipeline) forwardToBackend(ctx context.Context, msg bot.Normaliz
 		p.log.Warn("no credentials for reply", "seq", seq, "account_id", msg.AccountID)
 	}
 
-	p.log.Info("message processed", "seq", seq, "backend", backendID, "reply_chars", 0)
+	p.log.Info("message processed", "seq", seq, "backend", backendID, "reply_chars", len(extractMsgText(resp.Msg)))
 }
 
 // SendOutgoingMessage 由 ForwardFunc 调用，处理虚拟 Bot 的回复消息
@@ -446,10 +446,7 @@ func (p *MessagePipeline) HandleDirectMessage(ctx context.Context, content, user
 			replies = append(replies, fmt.Sprintf("[%s] 错误: %s", bid, err.Error()))
 			continue
 		}
-		replyText := ""
-		if m, ok := resp.Msg.(string); ok {
-			replyText = m
-		}
+		replyText := extractMsgText(resp.Msg)
 		ctxSession.AddTurn(content, replyText)
 		if len(backendIDs) > 1 && bid != backendIDs[0] {
 			replies = append(replies, fmt.Sprintf("[%s] %s", p.adapterName(bid), replyText))
@@ -475,12 +472,35 @@ func (p *MessagePipeline) sendBackendResponse(ctx context.Context, creds *bot.Cr
 	}
 }
 
+// extractMsgText 从后端响应中提取文本内容
+// 支持 string 和 iLink map 格式
+func extractMsgText(msg interface{}) string {
+	switch m := msg.(type) {
+	case string:
+		return m
+	case map[string]interface{}:
+		// iLink 格式: {"msg":{"item_list":[{"type":1,"text_item":{"text":"..."}}]}}
+		if msgMap, ok := m["msg"].(map[string]interface{}); ok {
+			if items, ok := msgMap["item_list"].([]interface{}); ok && len(items) > 0 {
+				if item, ok := items[0].(map[string]interface{}); ok {
+					if textItem, ok := item["text_item"].(map[string]interface{}); ok {
+						if text, ok := textItem["text"].(string); ok {
+							return text
+						}
+					}
+				}
+			}
+		}
+	}
+	return ""
+}
+
 func truncate(s string, n int) string {
 	runes := []rune(s)
 	if len(runes) <= n {
 		return s
 	}
-	return string(runes[:n]) + "..."
+return string(runes[:n]) + "..."
 }
 
 // ── 命令处理器 ──

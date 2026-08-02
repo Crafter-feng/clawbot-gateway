@@ -222,7 +222,7 @@ func (c *Connector) sendMessage(ctx context.Context, creds *Credentials, payload
 	}
 
 	// 打印发送结果便于调试
-	c.log.Info("sendMessage response", "status", resp.StatusCode, "body", string(respBody))
+	c.log.Debug("sendMessage response", "status", resp.StatusCode, "body", string(respBody))
 
 	if resp.StatusCode != 200 {
 		return fmt.Errorf("sendMessage failed: %d, body: %s", resp.StatusCode, string(respBody))

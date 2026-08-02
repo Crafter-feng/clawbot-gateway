@@ -1,6 +1,6 @@
 package database
 
-import "log"
+import "clawbot-gateway/internal/log"
 
 type VirtualBot struct {
 	ID        string `json:"id"`
@@ -21,7 +21,7 @@ func (db *DB) ListVirtualBots() ([]VirtualBot, error) {
 	for rows.Next() {
 		var vb VirtualBot
 		if err := rows.Scan(&vb.ID, &vb.AccountID, &vb.UserID, &vb.BaseURL, &vb.Token); err != nil {
-			log.Printf("scan error: %v", err)
+			log.Default().WithComponent("database").Warn("scan error: virtual_bots", "error", err)
 			continue
 		}
 		result = append(result, vb)

@@ -3,7 +3,6 @@ package notify
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"sync"
 	"time"
 
@@ -11,13 +10,14 @@ import (
 
 	"clawbot-gateway/internal/crypto"
 	"clawbot-gateway/internal/database"
+	"clawbot-gateway/internal/log"
 )
 
 // Handler 通知处理器
 type Handler struct {
 	db          *database.DB
 	sendFunc    func(ctx context.Context, toUser, content string) error
-	log         *slog.Logger
+	log         *log.Logger
 	publicURL   string
 	rateLimitMu sync.Mutex
 	rateCounts  map[string]int
@@ -29,7 +29,7 @@ func NewHandler(db *database.DB, sendFunc func(ctx context.Context, toUser, cont
 	return &Handler{
 		db:         db,
 		sendFunc:   sendFunc,
-		log:        slog.Default(),
+		log:        log.Default().WithComponent("notify"),
 		publicURL:  "",
 		rateCounts: make(map[string]int),
 		rateReset:  make(map[string]time.Time),
@@ -37,8 +37,8 @@ func NewHandler(db *database.DB, sendFunc func(ctx context.Context, toUser, cont
 }
 
 // SetLogger 设置日志记录器
-func (h *Handler) SetLogger(log *slog.Logger) {
-	h.log = log
+func (h *Handler) SetLogger(l *log.Logger) {
+	h.log = l.WithComponent("notify")
 }
 
 // SetPublicURL 设置外部可访问的 URL

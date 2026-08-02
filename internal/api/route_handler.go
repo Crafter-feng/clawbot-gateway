@@ -1,7 +1,6 @@
 package api
 
 import (
-	"log"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -13,7 +12,7 @@ import (
 func (s *APIServer) handleListRouteRules(c *gin.Context) {
 	rules, err := s.db.ListRouteRules()
 	if err != nil {
-		log.Printf("ERROR: failed to list route rules: %v", err)
+		s.log.Error("failed to list route rules", "error", err)
 		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
@@ -44,7 +43,7 @@ func (s *APIServer) handleGetRouteRule(c *gin.Context) {
 func (s *APIServer) handleCreateRouteRule(c *gin.Context) {
 	var rule database.RouteRule
 	if err := c.ShouldBindJSON(&rule); err != nil {
-		log.Printf("bad request: %v", err)
+		s.log.Warn("bad request: create route rule", "error", err)
 		c.JSON(400, gin.H{"error": "请求参数错误"})
 		return
 	}
@@ -73,7 +72,7 @@ func (s *APIServer) handleCreateRouteRule(c *gin.Context) {
 
 	id, err := s.db.CreateRouteRule(rule)
 	if err != nil {
-		log.Printf("ERROR: failed to create route rule: %v", err)
+		s.log.Error("failed to create route rule", "name", rule.Name, "error", err)
 		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
@@ -95,7 +94,7 @@ func (s *APIServer) handleUpdateRouteRule(c *gin.Context) {
 
 	var rule database.RouteRule
 	if err := c.ShouldBindJSON(&rule); err != nil {
-		log.Printf("bad request: %v", err)
+		s.log.Warn("bad request: update route rule", "id", id, "error", err)
 		c.JSON(400, gin.H{"error": "请求参数错误"})
 		return
 	}
@@ -112,7 +111,7 @@ func (s *APIServer) handleUpdateRouteRule(c *gin.Context) {
 		}
 	}
 	if err := s.db.UpdateRouteRule(id, rule); err != nil {
-		log.Printf("ERROR: failed to update route rule %d: %v", id, err)
+		s.log.Error("failed to update route rule", "id", id, "error", err)
 		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
@@ -132,7 +131,7 @@ func (s *APIServer) handleDeleteRouteRule(c *gin.Context) {
 		return
 	}
 	if err := s.db.DeleteRouteRule(id); err != nil {
-		log.Printf("ERROR: failed to delete route rule %d: %v", id, err)
+		s.log.Error("failed to delete route rule", "id", id, "error", err)
 		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
@@ -152,7 +151,7 @@ func (s *APIServer) handleToggleRouteRule(c *gin.Context) {
 	}
 
 	if err := s.db.ToggleRouteRule(id); err != nil {
-		log.Printf("ERROR: failed to toggle route rule %d: %v", id, err)
+		s.log.Error("failed to toggle route rule", "id", id, "error", err)
 		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
@@ -168,13 +167,13 @@ func (s *APIServer) handleReorderRouteRules(c *gin.Context) {
 		IDs []int `json:"ids"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Printf("bad request: %v", err)
+		s.log.Warn("bad request: reorder route rules", "error", err)
 		c.JSON(400, gin.H{"error": "请求参数错误"})
 		return
 	}
 
 	if err := s.db.ReorderRouteRules(req.IDs); err != nil {
-		log.Printf("ERROR: failed to reorder route rules: %v", err)
+		s.log.Error("failed to reorder route rules", "error", err)
 		c.JSON(500, gin.H{"error": "internal server error"})
 		return
 	}
@@ -194,7 +193,7 @@ func (s *APIServer) handleTestRouteRule(c *gin.Context) {
 		MsgType  string `json:"msg_type"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Printf("bad request: %v", err)
+		s.log.Warn("bad request: test route rule", "error", err)
 		c.JSON(400, gin.H{"error": "请求参数错误"})
 		return
 	}
