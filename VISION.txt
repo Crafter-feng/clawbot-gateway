@@ -25,7 +25,8 @@ VERSION = 0.0.6
 | `VISION.txt` | 手动维护 | **唯一权威来源** |
 | `internal/version/version.go` | `-ldflags` 注入 | 构建时由 `build-fpk.sh` 从 manifest 读取写入 |
 | `fpk/manifest` | 构建脚本自动更新 | `sed -i "s/^version.*/version = ${VERSION}/"` |
-| `web/package.json` | 手动同步 | 前端版本，独立于构建版本 |
+| `web/package.json` | 手动同步 | 前端版本号，独立于构建版本 |
+| `web/src-tauri/tauri.conf.json` | 手动同步 | Tauri 桌面端版本号，与 VISION.txt 一致 |
 | Git tag | `v${VERSION}` | 发布时打 tag |
 
 ## 发布流程
