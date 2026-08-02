@@ -141,6 +141,27 @@ func (c *Connector) SendRawPayload(ctx context.Context, creds *Credentials, payl
 	return c.sendMessage(ctx, creds, payload)
 }
 
+// ForwardAPIRequest 将请求转发到真实 iLink API，返回原始响应
+func (c *Connector) ForwardAPIRequest(ctx context.Context, creds *Credentials, endpoint string, body []byte) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "POST", creds.BaseURL+"/"+endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("forward request: %w", err)
+	}
+	c.setFullHeaders(req, creds.Token, string(body))
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("forward do: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, fmt.Errorf("forward read: %w", err)
+	}
+	return respBody, nil
+}
+
 func (c *Connector) SendTextWithCreds(ctx context.Context, creds *Credentials, toUser, text, contextToken string) error {
 	clientID := GenerateClientID()
 	var payload sendMessagePayload

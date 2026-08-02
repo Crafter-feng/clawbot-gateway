@@ -312,7 +312,7 @@ func (p *MessagePipeline) SendOutgoingMessage(ctx context.Context, accountID str
 		return fmt.Errorf("no text content in message")
 	}
 	// 查找真实账号凭证（Pipeline 内部维护虚拟Bot→真实账号映射）
-	creds := p.findAccountCredentials(accountID)
+	creds := p.FindAccountCredentials(accountID)
 	if creds == nil {
 		return fmt.Errorf("no available account for virtual bot: %s", accountID)
 	}
@@ -327,7 +327,7 @@ func (p *MessagePipeline) SendOutgoingMessage(ctx context.Context, accountID str
 
 // findAccountCredentials 查找虚拟 Bot 对应的真实账号凭证
 // 使用虚拟 Bot 入队时记录的 LastAccountID 精确匹配
-func (p *MessagePipeline) findAccountCredentials(accountID string) *bot.Credentials {
+func (p *MessagePipeline) FindAccountCredentials(accountID string) *bot.Credentials {
 	// 查找虚拟 Bot 记录的 LastAccountID（由 enqueueToVirtualBot 在入队时设置）
 	if vbot := p.clientReg.Get(accountID); vbot != nil && vbot.LastAccountID != "" {
 		for _, a := range p.connector.GetAccounts() {

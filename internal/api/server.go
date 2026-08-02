@@ -93,10 +93,16 @@ func (s *APIServer) Start(addr string) error {
 	// iLink API
 	ilinkServer := ilink.NewServer(s.connector, s.clientReg)
 ilinkServer.SetForwardFunc(func(ctx context.Context, accountID, endpoint string, body []byte) ([]byte, int, error) {
-		if err := s.Pipeline.SendOutgoingMessage(ctx, accountID, body); err != nil {
-			return nil, 500, fmt.Errorf("send failed: %w", err)
+		creds := s.Pipeline.FindAccountCredentials(accountID)
+		if creds == nil {
+			return nil, 500, fmt.Errorf("no available account for virtual bot: %s", accountID)
 		}
-		return []byte(`{"ret":0}`), 200, nil
+		// 转发到真实 iLink API（sendmessage/sendtyping/getuploadurl 等）
+		respBody, err := s.connector.ForwardAPIRequest(ctx, creds, strings.TrimPrefix(endpoint, "/"), body)
+		if err != nil {
+			return nil, 500, fmt.Errorf("forward failed: %w", err)
+		}
+		return respBody, 200, nil
 	})
 	ilinkServer.RegisterRoutes(rest)
 
