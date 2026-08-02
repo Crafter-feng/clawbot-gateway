@@ -217,6 +217,7 @@ func main() {
 	pipelineCtx, pipelineCancel := context.WithCancel(context.Background())
 	pipeline := api.NewMessagePipeline(conn, r, af, cm, clientRegistry)
 	pipeline.SetLogger(log)
+	pipeline.SetupProxyAdapters()
 	pipeline.Start(pipelineCtx)
 
 	addr := net.JoinHostPort(cfg.Server.Host, strconv.Itoa(cfg.Server.Port))

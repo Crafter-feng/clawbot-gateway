@@ -81,6 +81,30 @@ func (p *MessagePipeline) Start(ctx context.Context) {
 	go p.cleanupLoop(ctx)
 }
 
+// SetupProxyAdapters 为 ilink_proxy 后端设置入队回调
+// 必须在配置完成后、消息处理开始前调用
+func (p *MessagePipeline) SetupProxyAdapters() {
+	for _, backendID := range p.adapters.ListIDs() {
+		bak, ok := p.adapters.Get(backendID)
+		if !ok {
+			continue
+		}
+		if proxyAdapter, ok := bak.(*adapter.ILinkProxyBackendAdapter); ok {
+			bid := backendID
+			proxyAdapter.SetEnqueueFunc(func(req *adapter.ChatRequest) bool {
+				msg := bot.NormalizedMessage{
+					FromUser:     req.UserID,
+					AccountID:    req.AccountID,
+					Content:      req.Message,
+					ContextToken: req.ContextToken,
+				}
+				return p.enqueueToVirtualBot(msg, req.Message, bid, 0)
+			})
+			p.log.Info("proxy adapter configured", "backend", backendID)
+		}
+	}
+}
+
 // Wait 等待所有 in-flight 消息处理完成，用于优雅关闭
 func (p *MessagePipeline) Wait() {
 	p.wg.Wait()
@@ -271,32 +295,17 @@ func (p *MessagePipeline) forwardToBackend(ctx context.Context, msg bot.Normaliz
 		return
 	}
 
-	// ilink_proxy 是连接适配器：消息入虚拟 Bot 队列，不调用 Handle()，不回复
-	// 外部服务通过 getupdates 消费队列后处理并回复
-	if adapter.IsConnectionAdapter(bak.Type()) {
-		if p.enqueueToVirtualBot(msg, content, backendID, seq) {
-			return
-		}
-		// 找不到虚拟 Bot：回复错误
-		reply := fmt.Sprintf("❌ 后端 [%s] 虚拟 Bot 未注册", backendID)
-		creds := p.connector.GetAccountCredentials(msg.AccountID)
-		if creds != nil {
-			contextToken := p.connector.GetContextToken(msg.AccountID, msg.FromUser)
-			_ = p.connector.SendTextWithCreds(context.WithoutCancel(ctx), creds, msg.FromUser, reply, contextToken)
-		}
-		return
-	}
-
-	// 处理消息
 	ctxSession := p.ctxManager.GetContext(msg.FromUser, backendID)
 	backendCtx, cancel := context.WithTimeout(ctx, 120*time.Second)
 	defer cancel()
 
 	resp, err := bak.Handle(backendCtx, &adapter.ChatRequest{
-		Message:   content,
-		UserID:    msg.FromUser,
-		BackendID: backendID,
-		History:   convertChatHistory(ctxSession.GetHistory()),
+		Message:      content,
+		UserID:       msg.FromUser,
+		BackendID:    backendID,
+		History:      convertChatHistory(ctxSession.GetHistory()),
+		AccountID:    msg.AccountID,
+		ContextToken: msg.ContextToken,
 	})
 	if err != nil {
 		p.log.Error("backend error", "seq", seq, "backend", backendID, "error", err)
@@ -308,22 +317,27 @@ func (p *MessagePipeline) forwardToBackend(ctx context.Context, msg bot.Normaliz
 		}
 		return
 	}
-	// 添加回复前缀标识
-	replyText := fmt.Sprintf("[%s] %s", backendID, resp.Text)
-	ctxSession.AddTurn(content, replyText)
+
+	// 空回复表示异步后端（ilink_proxy），回复通过 SendOutgoingMessage 异步返回
+	if resp.Text == "" {
+		p.log.Debug("async backend", "seq", seq, "backend", backendID, "user", msg.FromUser)
+		return
+	}
+
+	ctxSession.AddTurn(content, resp.Text)
 
 	// 发送回复
 	creds := p.connector.GetAccountCredentials(msg.AccountID)
 	if creds != nil {
 		contextToken := p.connector.GetContextToken(msg.AccountID, msg.FromUser)
-		if err := p.connector.SendTextWithCreds(ctx, creds, msg.FromUser, replyText, contextToken); err != nil {
+		if err := p.connector.SendTextWithCreds(ctx, creds, msg.FromUser, resp.Text, contextToken); err != nil {
 			p.log.Warn("send reply error", "seq", seq, "error", err)
 		}
 	} else {
 		p.log.Warn("no credentials for reply", "seq", seq, "account_id", msg.AccountID)
 	}
 
-	p.log.Info("message processed", "seq", seq, "backend", backendID, "reply_chars", len(replyText))
+	p.log.Info("message processed", "seq", seq, "backend", backendID, "reply_chars", len(resp.Text))
 }
 
 // SendOutgoingMessage 由 ForwardFunc 调用，处理虚拟 Bot 的回复消息

@@ -15,13 +15,15 @@ type ChatMessage struct {
 
 // ChatRequest 聊天请求
 type ChatRequest struct {
-	Message     string
-	UserID      string
-	SessionID   string
-	BackendID   string
-	History     []ChatMessage
-	Attachments []Attachment
-	Stream      bool // 是否流式输出
+	Message      string
+	UserID       string
+	SessionID    string
+	BackendID    string
+	History      []ChatMessage
+	Attachments  []Attachment
+	Stream       bool // 是否流式输出
+	AccountID    string // 真实账号 ID（ilink_proxy 用于 LastAccountID）
+	ContextToken string // 原始消息的 context_token
 }
 
 // ChatResponse 聊天响应
