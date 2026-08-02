@@ -61,7 +61,7 @@ func (a *ILinkProxyAdapter) GetUserID() string {
 }
 
 // EnqueueFunc 由 Pipeline 设置，用于将消息入队到虚拟 Bot
-type EnqueueFunc func(req *ChatRequest) bool
+type EnqueueFunc func(req *BackendRequest) bool
 
 // ILinkProxyBackendAdapter iLink 代理后端适配器
 // Handle() 将消息入队虚拟 Bot 后返回空响应（异步回复，通过 SendOutgoingMessage 回传）
@@ -83,7 +83,7 @@ func (a *ILinkProxyBackendAdapter) SetEnqueueFunc(f EnqueueFunc) {
 
 // Handle 入队消息到虚拟 Bot，返回空响应表示异步回复
 // 外部服务通过 getupdates 消费后，通过 sendmessage 返回回复
-func (a *ILinkProxyBackendAdapter) Handle(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
+func (a *ILinkProxyBackendAdapter) Handle(ctx context.Context, req *BackendRequest) (*BackendResponse, error) {
 	if a.enqueue == nil {
 		return nil, fmt.Errorf("ilink_proxy: enqueue func not set for backend %s", a.id)
 	}
@@ -91,10 +91,10 @@ func (a *ILinkProxyBackendAdapter) Handle(ctx context.Context, req *ChatRequest)
 		return nil, fmt.Errorf("ilink_proxy: enqueue failed for backend %s", a.id)
 	}
 	// 空 Text 表示异步后端，Pipeline 会跳过直接回复
-	return &ChatResponse{Text: "", Backend: a.id, Async: true}, nil
+	return &BackendResponse{Text: "", Backend: a.id, Async: true}, nil
 }
 
-func (a *ILinkProxyBackendAdapter) HandleStream(ctx context.Context, req *ChatRequest, ch chan<- string) error {
+func (a *ILinkProxyBackendAdapter) HandleStream(ctx context.Context, req *BackendRequest, ch chan<- string) error {
 	return fmt.Errorf("ilink_proxy backend does not support streaming")
 }
 

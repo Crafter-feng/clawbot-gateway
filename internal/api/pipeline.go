@@ -91,7 +91,7 @@ func (p *MessagePipeline) SetupProxyAdapters() {
 		}
 		if proxyAdapter, ok := bak.(*adapter.ILinkProxyBackendAdapter); ok {
 			bid := backendID
-			proxyAdapter.SetEnqueueFunc(func(req *adapter.ChatRequest) bool {
+			proxyAdapter.SetEnqueueFunc(func(req *adapter.BackendRequest) bool {
 				msg := bot.NormalizedMessage{
 					FromUser:     req.UserID,
 					AccountID:    req.AccountID,
@@ -240,7 +240,7 @@ func (p *MessagePipeline) forwardToBackend(ctx context.Context, msg bot.Normaliz
 	backendCtx, cancel := context.WithTimeout(ctx, 120*time.Second)
 	defer cancel()
 
-	resp, err := bak.Handle(backendCtx, &adapter.ChatRequest{
+	resp, err := bak.Handle(backendCtx, &adapter.BackendRequest{
 		Message:      content,
 		UserID:       msg.FromUser,
 		BackendID:    backendID,
@@ -271,8 +271,16 @@ func (p *MessagePipeline) forwardToBackend(ctx context.Context, msg bot.Normaliz
 	creds := p.connector.GetAccountCredentials(msg.AccountID)
 	if creds != nil {
 		contextToken := p.connector.GetContextToken(msg.AccountID, msg.FromUser)
-		if err := p.connector.SendTextWithCreds(ctx, creds, msg.FromUser, resp.Text, contextToken); err != nil {
-			p.log.Warn("send reply error", "seq", seq, "error", err)
+		if resp.Msg != nil {
+			// 完整 iLink 消息负载
+			if err := p.connector.SendRawPayload(ctx, creds, resp.Msg); err != nil {
+				p.log.Warn("send raw msg error", "seq", seq, "error", err)
+			}
+		} else {
+			// 文本回复
+			if err := p.connector.SendTextWithCreds(ctx, creds, msg.FromUser, resp.Text, contextToken); err != nil {
+				p.log.Warn("send reply error", "seq", seq, "error", err)
+			}
 		}
 	} else {
 		p.log.Warn("no credentials for reply", "seq", seq, "account_id", msg.AccountID)
@@ -438,7 +446,7 @@ func (p *MessagePipeline) HandleDirectMessage(ctx context.Context, content, user
 			continue
 		}
 		ctxSession := p.ctxManager.GetContext(userID, bid)
-		resp, err := bak.Handle(ctx, &adapter.ChatRequest{
+		resp, err := bak.Handle(ctx, &adapter.BackendRequest{
 			Message:   content,
 			UserID:    userID,
 			BackendID: bid,

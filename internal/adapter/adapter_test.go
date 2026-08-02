@@ -159,7 +159,7 @@ func TestEchoAdapterHealthCheck(t *testing.T) {
 
 func TestEchoAdapterHandle(t *testing.T) {
 	a := NewEchoAdapter("echo-1", "Echo")
-	req := &ChatRequest{
+	req := &BackendRequest{
 		Message: "Hello, world!",
 		UserID:  "user1",
 	}
@@ -177,7 +177,7 @@ func TestEchoAdapterHandle(t *testing.T) {
 
 func TestEchoAdapterHandleStream(t *testing.T) {
 	a := NewEchoAdapter("echo-1", "Echo")
-	req := &ChatRequest{
+	req := &BackendRequest{
 		Message: "Hello",
 		UserID:  "user1",
 	}
@@ -249,8 +249,8 @@ func TestILinkProxyAdapterGetUserID(t *testing.T) {
 	}
 }
 
-func TestChatRequest(t *testing.T) {
-	req := &ChatRequest{
+func TestBackendRequest(t *testing.T) {
+	req := &BackendRequest{
 		Message:   "test",
 		UserID:    "user1",
 		SessionID: "session1",
@@ -267,8 +267,8 @@ func TestChatRequest(t *testing.T) {
 	}
 }
 
-func TestChatResponse(t *testing.T) {
-	resp := &ChatResponse{
+func TestBackendResponse(t *testing.T) {
+	resp := &BackendResponse{
 		Text:    "response",
 		Backend: "echo-1",
 	}

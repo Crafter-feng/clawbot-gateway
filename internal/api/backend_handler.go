@@ -205,7 +205,7 @@ func (s *APIServer) handleTestBackend(c *gin.Context) {
 	}
 
 	if healthy {
-		resp, err := adapterInstance.Handle(c.Request.Context(), &adapter.ChatRequest{
+		resp, err := adapterInstance.Handle(c.Request.Context(), &adapter.BackendRequest{
 			Message: "ping",
 			UserID:  "test",
 		})

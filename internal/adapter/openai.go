@@ -77,7 +77,7 @@ func sanitizeErrorBody(body string) string {
 	return body
 }
 
-func (o *OpenAICompatibleAdapter) Handle(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
+func (o *OpenAICompatibleAdapter) Handle(ctx context.Context, req *BackendRequest) (*BackendResponse, error) {
 	messages := o.buildMessages(req)
 	payload := map[string]interface{}{
 		"model":    o.model,
@@ -142,13 +142,13 @@ func (o *OpenAICompatibleAdapter) Handle(ctx context.Context, req *ChatRequest) 
 		return nil, fmt.Errorf("no choices in response")
 	}
 
-	return &ChatResponse{
+	return &BackendResponse{
 		Text:    strings.TrimSpace(result.Choices[0].Message.Content),
 		Backend: o.id,
 	}, nil
 }
 
-func (o *OpenAICompatibleAdapter) HandleStream(ctx context.Context, req *ChatRequest, ch chan<- string) error {
+func (o *OpenAICompatibleAdapter) HandleStream(ctx context.Context, req *BackendRequest, ch chan<- string) error {
 	defer close(ch)
 
 	messages := o.buildMessages(req)
@@ -223,7 +223,7 @@ func (o *OpenAICompatibleAdapter) HandleStream(ctx context.Context, req *ChatReq
 	return scanner.Err()
 }
 
-func (o *OpenAICompatibleAdapter) buildMessages(req *ChatRequest) []map[string]string {
+func (o *OpenAICompatibleAdapter) buildMessages(req *BackendRequest) []map[string]string {
 	messages := make([]map[string]string, 0)
 	if len(req.History) > 0 {
 		for _, h := range req.History {

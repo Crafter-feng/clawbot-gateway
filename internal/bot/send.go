@@ -136,6 +136,11 @@ type sendTypingPayload struct {
 	BaseInfo     BaseInfo `json:"base_info"`
 }
 
+// SendRawPayload 发送完整 iLink 消息负载（map 格式）
+func (c *Connector) SendRawPayload(ctx context.Context, creds *Credentials, payload map[string]interface{}) error {
+	return c.sendMessage(ctx, creds, payload)
+}
+
 func (c *Connector) SendTextWithCreds(ctx context.Context, creds *Credentials, toUser, text, contextToken string) error {
 	clientID := GenerateClientID()
 	var payload sendMessagePayload

@@ -13,8 +13,8 @@ type ChatMessage struct {
 	Content string `json:"content"`
 }
 
-// ChatRequest 聊天请求
-type ChatRequest struct {
+// BackendRequest 聊天请求
+type BackendRequest struct {
 	Message      string
 	UserID       string
 	SessionID    string
@@ -26,12 +26,13 @@ type ChatRequest struct {
 	ContextToken string // 原始消息的 context_token
 }
 
-// ChatResponse 聊天响应
-type ChatResponse struct {
-	Text    string `json:"text"`
-	Backend string `json:"backend"`
-	Stream  bool   `json:"stream,omitempty"`
-	Async   bool   // 异步后端（ilink_proxy），回复通过 SendOutgoingMessage 回传
+// BackendResponse 聊天响应
+type BackendResponse struct {
+	Text    string                 `json:"text"`
+	Backend string                 `json:"backend"`
+	Stream  bool                   `json:"stream,omitempty"`
+	Async   bool                   // 异步后端（ilink_proxy），回复通过 SendOutgoingMessage 回传
+	Msg     map[string]interface{} `json:"msg,omitempty"` // 完整 iLink sendmessage 负载，非 nil 时覆盖 Text
 }
 
 // Attachment 附件
@@ -56,8 +57,8 @@ type BackendAdapter interface {
 	ID() string
 	Name() string
 	Type() string
-	Handle(ctx context.Context, req *ChatRequest) (*ChatResponse, error)
-	HandleStream(ctx context.Context, req *ChatRequest, ch chan<- string) error
+	Handle(ctx context.Context, req *BackendRequest) (*BackendResponse, error)
+	HandleStream(ctx context.Context, req *BackendRequest, ch chan<- string) error
 	HealthCheck(ctx context.Context) bool
 }
 

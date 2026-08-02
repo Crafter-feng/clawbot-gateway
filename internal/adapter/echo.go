@@ -23,12 +23,12 @@ func (e *EchoAdapter) Name() string                         { return e.name }
 func (e *EchoAdapter) Type() string                         { return "echo" }
 func (e *EchoAdapter) HealthCheck(ctx context.Context) bool { return true }
 
-func (e *EchoAdapter) Handle(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
+func (e *EchoAdapter) Handle(ctx context.Context, req *BackendRequest) (*BackendResponse, error) {
 	reply := fmt.Sprintf("[Echo:%s] %s", e.id, req.Message)
-	return &ChatResponse{Text: reply, Backend: e.id}, nil
+	return &BackendResponse{Text: reply, Backend: e.id}, nil
 }
 
-func (e *EchoAdapter) HandleStream(ctx context.Context, req *ChatRequest, ch chan<- string) error {
+func (e *EchoAdapter) HandleStream(ctx context.Context, req *BackendRequest, ch chan<- string) error {
 	defer close(ch)
 	reply := fmt.Sprintf("[Echo:%s] %s", e.id, req.Message)
 	ch <- reply
