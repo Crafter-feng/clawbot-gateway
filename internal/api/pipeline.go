@@ -227,8 +227,16 @@ func (p *MessagePipeline) processMessage(ctx context.Context, msg bot.Normalized
 	backendID := decision.BackendID
 	p.log.Info("routing to backend", "seq", seq, "from", msg.FromUser, "backend", backendID, "matched_by", decision.MatchedBy)
 
+	// 规则命中时提示用户
+	if decision.MatchedBy == "keyword" {
+		hint := fmt.Sprintf("📬 路由规则匹配 → [%s]", p.adapterName(backendID))
+		creds := p.connector.GetAccountCredentials(msg.AccountID)
+		if creds != nil {
+			_ = p.connector.SendTextWithCreds(ctx, creds, msg.FromUser, hint, "")
+		}
+	}
+
 	// 4. 统一转发到后端（forwardToBackend 内部处理异步/同步回复）
-	p.forwardToBackend(ctx, msg, content, backendID, seq)
 	p.forwardToBackend(ctx, msg, content, backendID, seq)
 }
 
