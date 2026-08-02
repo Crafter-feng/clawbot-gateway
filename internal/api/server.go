@@ -89,6 +89,7 @@ func (s *APIServer) Start(addr string) error {
 	// 公开端点
 	rest.GET("/health", s.handleHealth)
 	rest.POST("/auth/login", s.handleLogin)
+	rest.GET("/api/v1/logs/stream", s.handleLogStream)
 
 	// iLink API
 	ilinkServer := ilink.NewServer(s.connector, s.clientReg)
@@ -167,11 +168,10 @@ ilinkServer.SetForwardFunc(func(ctx context.Context, accountID, endpoint string,
 	conn.GET("", s.handleListConnections)
 	conn.GET("/stats", s.handleConnectionStats)  // 静态路径必须在参数化路径之前
 	conn.GET("/:id", s.handleGetConnection)
-	// 日志
+	// 日志（REST 接口需认证，SSE 在公开路由）
 	logs := api.Group("/logs")
 	logs.GET("", s.handleGetLogs)
 	logs.GET("/categories", s.handleGetLogCategories)
-	logs.GET("/stream", s.handleLogStream)
 
 	// 消息 API
 	msg := api.Group("/message")
