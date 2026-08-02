@@ -171,9 +171,10 @@ jobs:
             echo "下载失败，第${i}次重试..."
             sleep 2
           done
+          [ -f /tmp/fnpack ] || { echo "::error::fnpack 下载失败"; exit 1; }
           chmod +x /tmp/fnpack
           cd fpk
-          /tmp/fnpack build --directory .
+          /tmp/fnpack build --directory . || { echo "::error::FPK 打包失败"; exit 1; }
           mv clawbot-gateway.fpk "clawbot-gateway-v${{ steps.version.outputs.version }}-${{ matrix.fnplatform }}.fpk"
           echo "✅ FPK: $(ls -lh clawbot-gateway-v${{ steps.version.outputs.version }}-${{ matrix.fnplatform }}.fpk)"
 
@@ -290,13 +291,17 @@ jobs:
           path: ./artifacts/
           pattern: '*-v*'
 
-      - name: 展开目录结构（调试）
+      - name: 验证构建产物
         run: |
+          COUNT=$(find ./artifacts -type f | wc -l)
           echo "=== 下载的构建产物 ==="
           find ./artifacts -type f | sort
           echo ""
-          echo "=== 文件数量 ==="
-          find ./artifacts -type f | wc -l
+          echo "文件数量: $COUNT"
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::error::没有下载到任何构建产物，release 终止"
+            exit 1
+          fi
 
       - name: 确定版本号
         id: version
