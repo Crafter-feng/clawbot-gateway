@@ -75,7 +75,7 @@ go run main.go
 
 ```bash
 # 拉取镜像
-docker pull ghcr.io/crafter-feng/clawbot-gateway:latest
+docker pull ghcr.io/ezfavorites/clawbot-gateway:latest
 
 # 创建数据目录
 mkdir -p data
@@ -87,7 +87,7 @@ docker run -d \
   -p 6798:6798 \
   -v $(pwd)/data:/app/data \
   -e CLAWBOT_LOGIN_PASSWORD=your_password \
-  ghcr.io/crafter-feng/clawbot-gateway:latest
+  ghcr.io/ezfavorites/clawbot-gateway:latest
 ```
 
 首次启动后，打开 `http://localhost:6798` 使用设置的密码登录管理面板。
@@ -99,7 +99,7 @@ docker run -d \
 ```yaml
 services:
   clawbot-gateway:
-    image: ghcr.io/crafter-feng/clawbot-gateway:latest
+    image: ghcr.io/ezfavorites/clawbot-gateway:latest
     container_name: clawbot-gateway
     restart: unless-stopped
     security_opt:

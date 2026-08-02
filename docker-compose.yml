@@ -1,7 +1,7 @@
 
 services:
   clawbot-gateway:
-    image: ghcr.io/crafter-feng/clawbot-gateway:latest
+    image: ghcr.io/ezfavorites/clawbot-gateway:latest
     container_name: clawbot-gateway
     restart: unless-stopped
     security_opt:
