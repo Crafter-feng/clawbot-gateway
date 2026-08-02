@@ -288,11 +288,15 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           path: ./artifacts/
-          pattern: fpk-*-v* desktop-*-v*
+          pattern: '*-v*'
 
-      - name: 展开目录结构
+      - name: 展开目录结构（调试）
         run: |
+          echo "=== 下载的构建产物 ==="
           find ./artifacts -type f | sort
+          echo ""
+          echo "=== 文件数量 ==="
+          find ./artifacts -type f | wc -l
 
       - name: 确定版本号
         id: version
@@ -307,12 +311,15 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: "ClawBot Gateway v${{ steps.version.outputs.version }}"
           files: |
-            ./artifacts/**/*.fpk
-            ./artifacts/**/*.dmg
-            ./artifacts/**/*.msi
-            ./artifacts/**/*.exe
-            ./artifacts/**/*.AppImage
-            ./artifacts/**/*.deb
+            artifacts/*/*.fpk
+            artifacts/*/*.dmg
+            artifacts/*/*.msi
+            artifacts/*/*.exe
+            artifacts/*/*.AppImage
+            artifacts/*/*.deb
+            artifacts/*/dmg/*.dmg
+            artifacts/*/msi/*.msi
+            artifacts/*/nsis/*.exe
           generate_release_notes: true
           body: |
             ## ClawBot Gateway v${{ steps.version.outputs.version }}
