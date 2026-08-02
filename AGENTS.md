@@ -22,8 +22,8 @@
 
 | 模式 | 说明 | 是否需要解析消息 |
 |------|------|-----------------|
-| 后端处理 | 路由到 BackendAdapter（如 openai_compatible、echo），调用 `Handle()` 处理后回复 | 是（NormalizedMessage → ChatRequest） |
-| 虚拟 Bot 代理 | 路由到 ConnectionAdapter（如 ilink_proxy），消息入虚拟 Bot 队列，外部服务通过 getupdates 消费 | 是（NormalizedMessage → RawMessageItem 入队） |
+| 后端处理 | 路由到后端（echo/openai），调用 `Handle()` 处理后同步回复 | 是（NormalizedMessage → ChatRequest → Handle()） |
+| 虚拟 Bot 代理 | 路由到 ilink_proxy，`Handle()` 入队虚拟 Bot 后返回空 resp.Text，Pipeline 跳过直接回复，外部服务通过 getupdates 消费 + sendmessage 异步回复 | 是（NormalizedMessage → ChatRequest → Handle() → 空 resp） |
 | 文件中转 | 路由到 RelayMgr 转发文件 | 是（NormalizedMessage → FileMessage） |
 
 **iLink 服务端不参与消息解析和路由**。iLink 服务端只和 Pipeline 交互：从队列拿消息（getupdates），回复通过 ForwardFunc 回调经 Connector 处理（sendmessage 等）。
@@ -50,6 +50,8 @@
 | `echo` | 后端适配器 | 否 |
 
 **只有 `ilink_proxy` 会创建虚拟 Bot**。
+
+**统一 Handle()**：所有后端统一通过 `Handle()` 入口。`forwardToBackend` 不再按类型分支，统一调用 `bak.Handle()`。`ilink_proxy` 的 `Handle()` 通过 `EnqueueFunc` 回调入队虚拟 Bot 后返回空响应，Pipeline 识别后跳过直接回复，等待外部服务通过 `SendOutgoingMessage` 异步回复。
 
 ### 5.1 适配器注册表（扩展规则）
 

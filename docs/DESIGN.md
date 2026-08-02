@@ -140,7 +140,7 @@ NormalizedMessage (标准化)
          ┌───────────┴───────────┐
          ▼                       ▼
 ┌─── BackendAdapter ───┐  ┌─── ConnectionAdapter (ilink_proxy) ───┐
-│  echo                │  │  消息写入虚拟 Bot 消息队列               │
+│  echo                │  │  Handle() 入队虚拟 Bot 队列               │
 │  openai_compatible   │  │  （不调用 Handle()，不回复）              │
 │  → Handle()          │  │  外部服务通过 getupdates 消费队列         │
 │  → AI API 响应       │  │  处理后通过 sendmessage 回复              │
@@ -170,6 +170,8 @@ NormalizedMessage (标准化)
 
 **关键理解**：
 - **Adapter** 是配置单元，定义了外部服务如何连接到 Gateway
+- 所有后端统一通过 `Handle()` 处理，`forwardToBackend` 不再按类型分支
+- `ilink_proxy` 的 `Handle()` 入队虚拟 Bot 后返回空响应，Pipeline 识别空响应跳过直接回复
 - Gateway 为每个 Adapter **内部生成** 连接配置（account_id、user_id、base_url），用户复制配置到外部服务
 
 ```
@@ -192,6 +194,8 @@ HermesClaw 通过 iLink 协议连接到 Gateway 的 iLink 服务端
 | `ilink_proxy` | 连接适配器 | 外部 iLink 服务（Hermes、OpenClaw） | 是 |
 | `openai_compatible` | 后端适配器 | OpenAI 兼容 API（Claude、DeepSeek） | 否 |
 | `echo` | 后端适配器 | 调试回显 | 否 |
+
+**统一 Handle()**：所有后端类型统一走 `Handle()` 入口。`ilink_proxy` 的 `Handle()` 入队虚拟 Bot 后返回空响应，Pipeline 跳过直接回复，等待外部服务通过 `SendOutgoingMessage` 异步回复。
 
 **注意**：只有 `ilink_proxy` 会创建虚拟 Bot，用于外部 iLink 服务接入。
 
