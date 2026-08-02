@@ -92,6 +92,13 @@ func (s *APIServer) handleGetLogCategories(c *gin.Context) {
 
 // handleLogStream SSE 实时日志推送
 func (s *APIServer) handleLogStream(c *gin.Context) {
+	// 通过 query 参数验证 token（EventSource 无法带 Authorization header）
+	token := c.Query("token")
+	if token == "" || (!s.validateJWT(token) && !s.validateAPIToken(token)) {
+		c.JSON(401, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	buf := log.GetBuffer()
 	if buf == nil {
 		c.JSON(500, gin.H{"error": "log buffer not available"})

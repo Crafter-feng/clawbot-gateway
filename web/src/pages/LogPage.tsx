@@ -139,7 +139,8 @@ export default function LogPage() {
     const proto = window.location.protocol === 'https:' ? 'https:' : 'http:'
     const host = window.location.host
     const base = isTauri ? 'http://localhost:6798' : `${proto}//${host}`
-    const es = new EventSource(`${base}/api/v1/logs/stream`)
+    const token = localStorage.getItem('clawbot_token') || ''
+    const es = new EventSource(`${base}/api/v1/logs/stream?token=${encodeURIComponent(token)}`)
 
     es.onopen = () => setSseConnected(true)
 
