@@ -265,28 +265,18 @@ func (p *MessagePipeline) forwardToBackend(ctx context.Context, msg bot.Normaliz
 		return
 	}
 
-	ctxSession.AddTurn(content, resp.Text)
-
 	// 发送回复
 	creds := p.connector.GetAccountCredentials(msg.AccountID)
 	if creds != nil {
 		contextToken := p.connector.GetContextToken(msg.AccountID, msg.FromUser)
 		if resp.Msg != nil {
-			// 完整 iLink 消息负载
-			if err := p.connector.SendRawPayload(ctx, creds, resp.Msg); err != nil {
-				p.log.Warn("send raw msg error", "seq", seq, "error", err)
-			}
-		} else {
-			// 文本回复
-			if err := p.connector.SendTextWithCreds(ctx, creds, msg.FromUser, resp.Text, contextToken); err != nil {
-				p.log.Warn("send reply error", "seq", seq, "error", err)
-			}
+			p.sendBackendResponse(ctx, creds, msg.FromUser, resp.Msg, contextToken, seq)
 		}
 	} else {
 		p.log.Warn("no credentials for reply", "seq", seq, "account_id", msg.AccountID)
 	}
 
-	p.log.Info("message processed", "seq", seq, "backend", backendID, "reply_chars", len(resp.Text))
+	p.log.Info("message processed", "seq", seq, "backend", backendID, "reply_chars", 0)
 }
 
 // SendOutgoingMessage 由 ForwardFunc 调用，处理虚拟 Bot 的回复消息
@@ -456,14 +446,33 @@ func (p *MessagePipeline) HandleDirectMessage(ctx context.Context, content, user
 			replies = append(replies, fmt.Sprintf("[%s] 错误: %s", bid, err.Error()))
 			continue
 		}
-		ctxSession.AddTurn(content, resp.Text)
+		replyText := ""
+		if m, ok := resp.Msg.(string); ok {
+			replyText = m
+		}
+		ctxSession.AddTurn(content, replyText)
 		if len(backendIDs) > 1 && bid != backendIDs[0] {
-			replies = append(replies, fmt.Sprintf("[%s] %s", p.adapterName(bid), resp.Text))
+			replies = append(replies, fmt.Sprintf("[%s] %s", p.adapterName(bid), replyText))
 		} else {
-			replies = append(replies, resp.Text)
+			replies = append(replies, replyText)
 		}
 	}
 	return strings.Join(replies, "\n\n---\n\n"), nil
+}
+
+func (p *MessagePipeline) sendBackendResponse(ctx context.Context, creds *bot.Credentials, toUser string, msg interface{}, contextToken string, seq int64) {
+	switch m := msg.(type) {
+	case string:
+		if err := p.connector.SendTextWithCreds(ctx, creds, toUser, m, contextToken); err != nil {
+			p.log.Warn("send reply error", "seq", seq, "error", err)
+		}
+	case map[string]interface{}:
+		if err := p.connector.SendRawPayload(ctx, creds, m); err != nil {
+			p.log.Warn("send raw msg error", "seq", seq, "error", err)
+		}
+	default:
+		p.log.Warn("unknown msg type in backend response", "seq", seq, "type", fmt.Sprintf("%T", msg))
+	}
 }
 
 func truncate(s string, n int) string {

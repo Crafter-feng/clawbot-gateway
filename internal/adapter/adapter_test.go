@@ -167,8 +167,9 @@ func TestEchoAdapterHandle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Handle failed: %v", err)
 	}
-	if !strings.Contains(resp.Text, "Hello, world!") {
-		t.Errorf("Handle response should contain input message, got '%s'", resp.Text)
+	msg, _ := resp.Msg.(string)
+	if !strings.Contains(msg, "Hello, world!") {
+		t.Errorf("Handle response should contain input message, got '%v'", resp.Msg)
 	}
 	if resp.Backend != "echo-1" {
 		t.Errorf("Backend want 'echo-1', got '%s'", resp.Backend)
@@ -269,11 +270,12 @@ func TestBackendRequest(t *testing.T) {
 
 func TestBackendResponse(t *testing.T) {
 	resp := &BackendResponse{
-		Text:    "response",
+		Msg:    "response",
 		Backend: "echo-1",
 	}
-	if resp.Text != "response" {
-		t.Errorf("Text want 'response', got '%s'", resp.Text)
+	if msgStr, _ := resp.Msg.(string)
+	msgStr != "response" {
+		t.Errorf("Msg want 'response', got '%v'", resp.Msg)
 	}
 	if resp.Backend != "echo-1" {
 		t.Errorf("Backend want 'echo-1', got '%s'", resp.Backend)

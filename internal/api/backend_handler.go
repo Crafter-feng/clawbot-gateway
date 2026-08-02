@@ -211,8 +211,8 @@ func (s *APIServer) handleTestBackend(c *gin.Context) {
 		})
 		if err != nil {
 			result["error"] = err.Error()
-		} else {
-			result["reply"] = resp.Text
+		} else if m, ok := resp.Msg.(string); ok {
+			result["reply"] = m
 		}
 	}
 	c.JSON(200, result)

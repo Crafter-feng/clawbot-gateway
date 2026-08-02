@@ -143,7 +143,7 @@ func (o *OpenAICompatibleAdapter) Handle(ctx context.Context, req *BackendReques
 	}
 
 	return &BackendResponse{
-		Text:    strings.TrimSpace(result.Choices[0].Message.Content),
+		Msg:    strings.TrimSpace(result.Choices[0].Message.Content),
 		Backend: o.id,
 	}, nil
 }

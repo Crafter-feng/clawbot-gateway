@@ -25,7 +25,7 @@ func (e *EchoAdapter) HealthCheck(ctx context.Context) bool { return true }
 
 func (e *EchoAdapter) Handle(ctx context.Context, req *BackendRequest) (*BackendResponse, error) {
 	reply := fmt.Sprintf("[Echo:%s] %s", e.id, req.Message)
-	return &BackendResponse{Text: reply, Backend: e.id}, nil
+	return &BackendResponse{Msg: reply, Backend: e.id}, nil
 }
 
 func (e *EchoAdapter) HandleStream(ctx context.Context, req *BackendRequest, ch chan<- string) error {

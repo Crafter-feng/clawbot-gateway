@@ -28,11 +28,10 @@ type BackendRequest struct {
 
 // BackendResponse 聊天响应
 type BackendResponse struct {
-	Text    string                 `json:"text"`
-	Backend string                 `json:"backend"`
-	Stream  bool                   `json:"stream,omitempty"`
-	Async   bool                   // 异步后端（ilink_proxy），回复通过 SendOutgoingMessage 回传
-	Msg     map[string]interface{} `json:"msg,omitempty"` // 完整 iLink sendmessage 负载，非 nil 时覆盖 Text
+	Backend string      `json:"backend"`
+	Stream  bool        `json:"stream,omitempty"`
+	Async   bool        // 异步后端（ilink_proxy），回复通过 SendOutgoingMessage 回传
+	Msg     interface{} // string → Pipeline 构建文本消息；map[string]interface{} → 完整 iLink 负载
 }
 
 // Attachment 附件
