@@ -47,6 +47,7 @@ type RouteRule struct {
 	BackendID   string           `json:"backend_id"`   // 目标后端
 	Priority    int              `json:"priority"`     // 优先级（越小越优先）
 	Enabled     bool             `json:"enabled"`      // 是否启用
+	IsPriority  bool             `json:"is_priority"`  // 优先规则（仅次于命令，忽略当前后端命中）
 	Description string           `json:"description"`  // 规则描述
 	Groups      []RouteRuleGroup `json:"groups"`       // 规则组列表
 	GroupLogic  string           `json:"group_logic"`  // 组间逻辑：and/or
@@ -61,6 +62,7 @@ type RouteRuleResponse struct {
 	BackendID   string           `json:"backend_id"`
 	Priority    int              `json:"priority"`
 	Enabled     bool             `json:"enabled"`
+	IsPriority  bool             `json:"is_priority"`
 	Description string           `json:"description"`
 	Groups      []RouteRuleGroup `json:"groups"`
 	GroupLogic  string           `json:"group_logic"`
@@ -71,9 +73,9 @@ type RouteRuleResponse struct {
 // ListRouteRules 列出所有路由规则
 func (db *DB) ListRouteRules() ([]RouteRule, error) {
 	rows, err := db.conn.Query(`
-		SELECT id, name, backend_id, priority, enabled, description, groups, group_logic, created_at, updated_at
+		SELECT id, name, backend_id, priority, enabled, is_priority, description, groups, group_logic, created_at, updated_at
 		FROM route_rules
-		ORDER BY priority ASC, id ASC
+		ORDER BY is_priority DESC, priority ASC, id ASC
 	`)
 	if err != nil {
 		return nil, err
@@ -92,6 +94,7 @@ func (db *DB) ListRouteRules() ([]RouteRule, error) {
 			&rule.BackendID,
 			&rule.Priority,
 			&rule.Enabled,
+			&rule.IsPriority,
 			&rule.Description,
 			&groupsJSON,
 			&rule.GroupLogic,
@@ -126,7 +129,7 @@ func (db *DB) GetRouteRule(id int) (*RouteRule, error) {
 	var createdAt, updatedAt string
 
 	err := db.conn.QueryRow(`
-		SELECT id, name, backend_id, priority, enabled, description, groups, group_logic, created_at, updated_at
+		SELECT id, name, backend_id, priority, enabled, is_priority, description, groups, group_logic, created_at, updated_at
 		FROM route_rules
 		WHERE id = ?
 	`, id).Scan(
@@ -135,6 +138,7 @@ func (db *DB) GetRouteRule(id int) (*RouteRule, error) {
 		&rule.BackendID,
 		&rule.Priority,
 		&rule.Enabled,
+		&rule.IsPriority,
 		&rule.Description,
 		&groupsJSON,
 		&rule.GroupLogic,
@@ -166,13 +170,14 @@ func (db *DB) CreateRouteRule(rule RouteRule) (int64, error) {
 	}
 
 	result, err := db.conn.Exec(`
-		INSERT INTO route_rules (name, backend_id, priority, enabled, description, groups, group_logic)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO route_rules (name, backend_id, priority, enabled, is_priority, description, groups, group_logic)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		rule.Name,
 		rule.BackendID,
 		rule.Priority,
 		rule.Enabled,
+		rule.IsPriority,
 		rule.Description,
 		string(groupsJSON),
 		rule.GroupLogic,
@@ -193,13 +198,14 @@ func (db *DB) UpdateRouteRule(id int, rule RouteRule) error {
 
 	_, err = db.conn.Exec(`
 		UPDATE route_rules
-		SET name = ?, backend_id = ?, priority = ?, enabled = ?, description = ?, groups = ?, group_logic = ?, updated_at = datetime('now')
+		SET name = ?, backend_id = ?, priority = ?, enabled = ?, is_priority = ?, description = ?, groups = ?, group_logic = ?, updated_at = datetime('now')
 		WHERE id = ?
 	`,
 		rule.Name,
 		rule.BackendID,
 		rule.Priority,
 		rule.Enabled,
+		rule.IsPriority,
 		rule.Description,
 		string(groupsJSON),
 		rule.GroupLogic,

@@ -106,6 +106,7 @@ func (db *DB) migrate() error {
 			backend_id TEXT NOT NULL,
 			priority INTEGER DEFAULT 0,
 			enabled INTEGER DEFAULT 1,
+			is_priority INTEGER DEFAULT 0,
 			description TEXT DEFAULT '',
 			groups TEXT NOT NULL DEFAULT '[]',
 			group_logic TEXT DEFAULT 'and',
@@ -131,6 +132,13 @@ func (db *DB) migrate() error {
 	for _, q := range queries {
 		if _, err := db.conn.Exec(q); err != nil {
 			return err
+		}
+	}
+
+	// 迁移：添加 is_priority 列到 route_rules（兼容旧数据库）
+	if _, err := db.conn.Exec("ALTER TABLE route_rules ADD COLUMN is_priority INTEGER DEFAULT 0"); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("migrate route_rules: %w", err)
 		}
 	}
 

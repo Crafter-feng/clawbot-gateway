@@ -19,6 +19,7 @@ export default function RouteRuleForm({ rule, onClose, onSave }: RouteRuleFormPr
   const [backendId, setBackendId] = useState(rule?.backend_id || '')
   const [priority, setPriority] = useState(rule?.priority || 1)
   const [enabled, setEnabled] = useState(rule?.enabled ?? true)
+  const [isPriority, setIsPriority] = useState(rule?.is_priority ?? false)
   const [description, setDescription] = useState(rule?.description || '')
   const [groups, setGroups] = useState<RouteRuleGroup[]>(rule?.groups || [])
   const [groupLogic, setGroupLogic] = useState<'and' | 'or'>(rule?.group_logic || 'and')
@@ -124,6 +125,7 @@ export default function RouteRuleForm({ rule, onClose, onSave }: RouteRuleFormPr
         backend_id: backendId,
         priority,
         enabled,
+        is_priority: isPriority,
         description: description.trim(),
         groups: filteredGroups,
         group_logic: groupLogic,
@@ -190,6 +192,21 @@ export default function RouteRuleForm({ rule, onClose, onSave }: RouteRuleFormPr
               onChange={(e) => setEnabled(e.target.checked)}
             />
             <span className="checkbox-label">启用</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="form-grid form-grid-3" style={{ marginTop: 'var(--space-2)' }}>
+        <div className="input-group">
+          <label className="input-label">优先规则</label>
+          <div className="checkbox-group" style={{ paddingTop: '8px' }}>
+            <input
+              type="checkbox"
+              className="checkbox"
+              checked={isPriority}
+              onChange={(e) => setIsPriority(e.target.checked)}
+            />
+            <span className="checkbox-label">优先匹配（仅次于命令，忽略会话后端命中直接执行）</span>
           </div>
         </div>
       </div>

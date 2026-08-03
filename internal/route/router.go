@@ -23,6 +23,7 @@ type RouteRule struct {
 	BackendID   string
 	Priority    int
 	Enabled     bool
+	IsPriority  bool
 	Groups      []RouteRuleGroup
 	GroupLogic  string
 }
@@ -264,14 +265,9 @@ func (r *Router) Route(message, userID, fromUser, toUser, msgType string) RouteD
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	// 1. 检查用户会话级覆写（最高优先级）
-	if backendID, ok := r.userBackends[userID]; ok {
-		return RouteDecision{BackendID: backendID, MatchedBy: "session"}
-	}
-
-	// 2. 按优先级遍历路由规则
+	// 1. 优先规则（仅次于命令，忽略当前后端命中直接执行）
 	for _, rule := range r.rules {
-		if !rule.Enabled {
+		if !rule.Enabled || !rule.IsPriority {
 			continue
 		}
 		if r.matchRule(message, userID, fromUser, toUser, msgType, rule) {
@@ -283,7 +279,26 @@ func (r *Router) Route(message, userID, fromUser, toUser, msgType string) RouteD
 		}
 	}
 
-	// 3. 返回默认后端
+	// 2. 检查用户会话级覆写
+	if backendID, ok := r.userBackends[userID]; ok {
+		return RouteDecision{BackendID: backendID, MatchedBy: "session"}
+	}
+
+	// 3. 按优先级遍历普通路由规则
+	for _, rule := range r.rules {
+		if !rule.Enabled || rule.IsPriority {
+			continue
+		}
+		if r.matchRule(message, userID, fromUser, toUser, msgType, rule) {
+			return RouteDecision{
+				BackendID: rule.BackendID,
+				MatchedBy: "keyword",
+				RuleID:    rule.ID,
+			}
+		}
+	}
+
+	// 4. 返回默认后端
 	return RouteDecision{BackendID: r.defaultBackend, MatchedBy: "default"}
 }
 

@@ -31,6 +31,7 @@ export interface RouteRule {
   backend_id: string
   priority: number
   enabled: boolean
+  is_priority: boolean
   description: string
   groups: RouteRuleGroup[]
   group_logic: 'and' | 'or'

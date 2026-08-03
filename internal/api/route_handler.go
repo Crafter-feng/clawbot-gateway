@@ -251,6 +251,7 @@ func convertToRouteRule(dbRule database.RouteRule) route.RouteRule {
 		BackendID:  dbRule.BackendID,
 		Priority:   dbRule.Priority,
 		Enabled:    dbRule.Enabled,
+		IsPriority: dbRule.IsPriority,
 		Groups:     groups,
 		GroupLogic: dbRule.GroupLogic,
 	}

@@ -61,6 +61,7 @@ export default function RouteRuleList({ onEdit, onDelete }: RouteRuleListProps) 
               <div className="list-item-title" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
                 <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>P{rule.priority}</span>
                 {rule.name}
+                {rule.is_priority && <Tag variant="info">优先</Tag>}
                 {!rule.enabled && <Tag variant="neutral">停用</Tag>}
               </div>
               <div className="list-item-subtitle" style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }}>
